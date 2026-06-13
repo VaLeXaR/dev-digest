@@ -1,8 +1,10 @@
 # `@devdigest/web` — the studio (Next.js 15)
 
 The DevDigest UI: import repos, browse pull requests, run and read AI reviews,
-author agents & skills, inspect memory, evals, and CI runs. App Router + React
-Server/Client components, data via **TanStack Query** hooks over the Fastify API.
+and author agents. App Router + React Server/Client components, data via
+**TanStack Query** hooks over the Fastify API. (This is the starter surface;
+course lessons add the Skills, Memory, Eval, Blast/Brief, multi-agent, CI, and
+dashboard screens.)
 
 - **Stack:** Next.js 15 (App Router), React 19, TanStack Query, `next-intl`
   (messages in `messages/<locale>/*.json`), `recharts`, `mermaid`,
@@ -22,38 +24,16 @@ Routes (`src/app/**/page.tsx`) and the API surface each leans on (via
 ```mermaid
 flowchart TD
   ROOT["/"] -->|"useRepos → GET /repos"| PULLS["/repos/:repoId/pulls<br/>PR list"]
+  ONB["/onboarding<br/>add repo"] -->|"POST /repos"| API[("Fastify API")]
+  PULLS --> PR["/pulls/:number<br/>review detail<br/>(overview · diff · findings)"]
 
-  subgraph Repo["/repos/:repoId/*"]
-    PULLS --> PR["/pulls/:number<br/>review detail"]
-    PR --> CONF["/pulls/:number/conformance"]
-    CTX["/context<br/>project context"]
-    CONV["/conventions"]
-    MULTI["/multi-agent"]
-    RONB["/onboarding<br/>tour"]
-  end
+  AGENTS["/agents"] --> AGENT["/agents/:id<br/>editor (config)"]
+  SETTINGS["/settings/:section<br/>API keys · models"]
 
-  AGENTS["/agents"] --> AGENT["/agents/:id"]
-  AGENT --> EVALCASE["/agents/:id/evals/:caseId"]
-  PERF["/agent-performance"]
-  CIRUNS["/ci-runs"]
-  EVAL["/eval"]
-  MEM["/memory"]
-  SKILLS["/skills"] --> SKILL["/skills/:id"]
-  SETTINGS["/settings/:section"]
-  ONB["/onboarding"]
-  SHOW["/showcase"]
-
-  PR -->|"GET /pulls/:id · /reviews · /findings · /pulls/:id/brief · /blast"| API[("Fastify API")]
-  CONF -->|"GET /conformance"| API
-  CTX -->|"GET /context"| API
-  CONV -->|"GET /conventions"| API
-  AGENTS -->|"/agents"| API
-  EVAL -->|"/eval/dashboard · /eval-cases"| API
-  CIRUNS -->|"/ci-runs · /runs"| API
-  MEM -->|"/memory"| API
-  SKILLS -->|"/skills · /skills/community"| API
-  PERF -->|"/performance · /stats"| API
-  SETTINGS -->|"/providers · /plugins · /settings"| API
+  PULLS -->|"GET /repos/:id/pulls · /repos/:id/index-state"| API
+  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments<br/>POST /pulls/:id/review · /findings/:id/(accept|dismiss)"| API
+  AGENTS -->|"/agents · /agents/:id"| API
+  SETTINGS -->|"/settings · /providers"| API
 ```
 
 Cross-cutting chrome lives in `src/components/app-shell` (nav, breadcrumbs,

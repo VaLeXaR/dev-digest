@@ -33,7 +33,7 @@ A spec lives in `specs/NN-name.flow.json`:
   We never use the AI `chat` command, so runs are stable and key-free.
 
 Flows target **read-only seeded data** (the demo repo `acme/payments-api`, PR
-#482, the seeded agents/skills), so nothing triggers a model call.
+#482, the seeded agents), so nothing triggers a model call.
 
 > **Precondition: a freshly-seeded DB.** Flow `02` follows the home redirect to
 > the *first* repo, so it assumes the seeded demo repo is the only one. CI
@@ -67,5 +67,3 @@ a CI artifact by `.github/workflows/e2e-web.yml`).
 | `01-app-boot` | root → redirect to first repo's PR list → seeded PR #482 |
 | `02-repo-pulls-detail` | PR list → open PR #482 → review detail route |
 | `03-agents` | agents list renders the seeded reviewer agents |
-| `04-skills` | skills library route renders |
-| `05-dashboards` | memory + CI runs + eval dashboards render |

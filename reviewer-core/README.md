@@ -2,34 +2,37 @@
 
 Pure review logic: **diff → prompt → LLM → grounded findings**. No database,
 GitHub, or filesystem; the only side effect is an LLM call through an **injected**
-`LLMProvider`, which is what makes it mock-testable and lets the same engine run
-in two very different hosts:
+`LLMProvider`, which is what makes it mock-testable.
 
-- the **server** (`@devdigest/api`) for local reviews in the studio, and
-- the **agent-runner** GitHub Action for reviews in CI.
-
-Both wire it via a tsconfig path alias (`@devdigest/reviewer-core` →
-`../reviewer-core/src`) and consume the TypeScript **source** directly (tsx in
-dev, vitest in tests, `@vercel/ncc` bundle in the runner). The package never
+In the starter the **server** (`@devdigest/api`) is its only consumer — for local
+reviews in the studio. (The CI runner that runs the same engine in GitHub Actions
+is added back in the Export-to-CI lesson, L06.) The server wires it via a tsconfig
+path alias (`@devdigest/reviewer-core` → `../reviewer-core/src`) and consumes the
+TypeScript **source** directly (tsx in dev, vitest in tests). The package never
 emits JS — its `build` is a type-check.
 
 ## Pipeline
 
 ```mermaid
 flowchart LR
-  IN["inputs<br/>diff · agent manifest · skills"] --> PROMPT["assemblePrompt()<br/>prompt.ts"]
-  PROMPT --> WRAP["wrapUntrusted()<br/>fence the diff vs prompt injection"]
+  IN["inputs<br/>diff · system prompt · repo map"] --> PROMPT["assemblePrompt()<br/>prompt.ts"]
+  PROMPT --> WRAP["wrapUntrusted() + INJECTION_GUARD<br/>fence untrusted content vs prompt injection"]
   WRAP --> LLM["LLMProvider (injected)<br/>llm/openrouter.ts"]
   LLM --> STRUCT["structured output<br/>llm/structured.ts<br/>Zod → JSON Schema · parse-with-repair"]
   STRUCT --> GROUND["groundFindings()<br/>grounding.ts<br/>mechanical citation gate vs the diff"]
-  GROUND --> REDUCE["reduce()<br/>review/reduce.ts<br/>merge map-reduce passes"]
-  REDUCE --> TOREVIEW["toReview()<br/>output/to-review.ts"]
-  TOREVIEW --> OUT["Review<br/>verdict · score · grounded findings"]
+  GROUND --> OUT["Review<br/>verdict · score · grounded findings"]
 ```
 
-The grounding step is the mandatory gate: a finding that doesn't cite a real
-line in the diff is dropped, so the engine can't hallucinate locations.
-`review/run.ts` orchestrates single-pass vs map-reduce strategies.
+The grounding step is the mandatory gate: a finding that doesn't cite a real line
+in the diff is dropped, so the engine can't hallucinate locations. The score is
+recomputed deterministically from the **surviving** findings, not trusted from the
+model. `review/run.ts` orchestrates the run (single-pass by default).
+
+The engine also accepts optional prompt slots the **course lessons** start
+feeding it — `skills` (L02), `memory` (L07), `specs` (L05), `callers` — plus a
+`reduce()`/map-reduce path and a `toReview()` CI payload helper used from L06.
+In the starter the server passes only the diff, system prompt, and repo map; the
+extra slots are omitted, so `assemblePrompt` simply leaves those sections out.
 
 ## Public API
 
