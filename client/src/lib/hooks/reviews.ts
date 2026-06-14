@@ -61,7 +61,12 @@ export function useDeleteRun(prId: string | null | undefined) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (runId: string) => api.del<{ ok: boolean }>(`/runs/${runId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["pr-runs", prId] }),
+    // Deleting a run also deletes the review it produced (server-side), so drop
+    // both the timeline and the Review Runs list from cache.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pr-runs", prId] });
+      qc.invalidateQueries({ queryKey: ["reviews", prId] });
+    },
   });
 }
 

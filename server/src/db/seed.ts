@@ -2,6 +2,15 @@ import 'dotenv/config';
 import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
 import { eq, and } from 'drizzle-orm';
+import {
+  GENERAL_REVIEWER_PROMPT,
+  SECURITY_REVIEWER_PROMPT,
+  PERFORMANCE_REVIEWER_PROMPT,
+} from './seed-prompts.js';
+
+/** Default provider/model for the built-in reviewer agents. */
+const DEFAULT_PROVIDER = 'openrouter' as const;
+const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
 
 /**
  * Seed the starter's demo data. Idempotent: re-running upserts the default
@@ -9,7 +18,8 @@ import { eq, and } from 'drizzle-orm';
  *
  * Seeds: default workspace + system user + membership, default settings,
  * demo repo (acme/payments-api), PR #482 with files/commits, a sample review
- * with a few findings, and the two built-in agents (General + Security).
+ * with a few findings, and the three built-in agents (General + Security +
+ * Performance), all on the default openrouter/deepseek-v4-flash provider+model.
  *
  * Course lessons populate the other tables (skills, conventions, memory, eval,
  * …) once their features are built — they start empty here.
@@ -165,16 +175,16 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     ]);
   }
 
-  // ---- built-in agents (the two starter presets) ----
+  // ---- built-in agents (the three starter presets) ----
+  // Prompt bodies live in ./seed-prompts.ts (mirrored in docs/agent-prompts/*.md).
   const seedAgents: Array<typeof t.agents.$inferInsert> = [
     {
       workspaceId,
       name: 'General Reviewer',
       description: 'Reviews a PR diff for bugs, correctness, and clarity.',
-      provider: 'openai',
-      model: 'gpt-4.1',
-      systemPrompt:
-        'You are a pragmatic pull-request reviewer. Examine the diff for bugs, correctness issues, missing edge cases, and unclear code. Return at most 5 high-value findings ranked by severity. Cite exact file:line.',
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
+      systemPrompt: GENERAL_REVIEWER_PROMPT,
       enabled: true,
       version: 1,
       createdBy: userId,
@@ -182,11 +192,21 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     {
       workspaceId,
       name: 'Security Reviewer',
-      description: 'Flags secrets, injection, and untrusted-input sinks before merge.',
-      provider: 'openai',
-      model: 'gpt-4.1',
-      systemPrompt:
-        'You are a security-focused PR reviewer. Examine the diff for hardcoded secrets, injection, SSRF, and untrusted input reaching a dangerous sink. Return at most 5 findings ranked by severity. Cite exact file:line.',
+      description: 'Flags secrets, injection, SSRF and the lethal trifecta before merge.',
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
+      systemPrompt: SECURITY_REVIEWER_PROMPT,
+      enabled: true,
+      version: 1,
+      createdBy: userId,
+    },
+    {
+      workspaceId,
+      name: 'Performance Reviewer',
+      description: 'Catches N+1 queries, missing indexes, and hot-path allocations.',
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
+      systemPrompt: PERFORMANCE_REVIEWER_PROMPT,
       enabled: true,
       version: 1,
       createdBy: userId,
