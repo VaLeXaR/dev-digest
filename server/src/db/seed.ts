@@ -223,8 +223,10 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
   return { workspaceId, userId };
 }
 
-// CLI entrypoint
-if (import.meta.url === `file://${process.argv[1]}`) {
+// CLI entrypoint — normalise to forward-slash URL so the check works on Windows
+const _seedUrl = import.meta.url.replace(/\\/g, '/');
+const _seedArgv = new URL(`file:///${process.argv[1]?.replace(/\\/g, '/').replace(/^\//, '')}`).href;
+if (_seedUrl === _seedArgv) {
   const url = process.env.DATABASE_URL;
   if (!url) {
     console.error('DATABASE_URL is required');

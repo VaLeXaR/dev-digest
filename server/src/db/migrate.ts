@@ -33,8 +33,10 @@ export async function runMigrations(databaseUrl: string): Promise<void> {
   }
 }
 
-// CLI entrypoint
-if (import.meta.url === `file://${process.argv[1]}`) {
+// CLI entrypoint — normalise to forward-slash URL so the check works on Windows
+const _migrateUrl = import.meta.url.replace(/\\/g, '/');
+const _migrateArgv = new URL(`file:///${process.argv[1]?.replace(/\\/g, '/').replace(/^\//, '')}`).href;
+if (_migrateUrl === _migrateArgv) {
   const url = process.env.DATABASE_URL;
   if (!url) {
     console.error('DATABASE_URL is required');
