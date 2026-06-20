@@ -7,6 +7,18 @@ export function sizeOf(pr: PrMeta): SizeInfo {
   return { size, lines };
 }
 
+/** Cost in USD (e.g. "$0.0013", "$0.14"). Returns "—" when null. */
+export function formatCost(usd: number | null | undefined): string {
+  if (usd == null) return '—';
+  if (usd === 0) return '$0.00';
+  return usd.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumSignificantDigits: 2,
+    maximumSignificantDigits: 3,
+  });
+}
+
 /** Compact relative time for the list's UPDATED column (e.g. "3h", "2d"). */
 export function relativeTime(iso: string | null | undefined): string {
   if (!iso) return "—";
