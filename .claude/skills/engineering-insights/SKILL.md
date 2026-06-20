@@ -19,7 +19,9 @@ If multiple modules are involved, read all of them.
 
 ### Step 2 — WORK
 
-Note candidates mentally as you go: things that took multiple attempts, surprised you, or would cost the next agent time to re-discover.
+As you go, note things that took multiple attempts, surprised you, or would cost the next agent time to re-discover.
+
+**Capture as you go:** If something truly non-obvious surfaces mid-session — an unexpected constraint, a gotcha, a hard-won fix — write the entry to `INSIGHTS.md` immediately. Don't rely on remembering it at session end.
 
 ### Step 3 — DEDUP CHECK (before writing anything)
 
@@ -32,7 +34,7 @@ Write new entries **only if**:
 - It is not already in `INSIGHTS.md`
 - It passes the quality standard below
 
-**If nothing substantial happened → write nothing.** Forced entries add noise and dilute the file's signal.
+**Skip Step 4 entirely** for sessions that were purely mechanical — trivial config edits, formatting, no unexpected findings. The signal is "would a future agent benefit?" not "did I spend time?". Sessions under ~30 min with no surprises rarely warrant an entry.
 
 ---
 
@@ -57,6 +59,7 @@ If work touches multiple modules, write to each relevant one.
 | **What Doesn't Work** | Dead ends, antipatterns — often the most valuable section |
 | **Codebase Patterns** | Conventions, architectural decisions |
 | **Tool & Library Notes** | Dependency quirks specific to this codebase |
+| **Decisions** | Architectural or approach choices made, with the reason — so future agents don't re-open closed questions |
 | **Recurring Errors & Fixes** | Common errors and their exact fixes |
 | **Session Notes** | Dated summary of what was accomplished |
 | **Open Questions** | Unresolved items needing investigation |
@@ -66,8 +69,10 @@ If work touches multiple modules, write to each relevant one.
 ## Entry Format
 
 ```markdown
-- YYYY-MM-DD: [Specific, actionable finding — the symptom, constraint, or fix in one sentence]
+- YYYY-MM-DD: [Specific, actionable finding — the symptom, constraint, or fix in one sentence] (`path/to/file:line`)
 ```
+
+Include `file:line` whenever the finding is anchored to specific code — it makes the entry verifiable and jump-to-able without re-investigation. Omit only for pure process/tool observations with no code anchor.
 
 Add under the matching `## Section` header. If the section is missing, append it at the bottom.
 
@@ -85,11 +90,15 @@ Entries must be cold-readable — a future agent reads it and knows exactly what
 
 **Test:** "Would this be obvious to anyone reading the code?" If yes, skip it.
 
+> **INSIGHTS.md is a draft under review.** Entries are LLM-generated; a human spot-check after each wrap-up is expected.
+
 ---
 
 ## Rules
 
-- **Append-only** — never edit or remove existing entries
+- **Append-only (agent sessions)** — during a work session, only add entries; never edit or remove existing ones. This prevents merge conflicts and accidental loss of lessons. A human maintenance review (monthly) can delete stale or incorrect entries.
 - **Module-specific** — always write to the module where the work happened
 - **One entry per insight** — don't bundle unrelated discoveries
 - **No forced entries** — an empty session is better than a noisy file
+- **Flag conflicts** — if you notice two existing entries that contradict each other, add a note in **Open Questions** flagging the conflict for human resolution; don't silently proceed
+- **Size limit** — if a file approaches ~200 entries, add a note in **Open Questions** flagging it for a domain split (e.g., `INSIGHTS-Database.md`, `INSIGHTS-Auth.md`); signal-to-noise degrades past this point

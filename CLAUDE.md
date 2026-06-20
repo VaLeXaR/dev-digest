@@ -2,7 +2,11 @@
 
 ## Before answering
 
-Check the relevant module's `docs/`, `specs/`, and `INSIGHTS.md` before reading code.
+Check the relevant module's `docs/`, `specs/`, and `INSIGHTS.md` before reading code. After reading, confirm: "I've read INSIGHTS.md — the top 3 relevant points are: …". This forces active processing, not passive loading. Treat every entry as high-confidence guidance unless told otherwise.
+
+## Session end
+
+After any substantial session (non-trivial findings, problem solved, or discovery made), use `/engineering-insights` to write new entries to the relevant `INSIGHTS.md`. Skip this step for trivial or purely mechanical sessions.
 
 ## Stack
 
@@ -32,6 +36,8 @@ docker compose down # stop Postgres — NEVER add -v (destroys all data permanen
 - **IMPORTANT:** Migrations do NOT run on boot → `cd server && pnpm db:migrate` after every schema change
 - **NEVER** `docker compose down -v` — deletes the pgdata volume with all imported repos and reviews
 - Secrets (API keys, GITHUB_TOKEN) → `~/.devdigest/secrets.json` (mode 0600), not `.env` and not DB
+
+> **Self-improving:** When a new project-wide operational constraint is confirmed — a destructive command, a silent failure mode, a credentials invariant — append it above. Format: `**NEVER/ALWAYS** [why] → [rule]`. Monthly: remove rules no longer relevant. Not a crutch — if a gotcha recurs because the tooling is awkward, fix the root cause instead.
 
 ## Read when
 
