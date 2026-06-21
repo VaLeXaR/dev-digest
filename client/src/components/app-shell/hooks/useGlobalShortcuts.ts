@@ -20,18 +20,25 @@ export function useGlobalShortcuts({ onOpenPalette, onOpenHelp }: GlobalShortcut
   const router = useRouter();
   const { repoId } = useActiveRepo();
 
+  // Refs let the effect read the latest callbacks without needing them as deps,
+  // which would reset gPending state on every navigation or parent re-render.
+  const onOpenPaletteRef = React.useRef(onOpenPalette);
+  onOpenPaletteRef.current = onOpenPalette;
+  const onOpenHelpRef = React.useRef(onOpenHelp);
+  onOpenHelpRef.current = onOpenHelp;
+
   React.useEffect(() => {
     let gPending = false;
     let gTimer: ReturnType<typeof setTimeout> | undefined;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        onOpenPalette();
+        onOpenPaletteRef.current();
         return;
       }
       if (isTextInput(e.target)) return;
       if (e.key === "?") {
-        onOpenHelp();
+        onOpenHelpRef.current();
         return;
       }
       if (e.key === "g") {
@@ -52,5 +59,5 @@ export function useGlobalShortcuts({ onOpenPalette, onOpenHelp }: GlobalShortcut
       window.removeEventListener("keydown", onKey);
       clearTimeout(gTimer);
     };
-  }, [router, repoId, onOpenPalette, onOpenHelp]);
+  }, [router, repoId]);
 }

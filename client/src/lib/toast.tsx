@@ -4,6 +4,7 @@
 "use client";
 
 import React from "react";
+import { s, TOAST_DURATION_MS } from "./toast.styles";
 
 type ToastKind = "success" | "error" | "info";
 interface Toast {
@@ -28,7 +29,8 @@ export function useToast(): ToastApi {
 }
 
 /* Module-level bridge so non-React code (e.g. the React Query cache) can raise
-   toasts without the hook. The mounted <ToastProvider> registers its pusher. */
+   toasts without the hook. Exactly ONE <ToastProvider> must be mounted at a
+   time — concurrent providers would race and the last one to mount wins. */
 type Pusher = (message: string, kind?: ToastKind) => void;
 let activePusher: Pusher | null = null;
 export const notify = {
@@ -38,11 +40,46 @@ export const notify = {
   info: (m: string) => activePusher?.(m, "info"),
 };
 
+// Pre-computed per-kind styles at module level (avoids inline object literals in JSX).
 const COLORS: Record<ToastKind, { bg: string; border: string; icon: string }> = {
   success: { bg: "var(--ok-bg, #052e1c)", border: "var(--ok)", icon: "✓" },
   error: { bg: "var(--crit-bg, #2e0a0a)", border: "var(--crit)", icon: "✕" },
   info: { bg: "var(--bg-elevated)", border: "var(--border-strong)", icon: "ℹ" },
 };
+
+const itemStyles: Record<ToastKind, React.CSSProperties> = {
+  success: { ...s.item, background: COLORS.success.bg, border: `1px solid ${COLORS.success.border}` },
+  error: { ...s.item, background: COLORS.error.bg, border: `1px solid ${COLORS.error.border}` },
+  info: { ...s.item, background: COLORS.info.bg, border: `1px solid ${COLORS.info.border}` },
+};
+
+const iconStyles: Record<ToastKind, React.CSSProperties> = {
+  success: { color: COLORS.success.border, fontWeight: 700 },
+  error: { color: COLORS.error.border, fontWeight: 700 },
+  info: { color: COLORS.info.border, fontWeight: 700 },
+};
+
+function ToastItem({ t, onDismiss }: { t: Toast; onDismiss: (id: number) => void }) {
+  React.useEffect(() => {
+    const timer = setTimeout(() => onDismiss(t.id), TOAST_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [t.id, onDismiss]);
+
+  return (
+    <div style={itemStyles[t.kind]}>
+      <span style={iconStyles[t.kind]}>{COLORS[t.kind].icon}</span>
+      <span style={s.message}>{t.message}</span>
+      <button
+        type="button"
+        onClick={() => onDismiss(t.id)}
+        style={s.dismiss}
+        aria-label="Dismiss"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = React.useState<Toast[]>([]);
@@ -51,8 +88,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const push = React.useCallback((message: string, kind: ToastKind = "info") => {
     const id = seq.current++;
     setItems((prev) => [...prev, { id, kind, message }]);
-    // auto-dismiss after 4s
-    setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), 4000);
+  }, []);
+
+  const dismiss = React.useCallback((id: number) => {
+    setItems((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   const api = React.useMemo<ToastApi>(
@@ -76,51 +115,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastCtx.Provider value={api}>
       {children}
-      <div
-        style={{
-          position: "fixed",
-          bottom: 20,
-          right: 20,
-          zIndex: 1000,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-          maxWidth: 380,
-        }}
-        role="status"
-        aria-live="polite"
-      >
-        {items.map((t) => {
-          const c = COLORS[t.kind];
-          return (
-            <div
-              key={t.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "12px 16px",
-                borderRadius: 9,
-                background: c.bg,
-                border: `1px solid ${c.border}`,
-                color: "var(--text-primary)",
-                fontSize: 14,
-                boxShadow: "0 6px 24px rgba(0,0,0,0.3)",
-                animation: "ddToastIn .16s ease-out",
-              }}
-            >
-              <span style={{ color: c.border, fontWeight: 700 }}>{c.icon}</span>
-              <span style={{ flex: 1 }}>{t.message}</span>
-              <button
-                onClick={() => setItems((prev) => prev.filter((x) => x.id !== t.id))}
-                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 16 }}
-                aria-label="Dismiss"
-              >
-                ×
-              </button>
-            </div>
-          );
-        })}
+      <div style={s.container} role="status" aria-live="polite">
+        {items.map((t) => (
+          <ToastItem key={t.id} t={t} onDismiss={dismiss} />
+        ))}
       </div>
     </ToastCtx.Provider>
   );

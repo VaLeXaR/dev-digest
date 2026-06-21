@@ -2,8 +2,6 @@
 
 import React from "react";
 
-let seq = 0;
-
 /** Mermaid diagrams must start with a known graph keyword. Anything else
  *  (prose, JSON like {"type":"Buffer"...}, empty) is not a diagram → skip. */
 const MERMAID_RE =
@@ -21,6 +19,7 @@ function looksLikeMermaid(src: string): boolean {
  */
 export function MermaidDiagram({ chart }: { chart: string }) {
   const ref = React.useRef<HTMLDivElement>(null);
+  const seq = React.useRef(0);
   const [state, setState] = React.useState<"pending" | "ok" | "invalid">("pending");
 
   React.useEffect(() => {
@@ -42,7 +41,7 @@ export function MermaidDiagram({ chart }: { chart: string }) {
           setState("invalid");
           return;
         }
-        const { svg } = await mermaid.render(`dd-mermaid-${seq++}`, src);
+        const { svg } = await mermaid.render(`dd-mermaid-${seq.current++}`, src);
         if (cancelled) return;
         if (ref.current) ref.current.innerHTML = svg;
         setState("ok");

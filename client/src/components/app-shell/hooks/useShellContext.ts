@@ -28,6 +28,13 @@ export function useShellContext({ onOpenCommandPalette }: ShellContextOptions): 
   const { data: pulls } = usePulls(repoId);
   const deleteRepo = useDeleteRepo();
 
+  // Stable ref so onOpenCommandPalette identity changes don't invalidate the useMemo.
+  const onOpenCommandPaletteRef = React.useRef(onOpenCommandPalette);
+  onOpenCommandPaletteRef.current = onOpenCommandPalette;
+
+  // Pre-compute the primitive so the full `pulls` array is not in useMemo deps.
+  const prCount = pulls?.filter((p) => p.status === "needs_review").length || undefined;
+
   const onSelectRepo = React.useCallback(
     (id: string) => {
       setRepoId(id);
@@ -66,26 +73,15 @@ export function useShellContext({ onOpenCommandPalette }: ShellContextOptions): 
       activeRepo: activeRepo ? toShellRepo(activeRepo) : null,
       theme,
       onToggleTheme: toggle,
-      onOpenCommandPalette,
+      // Delegate through ref so the useMemo doesn't re-run on identity change.
+      onOpenCommandPalette: () => onOpenCommandPaletteRef.current(),
       onSelectRepo,
       onAddRepo,
       onRemoveRepo,
       // Sidebar badge = PRs that still NEED review, not the total PR count.
       // 0 → undefined so the badge hides entirely when nothing needs review.
-      prCount: pulls?.filter((p) => p.status === "needs_review").length || undefined,
+      prCount,
     }),
-    [
-      pathname,
-      repoId,
-      repos,
-      activeRepo,
-      theme,
-      toggle,
-      onOpenCommandPalette,
-      onSelectRepo,
-      onAddRepo,
-      onRemoveRepo,
-      pulls,
-    ],
+    [pathname, repoId, repos, activeRepo, theme, toggle, onSelectRepo, onAddRepo, onRemoveRepo, prCount],
   );
 }
