@@ -153,6 +153,8 @@ export function FindingsTab({
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}
+            repoFullName={repoFullName}
+            headSha={headSha}
           />
         </div>
       )}

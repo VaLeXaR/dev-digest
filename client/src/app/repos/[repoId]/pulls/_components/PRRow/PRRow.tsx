@@ -23,7 +23,7 @@ const SEV_COLOR: Record<string, string> = {
 };
 const SEVS = ["CRITICAL", "WARNING", "SUGGESTION"] as const;
 
-export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
+export function PRRow({ pr, repoId, repoFullName }: { pr: PrMeta; repoId: string; repoFullName?: string | null }) {
   const t = useTranslations("prReview");
   const router = useRouter();
   const [h, setH] = React.useState(false);
@@ -139,6 +139,8 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
           anchor={popover.anchor}
           initialSeverity={popover.severity}
           onClose={() => setPopover(null)}
+          repoFullName={repoFullName}
+          headSha={pr.head_sha}
         />
       )}
     </>

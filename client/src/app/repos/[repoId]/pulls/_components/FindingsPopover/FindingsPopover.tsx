@@ -5,6 +5,7 @@ import { Icon, SEV, CategoryTag, ConfidenceNum } from "@devdigest/ui";
 import type { Severity, Category } from "@devdigest/ui";
 import type { FindingRecord } from "@devdigest/shared";
 import { usePrReviews } from "@/lib/hooks/reviews";
+import { githubBlobUrl } from "@/lib/github-urls";
 
 const SEVS: { key: string; color: string }[] = [
   { key: "CRITICAL", color: "var(--crit)" },
@@ -17,9 +18,11 @@ interface Props {
   anchor: DOMRect;
   initialSeverity: string | null;
   onClose: () => void;
+  repoFullName?: string | null;
+  headSha?: string | null;
 }
 
-export function FindingsPopover({ prId, anchor, initialSeverity, onClose }: Props) {
+export function FindingsPopover({ prId, anchor, initialSeverity, onClose, repoFullName, headSha }: Props) {
   const { data: reviews, isLoading } = usePrReviews(prId);
   const [severityFilter, setSeverityFilter] = React.useState<string | null>(initialSeverity);
   const popRef = React.useRef<HTMLDivElement | null>(null);
@@ -140,10 +143,11 @@ export function FindingsPopover({ prId, anchor, initialSeverity, onClose }: Prop
                 <CategoryTag category={f.category as Category} />
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 3, minWidth: 0 }}>
-                <span
-                  className="mono"
-                  title={`${f.file}:${f.start_line}`}
-                  style={{
+                {(() => {
+                  const fileUrl = repoFullName && headSha
+                    ? githubBlobUrl(repoFullName, headSha, f.file, f.start_line, f.end_line)
+                    : undefined;
+                  const pathStyle: React.CSSProperties = {
                     fontSize: 11,
                     color: "var(--accent-text)",
                     flex: 1,
@@ -153,10 +157,30 @@ export function FindingsPopover({ prId, anchor, initialSeverity, onClose }: Prop
                     textOverflow: "ellipsis",
                     direction: "rtl",
                     textAlign: "left",
-                  }}
-                >
-                  {f.file}:{f.start_line}
-                </span>
+                    textDecoration: "none",
+                  };
+                  return fileUrl ? (
+                    <a
+                      className="mono"
+                      href={fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`${f.file}:${f.start_line}`}
+                      onClick={(e) => e.stopPropagation()}
+                      style={pathStyle}
+                    >
+                      {f.file}:{f.start_line}
+                    </a>
+                  ) : (
+                    <span
+                      className="mono"
+                      title={`${f.file}:${f.start_line}`}
+                      style={pathStyle}
+                    >
+                      {f.file}:{f.start_line}
+                    </span>
+                  );
+                })()}
                 <ConfidenceNum value={f.confidence} />
               </div>
               <div

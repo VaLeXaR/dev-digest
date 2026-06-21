@@ -99,6 +99,8 @@ export function RunHistory({
   onOpenTrace,
   onGoToReview,
   onDelete,
+  repoFullName,
+  headSha,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
@@ -109,6 +111,8 @@ export function RunHistory({
   /** Jump to this run's inline review accordion below (clicking the agent name). */
   onGoToReview?: (runId: string) => void;
   onDelete?: (runId: string) => void;
+  repoFullName?: string | null;
+  headSha?: string | null;
 }) {
   const t = useTranslations("prReview");
   const [popover, setPopover] = React.useState<{
@@ -307,6 +311,8 @@ export function RunHistory({
           anchor={popover.anchor}
           initialSeverity={popover.severity}
           onClose={() => setPopover(null)}
+          repoFullName={repoFullName}
+          headSha={headSha}
         />
       )}
     </>
