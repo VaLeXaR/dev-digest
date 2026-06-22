@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Dropdown } from "@devdigest/ui";
 import { AppShell } from "../../../../components/app-shell";
-import { useSkills, useUpdateSkill } from "../../../../lib/hooks/skills";
+import { useSkills, useUpdateSkill, useDeleteSkill } from "../../../../lib/hooks/skills";
 import { SkillCard } from "../SkillCard/SkillCard";
 import { CreateSkillModal } from "./_components/CreateSkillModal/CreateSkillModal";
 import { ImportSkillModal } from "./_components/ImportSkillModal/ImportSkillModal";
@@ -14,6 +14,7 @@ export function SkillsListView({ activeId }: { activeId?: string }) {
   const search = useSearchParams();
   const { data: skills = [] } = useSkills();
   const update = useUpdateSkill();
+  const del = useDeleteSkill();
   const [filter, setFilter] = useState("");
 
   const showCreate = search.get("create") === "1";
@@ -85,6 +86,11 @@ export function SkillsListView({ activeId }: { activeId?: string }) {
             active={skill.id === activeId}
             onClick={() => router.push(`/skills/${skill.id}`)}
             onToggle={(enabled) => update.mutate({ id: skill.id, patch: { enabled } })}
+            onDelete={() => {
+              if (!confirm(`Delete "${skill.name}"?`)) return;
+              del.mutate(skill.id);
+              if (activeId === skill.id) router.push("/skills");
+            }}
           />
         ))}
       </div>
