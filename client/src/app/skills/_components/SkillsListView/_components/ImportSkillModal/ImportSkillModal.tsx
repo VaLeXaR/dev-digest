@@ -19,6 +19,8 @@ export function ImportSkillModal({ onClose }: { onClose: () => void }) {
   const [mode, setMode] = useState<Mode>("file");
   const [url, setUrl] = useState("");
   const [previews, setPreviews] = useState<SkillPreview[]>([]);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [drag, setDrag] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const previewUrl = useImportPreviewUrl();
@@ -27,6 +29,11 @@ export function ImportSkillModal({ onClose }: { onClose: () => void }) {
 
   const isPending = previewUrl.isPending || previewFile.isPending;
   const fetchError = previewUrl.error ?? previewFile.error;
+
+  function handleFileChange(file: File | null | undefined) {
+    if (!file) return;
+    setFileName(file.name);
+  }
 
   async function handleFetch() {
     let result: SkillPreview[];
@@ -63,26 +70,66 @@ export function ImportSkillModal({ onClose }: { onClose: () => void }) {
           </div>
         }
       >
-        <div style={s.modeTabs}>
-          {(["file", "url"] as Mode[]).map((m) => (
-            <button key={m} type="button" onClick={() => setMode(m)} style={s.modeBtn(mode === m)}>
-              {m === "file" ? "Upload file" : "Paste URL"}
-            </button>
-          ))}
+        <div style={s.body}>
+          <div style={s.modeTabs}>
+            {(["file", "url"] as Mode[]).map((m) => (
+              <button key={m} type="button" onClick={() => setMode(m)} style={s.modeBtn(mode === m)}>
+                {m === "file" ? "Upload file" : "Paste URL"}
+              </button>
+            ))}
+          </div>
+
+          {mode === "file" && (
+            <>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".md,.zip"
+                aria-label="Upload skill file"
+                style={{ display: "none" }}
+                onChange={(e) => handleFileChange(e.target.files?.[0])}
+              />
+              <div
+                style={s.dropZone(drag)}
+                onClick={() => fileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+                onDragLeave={() => setDrag(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDrag(false);
+                  const file = e.dataTransfer.files[0];
+                  if (file && fileRef.current) {
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    fileRef.current.files = dt.files;
+                    handleFileChange(file);
+                  }
+                }}
+              >
+                {fileName ? (
+                  <div style={s.fileName}>📄 {fileName}</div>
+                ) : (
+                  <>
+                    <div>Drop a file here or click to browse</div>
+                    <div style={s.dropZoneHint}>.md or .zip</div>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
+          {mode === "url" && (
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://raw.githubusercontent.com/…"
+              style={s.urlInput}
+            />
+          )}
+
+          {fetchError && <div style={s.error}>{(fetchError as Error).message}</div>}
         </div>
-        {mode === "file" && (
-          <input ref={fileRef} type="file" accept=".md,.zip" style={s.input} />
-        )}
-        {mode === "url" && (
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://raw.githubusercontent.com/…"
-            style={s.input}
-          />
-        )}
-        {fetchError && <div style={s.error}>{(fetchError as Error).message}</div>}
       </Modal>
     );
   }
@@ -102,19 +149,21 @@ export function ImportSkillModal({ onClose }: { onClose: () => void }) {
         </div>
       }
     >
-      <div style={s.trustWarning}>
-        ⚠ Importing a skill adds its instructions to your agent&apos;s prompt. Only import skills
-        from sources you trust.
-      </div>
-      {previews.map((p, i) => (
-        <div key={i} style={s.previewCard}>
-          <div style={s.previewHeader}>
-            <span style={s.previewName}>{p.name}</span>
-            <span style={s.previewType}>{p.type}</span>
-          </div>
-          <div style={s.previewBody}>{p.body.slice(0, 400)}</div>
+      <div style={s.previewBody2}>
+        <div style={s.trustWarning}>
+          ⚠ Importing a skill adds its instructions to your agent&apos;s prompt. Only import skills
+          from sources you trust.
         </div>
-      ))}
+        {previews.map((p, i) => (
+          <div key={i} style={s.previewCard}>
+            <div style={s.previewHeader}>
+              <span style={s.previewName}>{p.name}</span>
+              <span style={s.previewType}>{p.type}</span>
+            </div>
+            <div style={s.previewBody}>{p.body.slice(0, 400)}</div>
+          </div>
+        ))}
+      </div>
     </Modal>
   );
 }

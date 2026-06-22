@@ -1,19 +1,37 @@
 import type React from "react";
 
 export const s = {
+  body: { padding: 24 } as React.CSSProperties,
+  previewBody2: { padding: 24 } as React.CSSProperties,
   modeTabs: { display: "flex", gap: 8, marginBottom: 16 } as React.CSSProperties,
   modeBtn: (active: boolean): React.CSSProperties => ({
-    padding: "6px 16px",
+    padding: "7px 18px",
     borderRadius: 6,
-    border: "1px solid var(--border)",
+    border: `1.5px solid ${active ? "var(--accent)" : "var(--border)"}`,
     background: active ? "var(--accent)" : "var(--bg-input)",
-    color: active ? "#fff" : "var(--text-primary)",
+    color: active ? "#fff" : "var(--text-secondary)",
     cursor: "pointer",
     fontSize: 13,
+    fontWeight: active ? 600 : 400,
   }),
-  input: {
+  dropZone: (drag: boolean): React.CSSProperties => ({
     width: "100%",
-    padding: "8px 12px",
+    padding: "28px 20px",
+    borderRadius: 8,
+    border: `2px dashed ${drag ? "var(--accent)" : "var(--border)"}`,
+    background: drag ? "var(--accent-subtle, #6366f111)" : "var(--bg-input)",
+    color: "var(--text-secondary)",
+    fontSize: 13,
+    textAlign: "center",
+    cursor: "pointer",
+    boxSizing: "border-box" as const,
+    transition: "border-color .15s, background .15s",
+  }),
+  dropZoneHint: { fontSize: 11, color: "var(--text-muted)", marginTop: 4 } as React.CSSProperties,
+  fileName: { fontSize: 13, color: "var(--text-primary)", fontWeight: 500 } as React.CSSProperties,
+  urlInput: {
+    width: "100%",
+    padding: "9px 12px",
     borderRadius: 6,
     border: "1px solid var(--border)",
     background: "var(--bg-input)",
@@ -21,7 +39,7 @@ export const s = {
     fontSize: 13,
     boxSizing: "border-box" as const,
   } as React.CSSProperties,
-  error: { color: "#ef4444", fontSize: 13, marginTop: 8 } as React.CSSProperties,
+  error: { color: "#ef4444", fontSize: 13, marginTop: 10 } as React.CSSProperties,
   trustWarning: {
     background: "#f59e0b22",
     border: "1px solid #f59e0b44",
