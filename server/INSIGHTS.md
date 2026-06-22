@@ -32,6 +32,8 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/api`.
 
 ## Session Notes
 
+- 2026-06-22: Implemented conventions extractor (branch l-02-home-work, Task 2). `buildSamples` reads 9 config files + top-12 ranked files via `repoIntel.getConventionSamples`. `callLLM` uses `LLMProvider.complete()` (plain text, not `completeStructured`) — returns `[]` on parse errors per spec. `verifyEvidence` uses `fs.existsSync` + per-line includes search within ±5 lines of `evidenceLine`. All 3 functions + types exported. TypeScript compiles clean. (`src/modules/conventions/extractor.ts`)
+
 - 2026-06-22: Implemented directory-based ZIP skill import (branch l-02-home-work). `previewFromZip` now treats each directory containing `SKILL.md` as one skill — loose `.md` files and dirs without `SKILL.md` are silently ignored. `parseFrontmatter` extended to parse YAML list values (`Record<string, string | string[]>`); callers use `typeof` + `Array.isArray` guards. `assembleSkill` private method reads `includes:` frontmatter, resolves paths relative to the skill dir, and appends content with `\n\n`. No DB/contract/client changes. (`src/modules/skills/import.service.ts`)
 
 - 2026-06-20: Implemented Run Cost Badge (feature L01). Added `cost_usd double precision` back to `agent_runs` (migration 0010), wired `outcome.costUsd` through `run-executor → completeAgentRun → DB`, added `cost_usd` to `RunSummary` + `RunStats` contracts, and added `last_run_cost_usd` to the PR list response via a last-done-run subquery.
