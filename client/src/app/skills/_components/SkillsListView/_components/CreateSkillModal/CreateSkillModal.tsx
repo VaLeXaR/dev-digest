@@ -2,25 +2,19 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Modal, Button } from "@devdigest/ui";
+import { Modal, Button, Select } from "@devdigest/ui";
+import type { Skill } from "@devdigest/shared";
 import { useCreateSkill } from "../../../../../../lib/hooks/skills";
 import { s } from "./styles";
 
-const SKILL_TYPES = [
-  { value: "rubric", color: "var(--accent)" },
-  { value: "convention", color: "#22c55e" },
-  { value: "security", color: "#ef4444" },
-  { value: "custom", color: "var(--text-secondary)" },
-] as const;
-
-type SkillTypeValue = (typeof SKILL_TYPES)[number]["value"];
+const SKILL_TYPES: Skill["type"][] = ["rubric", "convention", "security", "custom"];
 
 export function CreateSkillModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const create = useCreateSkill();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [type, setType] = useState<SkillTypeValue>("custom");
+  const [type, setType] = useState<Skill["type"]>("custom");
 
   async function handleCreate() {
     const skill = await create.mutateAsync({ name, description, type, body: "" });
@@ -70,18 +64,11 @@ export function CreateSkillModal({ onClose }: { onClose: () => void }) {
         </div>
         <div style={s.fieldLast}>
           <span style={s.label}>Type</span>
-          <div style={s.typePicker}>
-            {SKILL_TYPES.map(({ value, color }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setType(value)}
-                style={s.typeBtn(type === value, color)}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
+          <Select
+            value={type}
+            onChange={(v) => setType(v as Skill["type"])}
+            options={SKILL_TYPES}
+          />
         </div>
       </div>
     </Modal>

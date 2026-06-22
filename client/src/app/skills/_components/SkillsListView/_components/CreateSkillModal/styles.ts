@@ -21,22 +21,5 @@ export const s = {
     fontSize: 13,
     boxSizing: "border-box" as const,
   } as React.CSSProperties,
-  typePicker: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 8,
-  } as React.CSSProperties,
-  typeBtn: (active: boolean, color: string): React.CSSProperties => ({
-    padding: "9px 14px",
-    borderRadius: 8,
-    border: `1.5px solid ${active ? color : "var(--border)"}`,
-    background: active ? color + "22" : "var(--bg-input)",
-    color: active ? color : "var(--text-secondary)",
-    fontSize: 13,
-    fontWeight: active ? 600 : 500,
-    cursor: "pointer",
-    textAlign: "left",
-    transition: "border-color .12s, background .12s, color .12s",
-  }),
   footer: { display: "flex", gap: 8, justifyContent: "flex-end" } as React.CSSProperties,
 };
