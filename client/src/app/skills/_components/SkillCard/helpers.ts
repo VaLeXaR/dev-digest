@@ -3,27 +3,29 @@ import type { Skill } from "@devdigest/shared";
 export function typeColor(type: Skill["type"]): string {
   switch (type) {
     case "rubric":
-      return "var(--accent)";
+      return "#6366f1";
     case "convention":
       return "#22c55e";
     case "security":
       return "#ef4444";
     case "custom":
-      return "var(--text-secondary)";
+      return "#71717a";
   }
 }
 
-export function sourceLabel(source: Skill["source"]): string {
+export type SourceInfo = { label: string; icon: "Edit" | "Link" | "Globe" | "Upload" };
+
+export function sourceInfo(source: Skill["source"]): SourceInfo {
   switch (source) {
     case "manual":
-      return "Manual";
+      return { label: "Manual", icon: "Edit" };
     case "imported_url":
-      return "Imported";
+      return { label: "Imported", icon: "Link" };
     case "imported_file":
-      return "Imported";
+      return { label: "Imported", icon: "Upload" };
     case "extracted":
-      return "Extracted";
+      return { label: "Extracted", icon: "Link" };
     case "community":
-      return "Community";
+      return { label: "Community", icon: "Globe" };
   }
 }

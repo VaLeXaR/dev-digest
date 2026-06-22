@@ -20,6 +20,8 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/api`.
 
 ## Recurring Errors & Fixes
 
+- 2026-06-22: `github.com/.../blob/...` URLs return HTML (the GitHub web UI page), not the raw file. `SkillsImportService.previewFromUrl()` now auto-converts blob URLs to `raw.githubusercontent.com` and rejects responses with `content-type: text/html`. If adding new URL-fetching logic, always validate `content-type` before parsing as text. (`src/modules/skills/import.service.ts:normalizeGitHubUrl`)
+
 ## Session Notes
 
 - 2026-06-20: Implemented Run Cost Badge (feature L01). Added `cost_usd double precision` back to `agent_runs` (migration 0010), wired `outcome.costUsd` through `run-executor → completeAgentRun → DB`, added `cost_usd` to `RunSummary` + `RunStats` contracts, and added `last_run_cost_usd` to the PR list response via a last-done-run subquery.

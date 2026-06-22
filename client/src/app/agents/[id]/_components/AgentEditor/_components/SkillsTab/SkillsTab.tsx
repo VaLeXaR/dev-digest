@@ -11,6 +11,53 @@ import {
 import { typeColor } from "../../../../../../../app/skills/_components/SkillCard/helpers";
 import { s } from "./styles";
 
+function SkillRow({
+  skill,
+  linked,
+  enabled,
+  dragOver,
+  onToggle,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragLeave,
+}: {
+  skill: Skill;
+  linked: boolean;
+  enabled: boolean;
+  dragOver: boolean;
+  onToggle: () => void;
+  onDragStart?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: () => void;
+  onDragLeave?: () => void;
+}) {
+  const color = typeColor(skill.type);
+
+  return (
+    <div
+      draggable={linked}
+      onDragStart={linked ? onDragStart : undefined}
+      onDragOver={linked ? onDragOver : undefined}
+      onDrop={linked ? onDrop : undefined}
+      onDragLeave={linked ? onDragLeave : undefined}
+      style={linked ? s.row(enabled, dragOver) : s.unlinkedRow()}
+    >
+      <span style={linked ? s.drag : s.dragPlaceholder}>≡</span>
+      <input
+        type="checkbox"
+        aria-label={linked ? `Disable ${skill.name}` : `Add ${skill.name}`}
+        checked={linked && enabled}
+        onChange={onToggle}
+        style={s.checkbox}
+      />
+      <span style={s.skillName}>{skill.name}</span>
+      {skill.description && <span style={s.skillDesc}>{skill.description}</span>}
+      <span style={s.typeBadge(color)}>{skill.type}</span>
+    </div>
+  );
+}
+
 export function SkillsTab({ agent }: { agent: Agent }) {
   const { data: allSkills = [] } = useSkills();
   const { data: links = [] } = useAgentSkillLinks(agent.id);
@@ -28,23 +75,26 @@ export function SkillsTab({ agent }: { agent: Agent }) {
     .map((l) => allSkills.find((sk) => sk.id === l.skill_id))
     .filter((sk): sk is Skill => !!sk);
 
-  const unlinkedSkills = search
-    ? allSkills.filter(
-        (sk) =>
-          !linkMap.has(sk.id) &&
-          (sk.name.toLowerCase().includes(search.toLowerCase()) ||
-            sk.description.toLowerCase().includes(search.toLowerCase())),
-      )
-    : [];
+  const q = search.toLowerCase();
+  const matches = (sk: Skill) =>
+    !q || sk.name.toLowerCase().includes(q) || sk.description.toLowerCase().includes(q);
+
+  const linkedVisible = linkedInOrder.filter(matches);
+  // Unlinked: only workspace-enabled skills, not already linked
+  const unlinkedVisible = allSkills.filter(
+    (sk) => sk.enabled && !linkMap.has(sk.id) && matches(sk),
+  );
 
   const enabledCount = links.filter((l) => l.enabled).length;
 
-  function handleToggle(skillId: string) {
-    const link = linkMap.get(skillId);
+  function handleToggle(skill: Skill) {
+    const link = linkMap.get(skill.id);
     if (link) {
-      toggleSkill.mutate({ skillId, enabled: !link.enabled });
+      // Already linked → toggle enabled flag for this agent
+      toggleSkill.mutate({ skillId: skill.id, enabled: !link.enabled });
     } else {
-      const newIds = [...links.map((l) => l.skill_id), skillId];
+      // Not linked → add to agent (enabled by default)
+      const newIds = [...links.map((l) => l.skill_id), skill.id];
       setSkills.mutate(newIds);
     }
   }
@@ -85,52 +135,39 @@ export function SkillsTab({ agent }: { agent: Agent }) {
         Order matters — earlier skills appear earlier in the assembled prompt. Drag to reorder.
       </div>
 
-      {linkedInOrder.map((skill) => {
+      {linkedVisible.map((skill) => {
         const link = linkMap.get(skill.id)!;
         return (
-          <div
+          <SkillRow
             key={skill.id}
-            draggable
+            skill={skill}
+            linked
+            enabled={link.enabled}
+            dragOver={dragOver === skill.id}
+            onToggle={() => handleToggle(skill)}
             onDragStart={() => handleDragStart(skill.id)}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(skill.id);
-            }}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(skill.id); }}
             onDrop={() => handleDrop(skill.id)}
             onDragLeave={() => setDragOver(null)}
-            style={{
-              ...s.row(link.enabled),
-              outline: dragOver === skill.id ? "2px solid var(--accent)" : undefined,
-            }}
-          >
-            <span style={s.drag}>≡</span>
-            <input
-              type="checkbox"
-              aria-label={`Enable ${skill.name}`}
-              checked={link.enabled}
-              onChange={() => handleToggle(skill.id)}
-              style={s.checkbox}
-            />
-            <span style={s.skillName}>{skill.name}</span>
-            <span style={s.typeBadge(typeColor(skill.type))}>{skill.type}</span>
-          </div>
+          />
         );
       })}
 
-      {unlinkedSkills.map((skill) => (
-        <div key={skill.id} style={s.unlinkedRow(false)}>
-          <span style={{ ...s.drag, opacity: 0 }}>≡</span>
-          <input
-            type="checkbox"
-            aria-label={`Add ${skill.name}`}
-            checked={false}
-            onChange={() => handleToggle(skill.id)}
-            style={s.checkbox}
-          />
-          <span style={s.skillName}>{skill.name}</span>
-          <span style={s.typeBadge(typeColor(skill.type))}>{skill.type}</span>
-        </div>
-      ))}
+      {unlinkedVisible.length > 0 && (
+        <>
+          {linkedVisible.length > 0 && <div style={s.divider} />}
+          {unlinkedVisible.map((skill) => (
+            <SkillRow
+              key={skill.id}
+              skill={skill}
+              linked={false}
+              enabled={false}
+              dragOver={false}
+              onToggle={() => handleToggle(skill)}
+            />
+          ))}
+        </>
+      )}
     </div>
   );
 }

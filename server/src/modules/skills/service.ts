@@ -27,7 +27,9 @@ export class SkillsService {
   }
 
   async list(workspaceId: string): Promise<Skill[]> {
-    return (await this.repo.list(workspaceId)).map(toSkillDto);
+    const rows = await this.repo.list(workspaceId);
+    const statsMap = await this.repo.statsForSkills(rows.map((r) => r.id));
+    return rows.map((r) => toSkillDto(r, statsMap.get(r.id)));
   }
 
   async get(workspaceId: string, id: string): Promise<Skill | undefined> {

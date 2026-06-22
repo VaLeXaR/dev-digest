@@ -26,8 +26,8 @@ const EnvSchema = z.object({
   // Note: even when on, sections only populate once the repo is indexed; an
   // unindexed repo degrades gracefully. Per-agent override: agents.repo_intel.
   REPO_INTEL_ENABLED: z.string().optional(),
-  API_PORT: z.coerce.number().int().default(3001),
-  WEB_PORT: z.coerce.number().int().default(3000),
+  API_PORT: z.coerce.number().int().default(4001),
+  WEB_PORT: z.coerce.number().int().default(4000),
   DEVDIGEST_CLONE_DIR: z.string().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   // `.env` (and .env.example) ship `LOG_LEVEL=` empty; an empty string is not a

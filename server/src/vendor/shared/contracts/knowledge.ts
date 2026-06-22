@@ -129,6 +129,9 @@ export const Skill = z.object({
   version: z.number().int(),
   created_at: z.string(),
   evidence_files: z.array(z.string()).nullish(),
+  agent_count: z.number().int().nullish(),
+  pull_pct: z.number().nullish(),
+  accept_pct: z.number().nullish(),
 });
 export type Skill = z.infer<typeof Skill>;
 

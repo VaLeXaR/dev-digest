@@ -1,7 +1,7 @@
-import type React from "react";
+import type { CSSProperties } from "react";
 
 export const s = {
-  card: (active: boolean, enabled: boolean): React.CSSProperties => ({
+  row: (active: boolean, enabled: boolean): CSSProperties => ({
     padding: 12,
     borderRadius: 8,
     cursor: "pointer",
@@ -10,30 +10,51 @@ export const s = {
     border: active ? "1px solid var(--border-active)" : "1px solid transparent",
     marginBottom: 4,
   }),
-  header: { display: "flex", alignItems: "center", gap: 8 } as React.CSSProperties,
+  card: (active: boolean, enabled: boolean): CSSProperties => ({
+    padding: 14,
+    borderRadius: 8,
+    cursor: "pointer",
+    border: "1px solid " + (active ? "var(--border-strong)" : "var(--border)"),
+    background: active ? "var(--bg-hover)" : "var(--bg-elevated)",
+    opacity: enabled ? 1 : 0.6,
+  }),
+  header: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
+  iconBox: (color: string): CSSProperties => ({
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    background: color + "22",
+    color,
+    display: "grid",
+    placeItems: "center",
+    flexShrink: 0,
+  }),
   name: {
     fontWeight: 600,
     fontSize: 13,
     flex: 1,
     color: "var(--text-primary)",
-  } as React.CSSProperties,
+    whiteSpace: "nowrap" as const,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  } satisfies CSSProperties,
   description: {
     fontSize: 12,
     color: "var(--text-muted)",
-    marginTop: 4,
+    margin: "6px 0 0",
+    lineHeight: 1.4,
     overflow: "hidden",
-    display: "-webkit-box",
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: "vertical" as const,
-  } as React.CSSProperties,
+    whiteSpace: "nowrap" as const,
+    textOverflow: "ellipsis",
+  } satisfies CSSProperties,
   meta: {
     display: "flex",
     alignItems: "center",
     gap: 6,
     marginTop: 8,
     flexWrap: "wrap" as const,
-  } as React.CSSProperties,
-  typeBadge: (color: string): React.CSSProperties => ({
+  } satisfies CSSProperties,
+  typeBadge: (color: string): CSSProperties => ({
     fontSize: 11,
     padding: "2px 6px",
     borderRadius: 4,
@@ -41,5 +62,26 @@ export const s = {
     color,
     fontWeight: 600,
   }),
-  sourceBadge: { fontSize: 11, color: "var(--text-muted)" } as React.CSSProperties,
+  sourceBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 3,
+    fontSize: 11,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  statsRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+  } satisfies CSSProperties,
+  statMuted: {
+    fontSize: 11,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  statAccept: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#22c55e",
+  } satisfies CSSProperties,
 };

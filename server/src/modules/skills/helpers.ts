@@ -1,7 +1,8 @@
 import type { Skill, SkillVersion } from '@devdigest/shared';
 import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
+import type { SkillStats } from './repository.js';
 
-export function toSkillDto(row: SkillRow): Skill {
+export function toSkillDto(row: SkillRow, stats?: SkillStats): Skill {
   return {
     id: row.id,
     name: row.name,
@@ -13,6 +14,9 @@ export function toSkillDto(row: SkillRow): Skill {
     version: row.version,
     created_at: row.createdAt.toISOString(),
     evidence_files: (row.evidenceFiles as string[] | null) ?? null,
+    agent_count: stats?.agentCount ?? null,
+    pull_pct: stats?.pullPct ?? null,
+    accept_pct: stats?.acceptPct ?? null,
   };
 }
 
