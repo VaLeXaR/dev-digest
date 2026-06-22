@@ -10,6 +10,7 @@ import {
   usePatchConvention,
 } from "../../../../lib/hooks/conventions";
 import { ConventionCard } from "../ConventionCard/ConventionCard";
+import { CreateSkillModal } from "../CreateSkillModal/CreateSkillModal";
 import { s } from "./styles";
 
 export function ConventionsView() {
@@ -152,10 +153,12 @@ export function ConventionsView() {
           </div>
         )}
 
-        {/* CreateSkillModal placeholder — Task 7 will fill this in */}
         {showCreateModal && (
-          // CreateSkillModal will be added in Task 7
-          null
+          <CreateSkillModal
+            repoName={repoName}
+            accepted={acceptedCandidates}
+            onClose={() => setShowCreateModal(false)}
+          />
         )}
       </div>
     </AppShell>

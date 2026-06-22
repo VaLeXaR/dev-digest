@@ -37,6 +37,8 @@ export interface CreateSkillInput {
   description: string;
   type: Skill["type"];
   body: string;
+  enabled?: boolean;
+  source?: Skill["source"];
 }
 
 export function useCreateSkill() {
