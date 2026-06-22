@@ -9,7 +9,14 @@ import type { Skill } from "@devdigest/shared";
 import { useUpdateSkill } from "../../../../../../../lib/hooks/skills";
 import { s } from "./styles";
 
-const SKILL_TYPES = ["rubric", "convention", "security", "custom"] as const;
+const SKILL_TYPES = [
+  { value: "rubric", color: "var(--accent)" },
+  { value: "convention", color: "#22c55e" },
+  { value: "security", color: "#ef4444" },
+  { value: "custom", color: "var(--text-secondary)" },
+] as const;
+
+type SkillTypeValue = (typeof SKILL_TYPES)[number]["value"];
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
@@ -19,7 +26,7 @@ export function ConfigTab({ skill }: { skill: Skill }) {
   const update = useUpdateSkill();
   const [name, setName] = useState(skill.name);
   const [description, setDescription] = useState(skill.description);
-  const [type, setType] = useState(skill.type);
+  const [type, setType] = useState<SkillTypeValue>(skill.type);
   const [body, setBody] = useState(skill.body);
 
   const isDirty =
@@ -60,19 +67,19 @@ export function ConfigTab({ skill }: { skill: Skill }) {
       </div>
 
       <div style={s.section}>
-        <label htmlFor="skill-type" style={s.label}>Type</label>
-        <select
-          id="skill-type"
-          value={type}
-          onChange={(e) => setType(e.target.value as Skill["type"])}
-          style={s.select}
-        >
-          {SKILL_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
+        <span style={s.label}>Type</span>
+        <div style={s.typePicker}>
+          {SKILL_TYPES.map(({ value, color }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setType(value)}
+              style={s.typeBtn(type === value, color)}
+            >
+              {value}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
       <div style={s.section}>
