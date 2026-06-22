@@ -117,6 +117,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
     // not surfaced on the list — findings live on the PR detail page.)
     const prIds = rows.map((r) => r.id);
     const latestReviewByPr = new Map<string, { score: number | null }>();
+    const latestRunCostByPr = new Map<string, number | null>();
     if (prIds.length > 0) {
       const reviewRows = await container.db
         .select({ prId: t.reviews.prId, score: t.reviews.score })
@@ -126,6 +127,23 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       // Rows are newest-first → first seen per PR is the latest review.
       for (const rv of reviewRows) {
         if (!latestReviewByPr.has(rv.prId)) latestReviewByPr.set(rv.prId, { score: rv.score });
+      }
+
+      // Cost of the last completed run per PR, for the COST column.
+      const runCostRows = await container.db
+        .select({ prId: t.agentRuns.prId, costUsd: t.agentRuns.costUsd })
+        .from(t.agentRuns)
+        .where(
+          and(
+            inArray(t.agentRuns.prId, prIds as [string, ...string[]]),
+            eq(t.agentRuns.status, 'done'),
+          ),
+        )
+        .orderBy(desc(t.agentRuns.ranAt));
+      for (const rc of runCostRows) {
+        if (rc.prId && !latestRunCostByPr.has(rc.prId)) {
+          latestRunCostByPr.set(rc.prId, rc.costUsd ?? null);
+        }
       }
     }
 
@@ -153,6 +171,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
+        last_run_cost_usd: latestRunCostByPr.get(r.id) ?? null,
       };
     });
   });

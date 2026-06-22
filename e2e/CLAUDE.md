@@ -25,7 +25,6 @@ npm test          # against your own running stack (requires freshly-seeded DB �
 ## Gotchas
 
 - Flows 02/04/05 assume the seeded repo is the ONLY one — will fail against a "dirty" dev DB
-- **NEVER** `docker compose down -v` to reset — destroys the main `devdigest_pgdata` volume
 
 ## Read when
 
