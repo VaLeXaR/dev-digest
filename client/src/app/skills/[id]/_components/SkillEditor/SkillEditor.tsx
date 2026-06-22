@@ -5,6 +5,8 @@ import { Tabs } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { TABS } from "./constants";
 import { ConfigTab } from "./_components/ConfigTab/ConfigTab";
+import { PreviewTab } from "./_components/PreviewTab/PreviewTab";
+import { VersionsTab } from "./_components/VersionsTab/VersionsTab";
 import { s } from "./styles";
 
 export function SkillEditor({
@@ -23,8 +25,8 @@ export function SkillEditor({
       </div>
       <div style={s.body}>
         {tab === "config" && <ConfigTab key={skill.id} skill={skill} />}
-        {tab === "preview" && <div style={{ color: "var(--text-muted)", fontSize: 13 }}>Preview tab — coming in Task 11</div>}
-        {tab === "versions" && <div style={{ color: "var(--text-muted)", fontSize: 13 }}>Versions tab — coming in Task 11</div>}
+        {tab === "preview" && <PreviewTab skill={skill} />}
+        {tab === "versions" && <VersionsTab skill={skill} />}
       </div>
     </div>
   );
