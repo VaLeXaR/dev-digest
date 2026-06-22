@@ -209,7 +209,7 @@ export class AgentsRepository {
   async linkSkill(agentId: string, skillId: string, order: number): Promise<void> {
     await this.db
       .insert(t.agentSkills)
-      .values({ agentId, skillId, order })
+      .values({ agentId, skillId, order, enabled: true })
       .onConflictDoUpdate({
         target: [t.agentSkills.agentId, t.agentSkills.skillId],
         set: { order },
@@ -232,6 +232,21 @@ export class AgentsRepository {
     if (skillIds.length === 0) return;
     await this.db
       .insert(t.agentSkills)
-      .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+      .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i, enabled: true })));
+  }
+
+  /** Update per-link fields (enabled / order) without replacing the full set. */
+  async updateSkillLink(
+    agentId: string,
+    skillId: string,
+    patch: { enabled?: boolean; order?: number },
+  ): Promise<void> {
+    await this.db
+      .update(t.agentSkills)
+      .set({
+        ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+        ...(patch.order !== undefined ? { order: patch.order } : {}),
+      })
+      .where(and(eq(t.agentSkills.agentId, agentId), eq(t.agentSkills.skillId, skillId)));
   }
 }

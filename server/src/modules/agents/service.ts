@@ -171,6 +171,19 @@ export class AgentsService {
     return this.skillLinks(agentId);
   }
 
+  /** Toggle or reorder a single skill link without replacing the full set. */
+  async updateSkillLink(
+    workspaceId: string,
+    agentId: string,
+    skillId: string,
+    patch: { enabled?: boolean },
+  ): Promise<AgentSkillLink[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    await this.repo.updateSkillLink(agentId, skillId, patch);
+    return this.skillLinks(agentId);
+  }
+
   /**
    * Dynamic model list from the provider adapter's /models. Degrades gracefully
    * to [] if the provider key is not configured (the editor still renders).
