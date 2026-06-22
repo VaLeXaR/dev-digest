@@ -6,14 +6,21 @@ import { Modal, Button } from "@devdigest/ui";
 import { useCreateSkill } from "../../../../../../lib/hooks/skills";
 import { s } from "./styles";
 
-const SKILL_TYPES = ["rubric", "convention", "security", "custom"] as const;
+const SKILL_TYPES = [
+  { value: "rubric", color: "var(--accent)" },
+  { value: "convention", color: "#22c55e" },
+  { value: "security", color: "#ef4444" },
+  { value: "custom", color: "var(--text-secondary)" },
+] as const;
+
+type SkillTypeValue = (typeof SKILL_TYPES)[number]["value"];
 
 export function CreateSkillModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const create = useCreateSkill();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [type, setType] = useState<(typeof SKILL_TYPES)[number]>("custom");
+  const [type, setType] = useState<SkillTypeValue>("custom");
 
   async function handleCreate() {
     const skill = await create.mutateAsync({ name, description, type, body: "" });
@@ -62,19 +69,19 @@ export function CreateSkillModal({ onClose }: { onClose: () => void }) {
           />
         </div>
         <div style={s.fieldLast}>
-          <label htmlFor="skill-type" style={s.label}>Type</label>
-          <select
-            id="skill-type"
-            value={type}
-            onChange={(e) => setType(e.target.value as (typeof SKILL_TYPES)[number])}
-            style={s.select}
-          >
-            {SKILL_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
+          <span style={s.label}>Type</span>
+          <div style={s.typePicker}>
+            {SKILL_TYPES.map(({ value, color }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setType(value)}
+                style={s.typeBtn(type === value, color)}
+              >
+                {value}
+              </button>
             ))}
-          </select>
+          </div>
         </div>
       </div>
     </Modal>
