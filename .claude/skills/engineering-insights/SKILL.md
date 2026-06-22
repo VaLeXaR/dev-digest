@@ -1,6 +1,6 @@
 ---
 name: engineering-insights
-description: Use when starting or finishing any devdigest session. Read the relevant module's INSIGHTS.md before touching code; write new non-obvious findings at session end only if substantial and not already recorded.
+description: Use when starting any devdigest session, the moment a non-obvious finding surfaces mid-session, or when wrapping up work — gotchas, working approaches, dead-ends, tool quirks, recurring errors, or open questions that a future agent would otherwise relearn.
 ---
 
 # Engineering Insights
@@ -11,30 +11,42 @@ Two mandatory checkpoints every session: **read first, write last.**
 
 ### Step 1 — READ (before any code or analysis)
 
-As soon as you know which module(s) the session touches, read that module's `INSIGHTS.md`. Treat every entry as high-confidence guidance for this session.
+Read the touched module's `INSIGHTS.md` immediately. Treat every entry as high-confidence guidance.
 
 If multiple modules are involved, read all of them.
 
-**Do not skip this step** even if the session seems simple — known gotchas live here, not in code.
+**Do not skip** — known gotchas live here, not in code.
 
-### Step 2 — WORK
+### Step 2 — WORK (capture mid-session, don't defer)
 
-As you go, note things that took multiple attempts, surprised you, or would cost the next agent time to re-discover.
-
-**Capture as you go:** If something truly non-obvious surfaces mid-session — an unexpected constraint, a gotcha, a hard-won fix — write the entry to `INSIGHTS.md` immediately. Don't rely on remembering it at session end.
+Note things mid-session that took multiple attempts, surprised you, or would cost the next agent time. **Write immediately when a finding is clear** — don't rely on remembering it at session end.
 
 ### Step 3 — DEDUP CHECK (before writing anything)
 
-Before writing a new entry, re-read `INSIGHTS.md`. If the insight is already present in any form, do not write it.
+Re-read `INSIGHTS.md`. If the insight is already present in any form, skip.
 
 ### Step 4 — WRITE (session end, conditional)
 
-Write new entries **only if**:
-- Something substantial was discovered (not obvious from reading the code)
-- It is not already in `INSIGHTS.md`
-- It passes the quality standard below
+Should I write this entry?
 
-**Skip Step 4 entirely** for sessions that were purely mechanical — trivial config edits, formatting, no unexpected findings. The signal is "would a future agent benefit?" not "did I spend time?". Sessions under ~30 min with no surprises rarely warrant an entry.
+```dot
+digraph write_decision {
+    "Obvious from reading code?" [shape=diamond];
+    "Already in INSIGHTS.md?" [shape=diamond];
+    "Would next agent re-investigate?" [shape=diamond];
+    "Skip" [shape=box];
+    "Write entry" [shape=box];
+
+    "Obvious from reading code?" -> "Skip" [label="yes"];
+    "Obvious from reading code?" -> "Already in INSIGHTS.md?" [label="no"];
+    "Already in INSIGHTS.md?" -> "Skip" [label="yes"];
+    "Already in INSIGHTS.md?" -> "Would next agent re-investigate?" [label="no"];
+    "Would next agent re-investigate?" -> "Write entry" [label="yes"];
+    "Would next agent re-investigate?" -> "Skip" [label="no"];
+}
+```
+
+Skip Step 4 entirely for purely mechanical sessions — trivial config edits, formatting, no surprises. Sessions under ~30 min with no surprises rarely warrant an entry.
 
 ---
 
@@ -56,7 +68,7 @@ If work touches multiple modules, write to each relevant one.
 | Section | What goes here |
 |---|---|
 | **What Works** | Approaches and solutions that worked |
-| **What Doesn't Work** | Dead ends, antipatterns — often the most valuable section |
+| **What Doesn't Work** | Dead ends, antipatterns — **highest-value section; most often skipped** |
 | **Codebase Patterns** | Conventions, architectural decisions |
 | **Tool & Library Notes** | Dependency quirks specific to this codebase |
 | **Decisions** | Architectural or approach choices made, with the reason — so future agents don't re-open closed questions |
@@ -72,7 +84,7 @@ If work touches multiple modules, write to each relevant one.
 - YYYY-MM-DD: [Specific, actionable finding — the symptom, constraint, or fix in one sentence] (`path/to/file:line`)
 ```
 
-Include `file:line` whenever the finding is anchored to specific code — it makes the entry verifiable and jump-to-able without re-investigation. Omit only for pure process/tool observations with no code anchor.
+Include `file:line` whenever the finding is anchored to specific code. Omit only for pure process/tool observations with no code anchor.
 
 Add under the matching `## Section` header. If the section is missing, append it at the bottom.
 
@@ -94,11 +106,22 @@ Entries must be cold-readable — a future agent reads it and knows exactly what
 
 ---
 
+## Non-Destructive Write Contract (hard rule)
+
+**Never use the `Write` tool on an existing `INSIGHTS.md`** — `Write` replaces the whole file and destroys all prior content.
+
+- **Re-read the target `INSIGHTS.md` immediately before writing** — its state may have changed during the session
+- **Insert with an anchored `Edit`** that adds the new bullet under the correct `##` heading
+- **Corrections are additive** — if reality contradicts an old entry, add a new dated note that supersedes it; never delete or edit the old one
+- **Idempotent** — if an equivalent entry already exists, skip it entirely
+
+---
+
 ## Rules
 
-- **Append-only (agent sessions)** — during a work session, only add entries; never edit or remove existing ones. This prevents merge conflicts and accidental loss of lessons. A human maintenance review (monthly) can delete stale or incorrect entries.
+- **Append-only (agent sessions)** — only add entries; never edit or remove existing ones. Human maintenance (monthly) can delete stale or incorrect entries.
 - **Module-specific** — always write to the module where the work happened
 - **One entry per insight** — don't bundle unrelated discoveries
 - **No forced entries** — an empty session is better than a noisy file
-- **Flag conflicts** — if you notice two existing entries that contradict each other, add a note in **Open Questions** flagging the conflict for human resolution; don't silently proceed
-- **Size limit** — if a file approaches ~200 entries, add a note in **Open Questions** flagging it for a domain split (e.g., `INSIGHTS-Database.md`, `INSIGHTS-Auth.md`); signal-to-noise degrades past this point
+- **Flag conflicts** — if two existing entries contradict each other, add a note in **Open Questions** flagging the conflict for human resolution; don't silently proceed
+- **Size limit** — if a file approaches ~200 entries, flag in **Open Questions** for a domain split (e.g., `INSIGHTS-Database.md`, `INSIGHTS-Auth.md`); signal-to-noise degrades past this point
