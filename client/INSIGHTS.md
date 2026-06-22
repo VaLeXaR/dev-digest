@@ -41,6 +41,8 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/web`.
 
 ## Session Notes
 
+- 2026-06-22: SVG ring chart for percentage stat cards: use a `<circle>` with `stroke-dasharray="${filled} ${circ - filled}"` where `filled = (pct/100) * 2πr` and `transform="rotate(-90 cx cy)"` to start the arc at the top. Keep `dominantBaseline="central"` on the label text for vertical centering. Pattern is self-contained — no chart library needed for simple single-value rings. (`src/app/skills/[id]/_components/SkillEditor/_components/StatsTab/StatsTab.tsx:RingChart`)
+
 - 2026-06-22: Skills feature UI polish (branch l-02-home-work). Added delete button on SkillCard, fixed GitHub blob URL → raw auto-conversion in import, replaced all native `<select>` with custom `Select` component (modal + skill editor + agent editor). Fixed z-index of Select dropdown in modals using `createPortal` with SSR guard.
 
 - 2026-06-20: Implemented Run Cost Badge (feature L01). Added `cost_usd` to `RunSummary` + `RunStats` contracts (both vendor copies), `formatCost()` to `pulls/helpers.ts`, COST column to PR list (constants + PRRow), per-run cost badge in RunHistory timeline, and Cost stat card in TraceBody. All 21 unit tests pass.
