@@ -8,6 +8,7 @@ export function useConventions(repoId: string) {
   return useQuery({
     queryKey: ["conventions", repoId],
     queryFn: () => api.get<ConventionCandidate[]>(`/repos/${repoId}/conventions`),
+    enabled: !!repoId,
   });
 }
 
