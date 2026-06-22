@@ -94,7 +94,7 @@ export class SkillsImportService {
       if (inc.includes('..') || inc.startsWith('/')) continue;
       const incPath = dirPath + inc;
       const incContent = fileMap.get(incPath);
-      if (!incContent) continue;
+      if (incContent === undefined) continue;
       body += '\n\n' + incContent.trim();
     }
 

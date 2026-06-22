@@ -32,7 +32,6 @@ describe('SkillsImportService', () => {
   describe('parseFrontmatter (via previewFromBuffer)', () => {
     it('parses includes list from SKILL.md frontmatter', async () => {
       const md = `---\nname: My Skill\ntype: convention\nincludes:\n  - examples.md\n  - config.md\n---\nBody`;
-      // We'll test this indirectly via ZIP in Task 2.
       // Here we verify the existing single-file path still works with the new signature.
       const previews = await svc.previewFromBuffer(Buffer.from(md), 'skill.md');
       expect(previews[0]?.name).toBe('My Skill');
