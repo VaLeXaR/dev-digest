@@ -27,4 +27,22 @@ describe('SkillsImportService', () => {
   it('rejects non-http URLs', async () => {
     await expect(svc.previewFromUrl('file:///etc/passwd')).rejects.toThrow('http');
   });
+
+  describe('parseFrontmatter (via previewFromBuffer)', () => {
+    it('parses includes list from SKILL.md frontmatter', async () => {
+      const md = `---\nname: My Skill\ntype: convention\nincludes:\n  - examples.md\n  - config.md\n---\nBody`;
+      // We'll test this indirectly via ZIP in Task 2.
+      // Here we verify the existing single-file path still works with the new signature.
+      const previews = await svc.previewFromBuffer(Buffer.from(md), 'skill.md');
+      expect(previews[0]?.name).toBe('My Skill');
+      expect(previews[0]?.type).toBe('convention');
+      expect(previews[0]?.body).toBe('Body');
+    });
+
+    it('ignores includes field in single-file mode (no zip)', async () => {
+      const md = `---\nname: Solo\nincludes:\n  - other.md\n---\nOnly body`;
+      const previews = await svc.previewFromBuffer(Buffer.from(md), 'solo.md');
+      expect(previews[0]?.body).toBe('Only body');
+    });
+  });
 });

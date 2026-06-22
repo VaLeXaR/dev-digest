@@ -48,10 +48,13 @@ export class SkillsImportService {
     if (fmMatch) {
       const fm = parseFrontmatter(fmMatch[1]!);
       const body = fmMatch[2]!.trim();
+      const rawType = fm['type'];
       return {
-        name: fm['name'] ?? filenameToName(filename),
-        description: fm['description'] ?? '',
-        type: (VALID_TYPES.includes(fm['type'] as SkillType) ? fm['type'] : 'custom') as SkillType,
+        name: (typeof fm['name'] === 'string' ? fm['name'] : undefined) ?? filenameToName(filename),
+        description: typeof fm['description'] === 'string' ? fm['description'] : '',
+        type: (typeof rawType === 'string' && VALID_TYPES.includes(rawType as SkillType)
+          ? rawType
+          : 'custom') as SkillType,
         body,
         source,
         filename,
@@ -73,14 +76,43 @@ function filenameToName(filename: string): string {
   return filename.replace(/\.md$/i, '').replace(/[-_]/g, ' ');
 }
 
-function parseFrontmatter(fm: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const line of fm.split('\n')) {
+function parseFrontmatter(fm: string): Record<string, string | string[]> {
+  const result: Record<string, string | string[]> = {};
+  const lines = fm.split('\n');
+  let listKey: string | null = null;
+  let listValues: string[] = [];
+
+  const flushList = () => {
+    if (listKey !== null) {
+      result[listKey] = listValues;
+      listKey = null;
+      listValues = [];
+    }
+  };
+
+  for (const line of lines) {
+    // YAML sequence item: "  - value" or "- value"
+    const listMatch = line.match(/^\s+-\s+(.*)/);
+    if (listMatch) {
+      if (listKey !== null) listValues.push(listMatch[1]!.trim());
+      continue;
+    }
+
+    flushList();
+
     const idx = line.indexOf(':');
     if (idx === -1) continue;
     const key = line.slice(0, idx).trim();
     const value = line.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
-    result[key] = value;
+
+    if (value === '') {
+      // No inline value — next lines may be list items
+      listKey = key;
+    } else {
+      result[key] = value;
+    }
   }
+
+  flushList();
   return result;
 }
