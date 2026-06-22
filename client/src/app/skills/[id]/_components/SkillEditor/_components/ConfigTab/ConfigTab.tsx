@@ -4,19 +4,12 @@ import React, { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { Button } from "@devdigest/ui";
+import { Button, Select } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { useUpdateSkill } from "../../../../../../../lib/hooks/skills";
 import { s } from "./styles";
 
-const SKILL_TYPES = [
-  { value: "rubric", color: "var(--accent)" },
-  { value: "convention", color: "#22c55e" },
-  { value: "security", color: "#ef4444" },
-  { value: "custom", color: "var(--text-secondary)" },
-] as const;
-
-type SkillTypeValue = (typeof SKILL_TYPES)[number]["value"];
+const SKILL_TYPES: Skill["type"][] = ["rubric", "convention", "security", "custom"];
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
@@ -26,7 +19,7 @@ export function ConfigTab({ skill }: { skill: Skill }) {
   const update = useUpdateSkill();
   const [name, setName] = useState(skill.name);
   const [description, setDescription] = useState(skill.description);
-  const [type, setType] = useState<SkillTypeValue>(skill.type);
+  const [type, setType] = useState<Skill["type"]>(skill.type);
   const [body, setBody] = useState(skill.body);
 
   const isDirty =
@@ -68,18 +61,11 @@ export function ConfigTab({ skill }: { skill: Skill }) {
 
       <div style={s.section}>
         <span style={s.label}>Type</span>
-        <div style={s.typePicker}>
-          {SKILL_TYPES.map(({ value, color }) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setType(value)}
-              style={s.typeBtn(type === value, color)}
-            >
-              {value}
-            </button>
-          ))}
-        </div>
+        <Select
+          value={type}
+          onChange={(v) => setType(v as Skill["type"])}
+          options={SKILL_TYPES}
+        />
       </div>
 
       <div style={s.section}>

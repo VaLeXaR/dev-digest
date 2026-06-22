@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { FormField, TextInput, SelectInput, SearchableSelect, Textarea, Toggle, Button } from "@devdigest/ui";
+import { FormField, TextInput, Select, SearchableSelect, Textarea, Toggle, Button } from "@devdigest/ui";
 import type { Agent, CiFailOn, Provider, ReviewStrategy } from "@devdigest/shared";
 import { useUpdateAgent, useProviderModels } from "../../../../../../../lib/hooks/agents";
 import { useToast } from "../../../../../../../lib/toast";
@@ -83,7 +83,7 @@ export function ConfigTab({ agent }: { agent: Agent }) {
         <TextInput value={description} onChange={setDescription} />
       </FormField>
       <FormField label={t("config.provider")}>
-        <SelectInput
+        <Select
           value={provider}
           onChange={(v) => setProvider(v as Provider)}
           options={[...PROVIDER_OPTIONS]}
@@ -101,14 +101,14 @@ export function ConfigTab({ agent }: { agent: Agent }) {
         />
       </FormField>
       <FormField label={t("config.strategy")} hint={t("config.strategyHint")}>
-        <SelectInput
+        <Select
           value={strategy}
           onChange={(v) => setStrategy(v as ReviewStrategy)}
           options={strategyOptions}
         />
       </FormField>
       <FormField label={t("config.ciFailOn")} hint={t("config.ciFailOnHint")}>
-        <SelectInput
+        <Select
           value={ciFailOn}
           onChange={(v) => setCiFailOn(v as CiFailOn)}
           options={ciFailOnOptions}
@@ -123,7 +123,7 @@ export function ConfigTab({ agent }: { agent: Agent }) {
         <Textarea value={systemPrompt} onChange={setSystemPrompt} rows={8} mono />
       </FormField>
       <FormField label={t("config.outputSchema")}>
-        <SelectInput value={OUTPUT_SCHEMA_VALUE} options={[OUTPUT_SCHEMA_VALUE]} />
+        <Select value={OUTPUT_SCHEMA_VALUE} options={[OUTPUT_SCHEMA_VALUE]} disabled />
       </FormField>
       <div style={s.actions}>
         <Button kind="primary" icon="Check" onClick={save} disabled={update.isPending}>

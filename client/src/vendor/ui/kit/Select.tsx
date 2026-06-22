@@ -1,4 +1,5 @@
 import React from "react";
+import ReactDOM from "react-dom";
 import { Icon } from "../icons";
 
 export interface SelectOption<T extends string = string> {
@@ -12,52 +13,92 @@ export function Select<T extends string>({
   options,
   placeholder = "Select…",
   width,
+  disabled,
 }: {
   value: T | "";
-  onChange: (v: T) => void;
+  onChange?: (v: T) => void;
   options: (T | SelectOption<T>)[];
   placeholder?: string;
   width?: number | string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
+  const [rect, setRect] = React.useState<DOMRect | null>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const dropRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
+    if (!open) return;
     const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (
+        triggerRef.current && !triggerRef.current.contains(t) &&
+        dropRef.current && !dropRef.current.contains(t)
+      ) {
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
-  }, []);
+  }, [open]);
 
   const normalized = options.map((o) =>
-    typeof o === "string" ? { value: o as T, label: o } : { value: o.value, label: o.label ?? o.value },
+    typeof o === "string"
+      ? { value: o as T, label: o }
+      : { value: o.value, label: o.label ?? o.value },
   );
 
   const selected = normalized.find((o) => o.value === value);
 
+  function handleToggle() {
+    if (disabled) return;
+    if (!open && triggerRef.current) {
+      setRect(triggerRef.current.getBoundingClientRect());
+    }
+    setOpen((o) => !o);
+  }
+
+  const dropStyle: React.CSSProperties = rect
+    ? {
+        position: "fixed",
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+        background: "var(--bg-elevated)",
+        border: "1px solid var(--border-strong)",
+        borderRadius: 9,
+        boxShadow: "var(--shadow-modal)",
+        padding: 6,
+        zIndex: 9999,
+        animation: "ddpop .12s ease",
+      }
+    : {};
+
   return (
-    <div ref={ref} style={{ position: "relative", display: "block", width: width ?? "100%" }}>
+    <div style={{ position: "relative", display: "block", width: width ?? "100%" }}>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={handleToggle}
+        disabled={disabled}
         style={{
           display: "flex",
           alignItems: "center",
           gap: 8,
           width: "100%",
-          padding: "8px 12px",
+          padding: "10px 12px",
           borderRadius: 7,
-          border: `1px solid ${open ? "var(--accent)" : "var(--border)"}`,
-          background: "var(--bg-input)",
+          border: `1px solid ${open ? "var(--accent)" : "var(--border-strong)"}`,
+          background: "var(--bg-elevated)",
           color: selected ? "var(--text-primary)" : "var(--text-muted)",
-          fontSize: 13,
+          fontSize: 14,
           fontWeight: 400,
           textAlign: "left",
-          cursor: "pointer",
+          cursor: disabled ? "default" : "pointer",
           outline: "none",
           boxSizing: "border-box",
           transition: "border-color .12s",
+          opacity: disabled ? 0.6 : 1,
         }}
       >
         <span style={{ flex: 1 }}>{selected?.label ?? placeholder}</span>
@@ -72,34 +113,21 @@ export function Select<T extends string>({
         />
       </button>
 
-      {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            right: 0,
-            background: "var(--bg-elevated)",
-            border: "1px solid var(--border-strong)",
-            borderRadius: 9,
-            boxShadow: "var(--shadow-modal)",
-            padding: 6,
-            zIndex: 50,
-            animation: "ddpop .12s ease",
-          }}
-        >
+      {open && rect && ReactDOM.createPortal(
+        <div ref={dropRef} style={dropStyle}>
           {normalized.map((o) => (
             <SelectItem
               key={o.value}
               label={o.label!}
               active={o.value === value}
               onClick={() => {
-                onChange(o.value);
+                onChange?.(o.value);
                 setOpen(false);
               }}
             />
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -126,12 +154,12 @@ function SelectItem({
         alignItems: "center",
         gap: 8,
         width: "100%",
-        padding: "7px 10px",
+        padding: "8px 12px",
         borderRadius: 6,
         border: "none",
         background: hover ? "var(--bg-hover)" : "transparent",
         color: active ? "var(--text-primary)" : "var(--text-secondary)",
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: active ? 600 : 400,
         textAlign: "left",
         cursor: "pointer",
