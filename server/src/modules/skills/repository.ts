@@ -2,7 +2,7 @@ import { and, asc, count, countDistinct, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
-import type { SkillType, SkillSource } from '@devdigest/shared';
+import type { SkillAgent, SkillType, SkillSource } from '@devdigest/shared';
 import { INITIAL_SKILL_VERSION, DEFAULT_SKILL_DESCRIPTION } from './constants.js';
 import { isSkillConfigChange } from './helpers.js';
 
@@ -106,6 +106,15 @@ export class SkillsRepository {
       .from(t.skillVersions)
       .where(eq(t.skillVersions.skillId, skillId))
       .orderBy(desc(t.skillVersions.version));
+  }
+
+  async getAgentsBySkill(skillId: string): Promise<SkillAgent[]> {
+    return this.db
+      .select({ id: t.agents.id, name: t.agents.name })
+      .from(t.agentSkills)
+      .innerJoin(t.agents, eq(t.agents.id, t.agentSkills.agentId))
+      .where(eq(t.agentSkills.skillId, skillId))
+      .orderBy(asc(t.agents.name));
   }
 
   async statsForSkills(skillIds: string[]): Promise<Map<string, SkillStats>> {

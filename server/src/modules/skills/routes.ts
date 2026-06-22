@@ -73,6 +73,13 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     return versions;
   });
 
+  app.get('/skills/:id/agents', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const agents = await service.getSkillAgents(workspaceId, req.params.id);
+    if (!agents) throw new NotFoundError('Skill not found');
+    return agents;
+  });
+
   app.post('/skills/import/preview-url', { schema: { body: ImportUrlBody } }, async (req) => {
     await getContext(app.container, req);
     return importSvc.previewFromUrl(req.body.url);

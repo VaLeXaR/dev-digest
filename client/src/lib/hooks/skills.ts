@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, API_BASE } from "../api";
-import type { Skill, SkillVersion, SkillPreview } from "@devdigest/shared";
+import type { Skill, SkillAgent, SkillVersion, SkillPreview } from "@devdigest/shared";
 
 export function useSkills() {
   return useQuery({ queryKey: ["skills"], queryFn: () => api.get<Skill[]>("/skills") });
@@ -20,6 +20,14 @@ export function useSkillVersions(id: string | null | undefined) {
   return useQuery({
     queryKey: ["skill-versions", id],
     queryFn: () => api.get<SkillVersion[]>(`/skills/${id}/versions`),
+    enabled: !!id,
+  });
+}
+
+export function useSkillAgents(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-agents", id],
+    queryFn: () => api.get<SkillAgent[]>(`/skills/${id}/agents`),
     enabled: !!id,
   });
 }

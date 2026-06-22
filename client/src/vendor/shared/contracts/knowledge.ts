@@ -162,6 +162,9 @@ export const SkillPreview = z.object({
 });
 export type SkillPreview = z.infer<typeof SkillPreview>;
 
+export const SkillAgent = z.object({ id: z.string(), name: z.string() });
+export type SkillAgent = z.infer<typeof SkillAgent>;
+
 // ---- Conventions ----
 export const ConventionCandidate = z.object({
   id: z.string(),

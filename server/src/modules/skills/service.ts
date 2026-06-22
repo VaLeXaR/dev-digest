@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { Skill, SkillVersion, SkillPreview, SkillType, SkillSource } from '@devdigest/shared';
+import type { Skill, SkillAgent, SkillVersion, SkillPreview, SkillType, SkillSource } from '@devdigest/shared';
 import { SkillsRepository } from './repository.js';
 import { toSkillDto, toSkillVersionDto } from './helpers.js';
 
@@ -34,7 +34,9 @@ export class SkillsService {
 
   async get(workspaceId: string, id: string): Promise<Skill | undefined> {
     const row = await this.repo.getById(workspaceId, id);
-    return row ? toSkillDto(row) : undefined;
+    if (!row) return undefined;
+    const statsMap = await this.repo.statsForSkills([row.id]);
+    return toSkillDto(row, statsMap.get(row.id));
   }
 
   async create(workspaceId: string, input: CreateSkillInput): Promise<Skill> {
@@ -55,6 +57,12 @@ export class SkillsService {
     const skill = await this.repo.getById(workspaceId, skillId);
     if (!skill) return undefined;
     return (await this.repo.listVersions(skillId)).map(toSkillVersionDto);
+  }
+
+  async getSkillAgents(workspaceId: string, skillId: string): Promise<SkillAgent[] | undefined> {
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    return this.repo.getAgentsBySkill(skillId);
   }
 
   async importConfirm(workspaceId: string, previews: SkillPreview[]): Promise<Skill[]> {
