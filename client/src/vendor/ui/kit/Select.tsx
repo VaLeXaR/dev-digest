@@ -1,5 +1,7 @@
+"use client";
+
 import React from "react";
-import ReactDOM from "react-dom";
+import { createPortal } from "react-dom";
 import { Icon } from "../icons";
 
 export interface SelectOption<T extends string = string> {
@@ -24,8 +26,13 @@ export function Select<T extends string>({
 }) {
   const [open, setOpen] = React.useState(false);
   const [rect, setRect] = React.useState<DOMRect | null>(null);
+  const [mounted, setMounted] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const dropRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   React.useEffect(() => {
     if (!open) return;
@@ -58,21 +65,42 @@ export function Select<T extends string>({
     setOpen((o) => !o);
   }
 
-  const dropStyle: React.CSSProperties = rect
-    ? {
-        position: "fixed",
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
-        background: "var(--bg-elevated)",
-        border: "1px solid var(--border-strong)",
-        borderRadius: 9,
-        boxShadow: "var(--shadow-modal)",
-        padding: 6,
-        zIndex: 9999,
-        animation: "ddpop .12s ease",
-      }
-    : {};
+  const dropdown =
+    open && mounted && rect
+      ? createPortal(
+          <div
+            ref={dropRef}
+            style={{
+              position: "fixed",
+              top: rect.bottom + 4,
+              left: rect.left,
+              width: rect.width,
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--border-strong)",
+              borderRadius: 9,
+              boxShadow: "var(--shadow-modal)",
+              padding: 6,
+              zIndex: 9999,
+              animation: "ddpop .12s ease",
+              maxHeight: 280,
+              overflowY: "auto",
+            }}
+          >
+            {normalized.map((o) => (
+              <SelectItem
+                key={o.value}
+                label={o.label!}
+                active={o.value === value}
+                onClick={() => {
+                  onChange?.(o.value);
+                  setOpen(false);
+                }}
+              />
+            ))}
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <div style={{ position: "relative", display: "block", width: width ?? "100%" }}>
@@ -112,23 +140,7 @@ export function Select<T extends string>({
           }}
         />
       </button>
-
-      {open && rect && ReactDOM.createPortal(
-        <div ref={dropRef} style={dropStyle}>
-          {normalized.map((o) => (
-            <SelectItem
-              key={o.value}
-              label={o.label!}
-              active={o.value === value}
-              onClick={() => {
-                onChange?.(o.value);
-                setOpen(false);
-              }}
-            />
-          ))}
-        </div>,
-        document.body,
-      )}
+      {dropdown}
     </div>
   );
 }
