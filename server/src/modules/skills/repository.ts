@@ -2,6 +2,7 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
+import type { SkillType, SkillSource } from '@devdigest/shared';
 import { INITIAL_SKILL_VERSION, DEFAULT_SKILL_DESCRIPTION } from './constants.js';
 import { isSkillConfigChange } from './helpers.js';
 
@@ -11,15 +12,15 @@ export interface InsertSkill {
   workspaceId: string;
   name: string;
   description: string;
-  type: string;
-  source: string;
+  type: SkillType;
+  source: SkillSource;
   body: string;
 }
 
 export interface UpdateSkill {
   name?: string;
   description?: string;
-  type?: string;
+  type?: SkillType;
   body?: string;
   enabled?: boolean;
 }
