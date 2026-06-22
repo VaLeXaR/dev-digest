@@ -6,6 +6,8 @@ import { Button, Dropdown } from "@devdigest/ui";
 import { AppShell } from "../../../../components/app-shell";
 import { useSkills, useUpdateSkill } from "../../../../lib/hooks/skills";
 import { SkillCard } from "../SkillCard/SkillCard";
+import { CreateSkillModal } from "./_components/CreateSkillModal/CreateSkillModal";
+import { ImportSkillModal } from "./_components/ImportSkillModal/ImportSkillModal";
 
 export function SkillsListView({ activeId }: { activeId?: string }) {
   const router = useRouter();
@@ -14,11 +16,21 @@ export function SkillsListView({ activeId }: { activeId?: string }) {
   const update = useUpdateSkill();
   const [filter, setFilter] = useState("");
 
+  const showCreate = search.get("create") === "1";
+  const showImport = search.get("import") === "1";
+
   const filtered = skills.filter(
     (s) =>
       s.name.toLowerCase().includes(filter.toLowerCase()) ||
       s.description.toLowerCase().includes(filter.toLowerCase()),
   );
+
+  function closeModal(param: "create" | "import") {
+    const sp = new URLSearchParams(search.toString());
+    sp.delete(param);
+    const qs = sp.toString();
+    router.replace(qs ? `/skills?${qs}` : "/skills");
+  }
 
   const isRoot = activeId === undefined;
 
@@ -83,6 +95,8 @@ export function SkillsListView({ activeId }: { activeId?: string }) {
     return (
       <AppShell crumb={[{ label: "Skills Lab" }, { label: "Skills" }]}>
         <div style={{ maxWidth: 640, margin: "0 auto", padding: 24 }}>{list}</div>
+        {showCreate && <CreateSkillModal onClose={() => closeModal("create")} />}
+        {showImport && <ImportSkillModal onClose={() => closeModal("import")} />}
       </AppShell>
     );
   }
