@@ -78,6 +78,7 @@ export async function buildSamples(
 
   for (const relPath of relativePaths) {
     const fullPath = path.join(repoPath, relPath);
+    if (!path.resolve(fullPath).startsWith(path.resolve(repoPath))) continue;
     try {
       const raw = fs.readFileSync(fullPath, 'utf8');
       samples.push({
@@ -176,7 +177,8 @@ export async function callLLM(
         typeof (item as Record<string, unknown>).evidencePath === 'string' &&
         typeof (item as Record<string, unknown>).evidenceLine === 'number' &&
         typeof (item as Record<string, unknown>).evidenceSnippet === 'string' &&
-        typeof (item as Record<string, unknown>).confidence === 'number'
+        (typeof (item as Record<string, unknown>).confidence === 'number' ||
+          typeof (item as Record<string, unknown>).confidence === 'string')
       ) {
         const i = item as Record<string, unknown>;
         candidates.push({
@@ -184,7 +186,7 @@ export async function callLLM(
           evidencePath: i.evidencePath as string,
           evidenceLine: i.evidenceLine as number,
           evidenceSnippet: i.evidenceSnippet as string,
-          confidence: i.confidence as number,
+          confidence: Math.max(0, Math.min(1, Number(i.confidence) || 0)),
         });
       }
     }
@@ -214,6 +216,13 @@ export async function verifyEvidence(
 
   for (const candidate of candidates) {
     const fullPath = path.join(repoPath, candidate.evidencePath);
+
+    // Guard against path traversal from LLM-generated evidencePath
+    const resolvedFull = path.resolve(fullPath);
+    const resolvedRepo = path.resolve(repoPath);
+    if (!resolvedFull.startsWith(resolvedRepo + path.sep) && resolvedFull !== resolvedRepo) {
+      continue; // discard — path escapes repo root
+    }
 
     if (!fs.existsSync(fullPath)) {
       continue;
