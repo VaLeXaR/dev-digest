@@ -14,6 +14,50 @@ export class ConventionsRepository {
   constructor(private db: Db) {}
 
   /**
+   * Atomically replace all conventions for a repo.
+   * Runs delete + insert inside a single Drizzle transaction.
+   */
+  async replaceAll(
+    workspaceId: string,
+    repoId: string,
+    candidates: Array<{
+      rule: string;
+      evidencePath: string;
+      evidenceSnippet: string;
+      confidence: number;
+    }>,
+  ): Promise<ConventionCandidate[]> {
+    return this.db.transaction(async (tx) => {
+      await tx
+        .delete(t.conventions)
+        .where(
+          and(
+            eq(t.conventions.repoId, repoId),
+            eq(t.conventions.workspaceId, workspaceId),
+          ),
+        );
+
+      if (candidates.length === 0) return [];
+
+      const rows = await tx
+        .insert(t.conventions)
+        .values(
+          candidates.map((c) => ({
+            workspaceId,
+            repoId,
+            rule: c.rule,
+            evidencePath: c.evidencePath,
+            evidenceSnippet: c.evidenceSnippet,
+            confidence: c.confidence,
+          })),
+        )
+        .returning();
+
+      return rows.map((row) => this.mapRowToCandidate(row));
+    });
+  }
+
+  /**
    * Delete all conventions for a repo before re-scan.
    * Workspace-scoped to prevent cross-workspace data leaks.
    */

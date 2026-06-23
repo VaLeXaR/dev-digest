@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { z } from 'zod';
 import type { LLMProvider } from '@devdigest/shared';
 import type { RepoIntel } from '../repo-intel/types.js';
 
@@ -13,7 +14,6 @@ export interface FileSample {
 export interface RawCandidate {
   rule: string;
   evidencePath: string;
-  evidenceLine: number;   // 1-based line number (used only for verification)
   evidenceSnippet: string;
   confidence: number;     // 0.0 – 1.0
 }
@@ -33,6 +33,8 @@ const CONFIG_FILES = [
   '.prettierrc.js',
   '.prettierrc.json',
   '.editorconfig',
+  'biome.json',
+  'biome.jsonc',
 ];
 
 const MAX_FILE_CHARS = 4000;
@@ -95,53 +97,54 @@ export async function buildSamples(
 
 // ---------- Step 2 — callLLM ------------------------------------------------
 
-const SYSTEM_PROMPT = `You are a code convention analyst. Given file samples from a software repository,
-identify recurring coding conventions the team follows.
-Return ONLY valid JSON — an array of convention objects.
-Do not include markdown, explanation, or any text outside the JSON array.`;
+const SYSTEM_PROMPT = `You are a code-convention analyst. Analyze the provided code samples and \
+extract concrete coding conventions consistently followed in this repository.
+Return ONLY conventions that: have clear evidence in the provided files, \
+can be formulated as a specific actionable rule (start with Always/Never/Use X \
+instead of Y), appear in at least 2 places or are configured explicitly, \
+would be useful for a code reviewer to enforce.
+Do NOT include generic best practices obvious to any TypeScript developer, \
+things with only 1 example unless in a config file, or framework defaults.`;
 
-function buildUserPrompt(samples: FileSample[]): string {
-  const filesSection = samples
+function buildUserPrompt(samples: FileSample[], repoName: string): string {
+  const fileContents = samples
     .map((s) => `=== ${s.path} ===\n${s.content}`)
     .join('\n\n');
 
-  return `Analyze these files and extract up to 10 coding conventions.
-Return a JSON array with this exact shape:
-[
-  {
-    "rule": "Short imperative description of the convention",
-    "evidencePath": "relative/path/to/file.ts",
-    "evidenceLine": 42,
-    "evidenceSnippet": "the exact code line or 2-3 lines showing the convention",
-    "confidence": 0.85
-  }
-]
-
-Only include conventions that appear in at least 2 files or are explicitly configured.
-Only return rules with direct evidence in the provided files.
-Confidence should be 0.0-1.0 based on how consistently the pattern appears.
-
-Files:
-${filesSection}`;
+  return `Repository: ${repoName}
+Analyze these files and extract coding conventions:
+${fileContents}
+Return JSON with candidates array: rule (imperative form), evidence_path (relative path), evidence_snippet (2-5 lines of exact code), confidence (0.0-1.0). Only include conventions with confidence > 0.6.`;
 }
+
+// Zod schema for one LLM-returned candidate (snake_case field names as prompted)
+const LlmCandidateSchema = z.object({
+  rule: z.string(),
+  evidence_path: z.string(),
+  evidence_snippet: z.string(),
+  confidence: z
+    .union([z.number(), z.string()])
+    .transform((v) => Math.max(0, Math.min(1, Number(v) || 0))),
+});
 
 /**
  * Call the LLM to extract conventions from the file samples.
  *
  * Uses the `complete()` method on the LLMProvider (plain text completion),
- * then JSON-parses the response. Returns [] on any parse error — the service
- * layer handles empty results gracefully.
+ * then JSON-parses and Zod-validates the response. Returns [] on any parse
+ * error — the service layer handles empty results gracefully.
  */
 export async function callLLM(
   samples: FileSample[],
   llm: LlmAdapter,
   model: string,
   provider: string,
+  repoName: string,
 ): Promise<RawCandidate[]> {
   // provider is used for logging context; the llm adapter is already resolved
   void provider;
 
-  const userPrompt = buildUserPrompt(samples);
+  const userPrompt = buildUserPrompt(samples, repoName);
 
   // API errors (bad key, network, rate-limit) propagate — only JSON parse errors return [].
   const result = await llm.complete({
@@ -162,28 +165,17 @@ export async function callLLM(
     const parsed: unknown = JSON.parse(stripped);
     if (!Array.isArray(parsed)) return [];
 
-    // Validate shape — discard malformed entries rather than throwing
     const candidates: RawCandidate[] = [];
     for (const item of parsed) {
-      if (
-        item !== null &&
-        typeof item === 'object' &&
-        typeof (item as Record<string, unknown>).rule === 'string' &&
-        typeof (item as Record<string, unknown>).evidencePath === 'string' &&
-        typeof (item as Record<string, unknown>).evidenceLine === 'number' &&
-        typeof (item as Record<string, unknown>).evidenceSnippet === 'string' &&
-        (typeof (item as Record<string, unknown>).confidence === 'number' ||
-          typeof (item as Record<string, unknown>).confidence === 'string')
-      ) {
-        const i = item as Record<string, unknown>;
-        candidates.push({
-          rule: i.rule as string,
-          evidencePath: i.evidencePath as string,
-          evidenceLine: i.evidenceLine as number,
-          evidenceSnippet: i.evidenceSnippet as string,
-          confidence: Math.max(0, Math.min(1, Number(i.confidence) || 0)),
-        });
-      }
+      const parsed = LlmCandidateSchema.safeParse(item);
+      if (!parsed.success) continue;
+      const d = parsed.data;
+      candidates.push({
+        rule: d.rule,
+        evidencePath: d.evidence_path,
+        evidenceSnippet: d.evidence_snippet,
+        confidence: d.confidence,
+      });
     }
     return candidates;
   } catch {
@@ -198,16 +190,15 @@ export async function callLLM(
  * Validate that LLM-reported evidence actually exists in the repo.
  *
  * For each candidate:
- * 1. Check the file exists on disk.
- * 2. Search for evidenceSnippet (trimmed) within ±5 lines of evidenceLine.
- * 3. Discard candidates whose evidence cannot be found.
- * 4. Return verified candidates with evidenceLine stripped.
+ * 1. Check the file exists on disk (path traversal guard applied first).
+ * 2. Check that the first line of evidenceSnippet literally appears anywhere in the file.
+ * 3. Discard candidates that fail either check.
  */
 export async function verifyEvidence(
   candidates: RawCandidate[],
   repoPath: string,
-): Promise<Array<Omit<RawCandidate, 'evidenceLine'>>> {
-  const verified: Array<Omit<RawCandidate, 'evidenceLine'>> = [];
+): Promise<RawCandidate[]> {
+  const verified: RawCandidate[] = [];
 
   for (const candidate of candidates) {
     const fullPath = path.join(repoPath, candidate.evidencePath);
@@ -223,51 +214,20 @@ export async function verifyEvidence(
       continue;
     }
 
-    let lines: string[];
+    let content: string;
     try {
-      const content = fs.readFileSync(fullPath, 'utf8');
-      lines = content.split('\n');
+      content = fs.readFileSync(fullPath, 'utf8');
     } catch {
       continue;
     }
 
-    // evidenceLine is 1-based; convert to 0-based index
-    const centerIdx = candidate.evidenceLine - 1;
-    const start = Math.max(0, centerIdx - 5);
-    const end = Math.min(lines.length - 1, centerIdx + 5);
-
-    const snippet = candidate.evidenceSnippet.trim();
-    let found = false;
-
-    for (let i = start; i <= end; i++) {
-      if (lines[i]?.includes(snippet)) {
-        found = true;
-        break;
-      }
-    }
-
-    // Also check multi-line snippets — try if the snippet spans multiple lines
-    if (!found && snippet.includes('\n')) {
-      const snippetLines = snippet.split('\n');
-      outer: for (let i = start; i <= end - snippetLines.length + 1; i++) {
-        for (let j = 0; j < snippetLines.length; j++) {
-          if (!lines[i + j]?.includes(snippetLines[j]!.trim())) {
-            continue outer;
-          }
-        }
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) {
+    // Check that the first line of the snippet literally exists anywhere in the file
+    const firstLine = candidate.evidenceSnippet.split('\n')[0]?.trim() ?? '';
+    if (!firstLine || !content.includes(firstLine)) {
       continue;
     }
 
-    // Strip evidenceLine before returning
-    const { evidenceLine: _evidenceLine, ...rest } = candidate;
-    void _evidenceLine;
-    verified.push(rest);
+    verified.push(candidate);
   }
 
   return verified;

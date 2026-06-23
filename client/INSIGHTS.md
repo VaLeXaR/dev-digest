@@ -19,6 +19,8 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/web`.
 
 ## What Doesn't Work
 
+- 2026-06-23: **Two consecutive `router.replace` + `router.push` calls in the same synchronous tick are unsafe in Next.js 15 / React 19 concurrent mode** — the scheduler can cancel the first navigation before it commits, leaving the URL unchanged. Pattern seen in `ImportSkillModal.handleConfirm`: calling `onClose()` (which did `router.replace("/skills")`) immediately followed by `router.push("/skills/${id}")` caused the modal to stay open even after a successful import. Fix: use a single `router.replace(destination)` per action, not two consecutive calls. (`src/app/skills/_components/SkillsListView/_components/ImportSkillModal/ImportSkillModal.tsx:51`)
+
 - 2026-06-22: Native `<select>` dropdown is not styleable in dark mode — `color-scheme: dark` and all CSS custom properties are ignored for the browser-native open dropdown list. This affects both light text on white background (low contrast) and colored options. Only fix: replace with a fully custom component. A reusable `Select<T>` with portal rendering exists at `src/vendor/ui/kit/Select.tsx` — use it instead of any native `<select>`. (`src/vendor/ui/kit/Select.tsx`)
 
 ## Codebase Patterns

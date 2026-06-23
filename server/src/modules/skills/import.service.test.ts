@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 import { SkillsImportService } from './import.service.js';
 
@@ -27,6 +27,84 @@ describe('SkillsImportService', () => {
 
   it('rejects non-http URLs', async () => {
     await expect(svc.previewFromUrl('file:///etc/passwd')).rejects.toThrow('http');
+  });
+
+  describe('previewFromUrl — GitHub repo root URLs (ZIP archive)', () => {
+    const SKILL_MD = '---\nname: Test Skill\ntype: custom\n---\nBody text';
+
+    function mockFetch(responses: Array<{ status: number; buffer?: Buffer }>) {
+      let call = 0;
+      return vi.spyOn(global, 'fetch').mockImplementation(async () => {
+        const r = responses[call++] ?? { status: 404 };
+        const buf = r.buffer ?? Buffer.alloc(0);
+        return {
+          ok: r.status >= 200 && r.status < 300,
+          status: r.status,
+          statusText: r.status === 404 ? 'Not Found' : 'OK',
+          headers: { get: () => null },
+          arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+        } as unknown as Response;
+      });
+    }
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it('downloads main branch archive and extracts skills', async () => {
+      const zip = makeZip({ 'test-skill-main/SKILL.md': SKILL_MD });
+      const spy = mockFetch([{ status: 200, buffer: zip }]);
+      const previews = await svc.previewFromUrl('https://github.com/VaLeXaR/test-skill');
+      expect(previews).toHaveLength(1);
+      expect(previews[0]?.name).toBe('Test Skill');
+      expect(spy.mock.calls[0]![0] as string).toContain('/archive/refs/heads/main.zip');
+    });
+
+    it('falls back to master archive when main returns 404', async () => {
+      const zip = makeZip({ 'test-skill-master/SKILL.md': SKILL_MD });
+      const spy = mockFetch([{ status: 404 }, { status: 200, buffer: zip }]);
+      const previews = await svc.previewFromUrl('https://github.com/VaLeXaR/test-skill');
+      expect(previews).toHaveLength(1);
+      expect(spy.mock.calls).toHaveLength(2);
+      expect(spy.mock.calls[1]![0] as string).toContain('/archive/refs/heads/master.zip');
+    });
+
+    it('throws when both main and master archives return 404', async () => {
+      mockFetch([{ status: 404 }, { status: 404 }]);
+      await expect(svc.previewFromUrl('https://github.com/VaLeXaR/test-skill')).rejects.toThrow(
+        'Repository not found',
+      );
+    });
+
+    it('handles repos with multiple skill subdirectories', async () => {
+      const zip = makeZip({
+        'test-skill-main/skill-a/SKILL.md': '---\nname: Skill A\n---\nA body',
+        'test-skill-main/skill-b/SKILL.md': '---\nname: Skill B\n---\nB body',
+      });
+      mockFetch([{ status: 200, buffer: zip }]);
+      const previews = await svc.previewFromUrl('https://github.com/VaLeXaR/test-skill');
+      expect(previews).toHaveLength(2);
+    });
+
+    it('repo root URL with trailing slash is handled', async () => {
+      const zip = makeZip({ 'test-skill-main/SKILL.md': SKILL_MD });
+      const spy = mockFetch([{ status: 200, buffer: zip }]);
+      await svc.previewFromUrl('https://github.com/VaLeXaR/test-skill/');
+      expect(spy.mock.calls[0]![0] as string).toContain('VaLeXaR/test-skill/archive/refs/heads/main.zip');
+    });
+
+    it('blob URL still fetches as raw text (not archive)', async () => {
+      const spy = vi.spyOn(global, 'fetch').mockImplementation(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: (h: string) => (h === 'content-type' ? 'text/plain' : null) },
+        text: async () => SKILL_MD,
+      } as unknown as Response));
+      const previews = await svc.previewFromUrl('https://github.com/VaLeXaR/test-skill/blob/main/SKILL.md');
+      expect(previews).toHaveLength(1);
+      expect(spy.mock.calls[0]![0] as string).toBe(
+        'https://raw.githubusercontent.com/VaLeXaR/test-skill/main/SKILL.md',
+      );
+    });
   });
 
   describe('parseFrontmatter (via previewFromBuffer)', () => {

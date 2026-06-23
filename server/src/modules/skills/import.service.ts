@@ -15,6 +15,11 @@ export class SkillsImportService {
 
   async previewFromUrl(rawUrl: string): Promise<SkillPreview[]> {
     if (!/^https?:\/\//i.test(rawUrl)) throw new Error('URL must start with http:// or https://');
+
+    // Plain GitHub repo root → download archive ZIP and extract all skills
+    const repoMatch = rawUrl.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+?)\/?$/);
+    if (repoMatch) return this.previewFromGitHubRepo(repoMatch[1]!, repoMatch[2]!);
+
     const url = normalizeGitHubUrl(rawUrl);
     const { hostname } = new URL(url);
     if (PRIVATE_IP_RE.test(hostname)) throw new Error('URL hostname not allowed (private IP)');
@@ -22,12 +27,25 @@ export class SkillsImportService {
     const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
     const ct = res.headers.get('content-type') ?? '';
-    if (ct.includes('text/html')) throw new Error('URL returned an HTML page. Paste the raw file URL (or a GitHub blob URL — it will be converted automatically).');
+    if (ct.includes('text/html'))
+      throw new Error('URL returned an HTML page. Paste the raw file URL (or a GitHub blob URL — it will be converted automatically).');
     if (!ct.includes('text/')) throw new Error('URL must return a plain text file');
 
     const text = await res.text();
     const filename = url.split('/').at(-1) ?? 'skill.md';
     return [this.parseMdText(text, filename, 'imported_url')];
+  }
+
+  private async previewFromGitHubRepo(owner: string, repo: string): Promise<SkillPreview[]> {
+    for (const branch of ['main', 'master']) {
+      const url = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+      if (res.status === 404) continue;
+      if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
+      const buffer = Buffer.from(await res.arrayBuffer());
+      return this.previewFromZip(buffer);
+    }
+    throw new Error('Repository not found or has no main/master branch');
   }
 
   private previewFromZip(buffer: Buffer): SkillPreview[] {

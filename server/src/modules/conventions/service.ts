@@ -47,17 +47,13 @@ export class ConventionsService {
     const llm = await this.container.llm(provider);
 
     // 5. Call LLM to extract raw candidates
-    const rawCandidates = await callLLM(samples, llm, model, provider);
+    const rawCandidates = await callLLM(samples, llm, model, provider, repoRow.fullName);
 
     // 6. Verify evidence exists on disk
     const verified = await verifyEvidence(rawCandidates, clonePath);
 
-    // 7. Replace existing conventions with fresh results
-    await this.repo.deleteAllForRepo(repoId, workspaceId);
-    const candidates = await this.repo.insertMany(workspaceId, repoId, verified);
-
-    // 8. Return the inserted candidates
-    return candidates;
+    // 7. Atomically replace existing conventions with fresh results
+    return this.repo.replaceAll(workspaceId, repoId, verified);
   }
 
   async list(repoId: string, workspaceId: string): Promise<ConventionCandidate[]> {

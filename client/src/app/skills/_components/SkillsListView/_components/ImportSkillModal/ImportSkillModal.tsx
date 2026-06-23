@@ -49,9 +49,12 @@ export function ImportSkillModal({ onClose }: { onClose: () => void }) {
   }
 
   async function handleConfirm() {
-    const created = await confirm.mutateAsync(previews);
-    onClose();
-    if (created[0]) router.push(`/skills/${created[0].id}`);
+    try {
+      const created = await confirm.mutateAsync(previews);
+      router.replace(created[0] ? `/skills/${created[0].id}` : "/skills");
+    } catch {
+      // confirm.error is set by TanStack Query — displayed below
+    }
   }
 
   if (step === "source") {
@@ -123,7 +126,7 @@ export function ImportSkillModal({ onClose }: { onClose: () => void }) {
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://raw.githubusercontent.com/…"
+              placeholder="https://github.com/owner/repo  or  raw URL"
               style={s.urlInput}
             />
           )}
@@ -163,6 +166,7 @@ export function ImportSkillModal({ onClose }: { onClose: () => void }) {
             <div style={s.previewBody}>{p.body.slice(0, 400)}</div>
           </div>
         ))}
+        {confirm.error && <div style={s.error}>{(confirm.error as Error).message}</div>}
       </div>
     </Modal>
   );
