@@ -27,8 +27,28 @@ export interface PatchConventionInput {
   id: string;
   patch: {
     rule?: string;
-    accepted?: boolean;
+    accepted?: boolean | null;
   };
+}
+
+export function useDeleteResolvedConventions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (repoId: string) => api.del(`/repos/${repoId}/conventions/resolved`),
+    onSuccess: (_data, repoId) => {
+      qc.invalidateQueries({ queryKey: ["conventions", repoId] });
+    },
+  });
+}
+
+export function useDeleteConvention() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/conventions/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["conventions"] });
+    },
+  });
 }
 
 export function usePatchConvention() {

@@ -143,22 +143,17 @@ export async function callLLM(
 
   const userPrompt = buildUserPrompt(samples);
 
-  let text: string;
-  try {
-    const result = await llm.complete({
-      model,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.2,
-      maxTokens: 2048,
-    });
-    text = result.text;
-  } catch (err) {
-    console.warn(`[conventions] LLM call failed: ${(err as Error).message}`);
-    return [];
-  }
+  // API errors (bad key, network, rate-limit) propagate — only JSON parse errors return [].
+  const result = await llm.complete({
+    model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ],
+    temperature: 0.2,
+    maxTokens: 2048,
+  });
+  const text = result.text;
 
   // Strip markdown code fences if the model wraps the JSON anyway
   const stripped = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');

@@ -4,6 +4,9 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/web`.
 
 ## What Works
 
+- 2026-06-26: For list components with accept/reject patch actions, sort client-side with `useMemo` by a stable field (e.g. `confidence desc`) before render — this keeps order consistent across refetches triggered by `invalidateQueries`. Without it, the list reorders every time a card is patched because the server returns rows in DB insertion/update order. (`src/app/conventions/_components/ConventionsView/ConventionsView.tsx`)
+- 2026-06-23: **Supersedes entry above — tiebreaker required.** Sorting by `confidence` alone is not stable when multiple items share the same value — equal-confidence items can swap after refetch. Use a secondary sort key: `sort((a, b) => b.confidence - a.confidence || a.id.localeCompare(b.id))`. Also fix the server query to match: `ORDER BY confidence DESC, id ASC`. Both sides must be deterministic together. (`src/app/conventions/_components/ConventionsView/ConventionsView.tsx`, `server/src/modules/conventions/repository.ts`)
+
 - 2026-06-22: `SkillsTab` dual-action checkbox: when a skill is already linked to the agent, the checkbox toggles `enabled` for that agent via `useToggleAgentSkill`; when not linked, checking it calls `useSetAgentSkills` to append the skill id. Same `handleToggle(skill)` handles both cases by checking `linkMap.has(skill.id)`. (`src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.tsx`)
 - 2026-06-22: Opacity hierarchy for link status in `SkillsTab`: linked+enabled rows at full opacity, linked+disabled at 0.55, unlinked (available) rows at 0.4. This lets all workspace-enabled skills be visible by default without the unlinked ones competing visually with the active ones. (`src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/styles.ts`)
 
@@ -20,6 +23,10 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/web`.
 
 ## Codebase Patterns
 
+- 2026-06-26: To get the current workspace's repo (repoId + repo metadata) in any client component, use `useActiveRepo()` from `client/src/lib/repo-context.tsx` — it reads URL params first, then localStorage, then falls back to the first repo from the API. Returns `{ repoId: string | undefined, activeRepo: Repo | undefined }`. Do NOT try to derive the current repo from URL segments directly in new pages. (`src/lib/repo-context.tsx`)
+
+- 2026-06-26: Sidebar navigation items are defined in `client/src/vendor/ui/nav.ts` — add new routes there under the appropriate section (`SKILLS_LAB`, `WORKSPACE`, etc.). Keyboard shortcuts (`gKey`, `keys`) are auto-wired from the nav definition via `useGlobalShortcuts`. Active nav highlighting also auto-derives from `href`. (`src/vendor/ui/nav.ts`)
+
 - 2026-06-22: Product decision — SkillsTab shows **all workspace-enabled skills by default**, not just those already linked to the agent. Linked skills appear first (ordered, draggable); unlinked enabled skills appear below the divider. The user can enable any unlinked skill with one click. Do not revert to search-only discovery of unlinked skills. (`src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.tsx:84-89`)
 
 - 2026-06-20: `src/vendor/shared/` is a **manual copy** of `server/src/vendor/shared/` — not a symlink or published package. Any change to contracts (Zod schemas, types) must be applied to **both** copies simultaneously. The client AGENTS.md calls this out: "changes require sync with server". (`client/src/vendor/shared/contracts/`)
@@ -34,12 +41,16 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/web`.
 
 ## Recurring Errors & Fixes
 
+- 2026-06-26: All repo-scoped `useQuery` hooks MUST include `enabled: !!repoId` in the query options. Without it, when the component mounts before `useActiveRepo()` resolves, the hook fires `GET /repos//conventions` (empty path segment → 404). Every existing repo-scoped hook in `src/lib/hooks/` uses this guard — always add it. Caught in code review on `useConventions`. (`src/lib/hooks/conventions.ts`)
+
 - 2026-06-20: When adding a required (non-optional) field to `RunSummary`, existing test mocks that use `Partial<RunSummary>` as base will fail with `Type 'undefined' is not assignable to type 'X | null'`. Fix: add the new field with a default value (`null`) to the base mock object in the test. (`src/app/repos/[repoId]/pulls/[number]/_components/RunHistory/RunHistory.test.tsx:17`)
 - 2026-06-20: `Record<string, number>` indexed access returns `number | undefined` in this project (strict / `noUncheckedIndexedAccess`). Accessing with a variable string key in filter/render expressions causes TS2532. Fix: always write `(record[key] ?? 0)` when indexing a plain `Record<string, number>`. (`src/app/repos/[repoId]/pulls/[number]/_components/RunHistory/RunHistory.tsx`)
 - 2026-06-20: `Icon.AlertCircle` does not exist in `@devdigest/ui`. For CRITICAL severity use `Icon.XCircle` (already present and used in `AddRepoView.tsx`). (`src/app/repos/[repoId]/pulls/_components/PRRow/PRRow.tsx`)
 - 2026-06-20: **Supersedes the entry above.** The canonical per-severity icons are defined in `src/vendor/ui/primitives/tokens.ts` as `SEV`: CRITICAL → `AlertOctagon`, WARNING → `AlertTriangle`, SUGGESTION → `Lightbulb`. Always derive the icon via `SEV[severity].icon` + `Icon[sev.icon]` — never hardcode `XCircle` or `Info` for severity. Previous session got this wrong; future divergence will show visually. (`src/vendor/ui/primitives/tokens.ts`)
 
 ## Session Notes
+
+- 2026-06-26: Implemented Conventions Extractor client (branch l-02-home-work). New page at `/conventions` with ConventionsView (Re-scan button, acceptance counter, Deselect all, list of ConventionCards with inline rule edit + Accept/Reject), CreateSkillModal (assembles markdown from accepted candidates → POST /skills), and Conventions sidebar nav link. Hooks: `useConventions`, `useExtractConventions`, `usePatchConvention`. (`src/app/conventions/`, `src/lib/hooks/conventions.ts`)
 
 - 2026-06-22: SVG ring chart for percentage stat cards: use a `<circle>` with `stroke-dasharray="${filled} ${circ - filled}"` where `filled = (pct/100) * 2πr` and `transform="rotate(-90 cx cy)"` to start the arc at the top. Keep `dominantBaseline="central"` on the label text for vertical centering. Pattern is self-contained — no chart library needed for simple single-value rings. (`src/app/skills/[id]/_components/SkillEditor/_components/StatsTab/StatsTab.tsx:RingChart`)
 

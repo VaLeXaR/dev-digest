@@ -69,6 +69,52 @@ export const s = {
     marginBottom: 8,
   } satisfies CSSProperties,
 
+  repoName: {
+    color: "var(--accent-text, var(--accent))",
+  } satisfies CSSProperties,
+
+  overlay: {
+    position: "fixed" as const,
+    inset: 0,
+    background: "rgba(0,0,0,0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+  } satisfies CSSProperties,
+
+  modal: {
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
+    borderRadius: 12,
+    padding: "28px 28px 24px",
+    maxWidth: 400,
+    width: "100%",
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 16,
+  } satisfies CSSProperties,
+
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: "var(--text-primary)",
+    margin: 0,
+  } satisfies CSSProperties,
+
+  modalBody: {
+    fontSize: 14,
+    color: "var(--text-secondary)",
+    margin: 0,
+    lineHeight: 1.5,
+  } satisfies CSSProperties,
+
+  modalActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 8,
+  } satisfies CSSProperties,
+
   spinner: {
     display: "inline-block",
     width: 14,
@@ -76,6 +122,6 @@ export const s = {
     border: "2px solid currentColor",
     borderTopColor: "transparent",
     borderRadius: "50%",
-    animation: "spin 0.75s linear infinite",
+    animation: "ddspin 0.75s linear infinite",
   } satisfies CSSProperties,
 } as const;

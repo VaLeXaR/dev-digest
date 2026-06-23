@@ -2,13 +2,22 @@ import type { CSSProperties } from "react";
 
 export const s = {
   card: {
-    padding: 16,
+    padding: 20,
     borderRadius: 10,
     border: "1px solid var(--border)",
     background: "var(--bg-elevated)",
     display: "flex",
+    flexDirection: "row",
+    gap: 20,
+    alignItems: "flex-start",
+  } satisfies CSSProperties,
+
+  body: {
+    flex: 1,
+    display: "flex",
     flexDirection: "column",
     gap: 12,
+    minWidth: 0,
   } satisfies CSSProperties,
 
   ruleRow: {
@@ -19,8 +28,9 @@ export const s = {
 
   ruleText: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: 600,
+    fontSize: 15,
+    fontWeight: 700,
+    fontStyle: "italic",
     color: "var(--text-primary)",
     lineHeight: 1.4,
     cursor: "pointer",
@@ -31,8 +41,9 @@ export const s = {
 
   ruleInput: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: 600,
+    fontSize: 15,
+    fontWeight: 700,
+    fontStyle: "italic",
     color: "var(--text-primary)",
     lineHeight: 1.4,
     background: "var(--bg-input)",
@@ -68,6 +79,10 @@ export const s = {
     whiteSpace: "nowrap" as const,
   } satisfies CSSProperties,
 
+  snippetWrap: {
+    position: "relative" as const,
+  } satisfies CSSProperties,
+
   snippet: {
     fontFamily: "monospace",
     fontSize: 12,
@@ -81,6 +96,25 @@ export const s = {
     lineHeight: 1.6,
     maxHeight: 120,
     overflow: "auto",
+    margin: 0,
+  } satisfies CSSProperties,
+
+  copyBtn: {
+    position: "absolute" as const,
+    top: 6,
+    right: 6,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    border: "1px solid var(--border)",
+    background: "var(--bg-elevated)",
+    color: "var(--text-muted)",
+    cursor: "pointer",
+    padding: 0,
+    opacity: 0.8,
   } satisfies CSSProperties,
 
   confidenceRow: {
@@ -107,9 +141,24 @@ export const s = {
 
   actions: {
     display: "flex",
-    alignItems: "center",
-    justifyContent: "flex-end",
+    flexDirection: "column",
     gap: 8,
+    flexShrink: 0,
+    width: 112,
+  } satisfies CSSProperties,
+
+  removeBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    height: 28,
+    borderRadius: 6,
+    border: "1px solid var(--border)",
+    background: "transparent",
+    color: "var(--text-muted)",
+    cursor: "pointer",
+    padding: 0,
     marginTop: 4,
   } satisfies CSSProperties,
 } as const;

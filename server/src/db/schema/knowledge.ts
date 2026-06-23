@@ -38,5 +38,5 @@ export const conventions = pgTable('conventions', {
   evidencePath: text('evidence_path'),
   evidenceSnippet: text('evidence_snippet'),
   confidence: doublePrecision('confidence'),
-  accepted: boolean('accepted').notNull().default(false),
+  accepted: boolean('accepted'),
 });

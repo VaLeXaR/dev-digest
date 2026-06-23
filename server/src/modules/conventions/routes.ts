@@ -7,7 +7,7 @@ import { ConventionsService } from './service.js';
 
 const PatchConventionBody = z.object({
   rule: z.string().optional(),
-  accepted: z.boolean().optional(),
+  accepted: z.boolean().nullable().optional(),
 });
 
 export default async function conventionsRoutes(appBase: FastifyInstance) {
@@ -44,6 +44,30 @@ export default async function conventionsRoutes(appBase: FastifyInstance) {
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
       return service.update(req.params.id, workspaceId, req.body);
+    },
+  );
+
+  // DELETE /conventions/:id
+  // Delete a single convention by ID; returns 204 No Content.
+  app.delete(
+    '/conventions/:id',
+    { schema: { params: IdParams } },
+    async (req, reply) => {
+      const { workspaceId } = await getContext(app.container, req);
+      await service.deleteOne(req.params.id, workspaceId);
+      reply.status(204);
+    },
+  );
+
+  // DELETE /repos/:id/conventions/resolved
+  // Delete all accepted + rejected (non-null) conventions; returns 204 No Content.
+  app.delete(
+    '/repos/:id/conventions/resolved',
+    { schema: { params: IdParams } },
+    async (req, reply) => {
+      const { workspaceId } = await getContext(app.container, req);
+      await service.deleteResolved(req.params.id, workspaceId);
+      reply.status(204);
     },
   );
 

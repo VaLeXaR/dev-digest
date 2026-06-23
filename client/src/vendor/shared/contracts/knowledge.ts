@@ -172,7 +172,7 @@ export const ConventionCandidate = z.object({
   evidence_path: z.string(),
   evidence_snippet: z.string(),
   confidence: z.number().min(0).max(1),
-  accepted: z.boolean(),
+  accepted: z.boolean().nullable(),
 });
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
 

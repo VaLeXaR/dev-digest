@@ -67,9 +67,17 @@ export class ConventionsService {
   async update(
     id: string,
     workspaceId: string,
-    patch: { rule?: string; accepted?: boolean },
+    patch: { rule?: string; accepted?: boolean | null },
   ): Promise<ConventionCandidate> {
     return this.repo.updateOne(id, workspaceId, patch);
+  }
+
+  async deleteOne(id: string, workspaceId: string): Promise<void> {
+    return this.repo.deleteOne(id, workspaceId);
+  }
+
+  async deleteResolved(repoId: string, workspaceId: string): Promise<void> {
+    return this.repo.deleteResolved(repoId, workspaceId);
   }
 
   async deleteAll(repoId: string, workspaceId: string): Promise<void> {

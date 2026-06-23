@@ -23,4 +23,5 @@ export const s = {
     lineHeight: 1.5,
   } satisfies CSSProperties,
   noteIcon: { flexShrink: 0, marginTop: 1 } satisfies CSSProperties,
+  providerRow: { display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
 } as const;

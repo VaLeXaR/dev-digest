@@ -12,6 +12,7 @@ interface CreateSkillModalProps {
   repoName: string;
   accepted: ConventionCandidate[];
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
 function assembleSkillBody(repoName: string, candidates: ConventionCandidate[]): string {
@@ -44,7 +45,7 @@ function assembleSkillBody(repoName: string, candidates: ConventionCandidate[]):
   return lines.join('\n');
 }
 
-export function CreateSkillModal({ repoName, accepted, onClose }: CreateSkillModalProps) {
+export function CreateSkillModal({ repoName, accepted, onClose, onSuccess }: CreateSkillModalProps) {
   const createSkill = useCreateSkill();
 
   const defaultBody = assembleSkillBody(repoName, accepted);
@@ -63,7 +64,7 @@ export function CreateSkillModal({ repoName, accepted, onClose }: CreateSkillMod
   async function handleSubmit() {
     await createSkill.mutateAsync({ name, description, type, enabled, body, source: "manual" });
     setSuccess(true);
-    setTimeout(() => onClose(), 1500);
+    setTimeout(() => (onSuccess ?? onClose)(), 1500);
   }
 
   return (

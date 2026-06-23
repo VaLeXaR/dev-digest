@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { ConventionCandidate } from '@devdigest/shared';
@@ -54,7 +54,6 @@ export class ConventionsRepository {
           evidencePath: c.evidencePath,
           evidenceSnippet: c.evidenceSnippet,
           confidence: c.confidence,
-          accepted: false,
         })),
       )
       .returning();
@@ -76,19 +75,37 @@ export class ConventionsRepository {
           eq(t.conventions.workspaceId, workspaceId),
         ),
       )
-      .orderBy(desc(t.conventions.confidence));
+      .orderBy(desc(t.conventions.confidence), asc(t.conventions.id));
 
     return rows.map((row) => this.mapRowToCandidate(row));
+  }
+
+  async deleteOne(id: string, workspaceId: string): Promise<void> {
+    await this.db
+      .delete(t.conventions)
+      .where(and(eq(t.conventions.id, id), eq(t.conventions.workspaceId, workspaceId)));
   }
 
   /**
    * Update a convention's rule text or accepted flag.
    * Workspace-scoped to prevent cross-workspace data leaks.
    */
+  async deleteResolved(repoId: string, workspaceId: string): Promise<void> {
+    await this.db
+      .delete(t.conventions)
+      .where(
+        and(
+          eq(t.conventions.repoId, repoId),
+          eq(t.conventions.workspaceId, workspaceId),
+          isNotNull(t.conventions.accepted),
+        ),
+      );
+  }
+
   async updateOne(
     id: string,
     workspaceId: string,
-    patch: { rule?: string; accepted?: boolean },
+    patch: { rule?: string; accepted?: boolean | null },
   ): Promise<ConventionCandidate> {
     const [row] = await this.db
       .update(t.conventions)

@@ -155,8 +155,33 @@ export class OpenRouterProvider implements LLMProvider {
       (a, b) => (a.pricing?.completionPerM ?? Infinity) - (b.pricing?.completionPerM ?? Infinity),
     );
   }
-  async complete(_req: CompletionRequest): Promise<CompletionResult> {
-    throw new Error(NOT_SUPPORTED);
+  async complete(req: CompletionRequest): Promise<CompletionResult> {
+    const res = await this.client.chat.completions.create({
+      model: req.model,
+      messages: req.messages,
+      temperature: req.temperature ?? 0.2,
+      ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
+      ...(this.id === 'openrouter' ? { usage: { include: true } } : {}),
+    });
+
+    const choice = res.choices?.[0];
+    if (!choice) {
+      const errMsg = (res as unknown as { error?: { message?: string } }).error?.message;
+      throw new Error(`OpenRouter returned no choices${errMsg ? `: ${errMsg}` : ''}`);
+    }
+
+    const text = choice.message?.content ?? '';
+    const tokensIn = res.usage?.prompt_tokens ?? 0;
+    const tokensOut = res.usage?.completion_tokens ?? 0;
+    const apiCost = (res.usage as { cost?: number } | null | undefined)?.cost;
+
+    return {
+      text,
+      model: req.model,
+      tokensIn,
+      tokensOut,
+      costUsd: typeof apiCost === 'number' ? apiCost : (this.estimateCost?.(req.model, tokensIn, tokensOut) ?? null),
+    };
   }
   async embed(_texts: string[]): Promise<number[][]> {
     throw new Error(NOT_SUPPORTED);

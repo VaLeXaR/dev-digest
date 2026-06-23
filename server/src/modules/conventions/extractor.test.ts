@@ -260,7 +260,7 @@ describe('callLLM', () => {
     expect(result[0]?.confidence).toBe(0);
   });
 
-  it('returns [] when LLM complete() throws', async () => {
+  it('propagates error when LLM complete() throws', async () => {
     const llm: LLMProvider = {
       id: 'openai',
       listModels: vi.fn(),
@@ -268,7 +268,6 @@ describe('callLLM', () => {
       completeStructured: vi.fn(),
       embed: vi.fn(),
     } as unknown as LLMProvider;
-    const result = await callLLM(samples, llm, model, provider);
-    expect(result).toEqual([]);
+    await expect(callLLM(samples, llm, model, provider)).rejects.toThrow('network error');
   });
 });

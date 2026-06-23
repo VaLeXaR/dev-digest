@@ -8,7 +8,10 @@ import {
   useConventions,
   useExtractConventions,
   usePatchConvention,
+  useDeleteConvention,
+  useDeleteResolvedConventions,
 } from "../../../../lib/hooks/conventions";
+import { useToast } from "../../../../lib/toast";
 import { ConventionCard } from "../ConventionCard/ConventionCard";
 import { CreateSkillModal } from "../CreateSkillModal/CreateSkillModal";
 import { s } from "./styles";
@@ -24,12 +27,23 @@ export function ConventionsView() {
     refetch,
   } = useConventions(repoId ?? "");
 
+  const toast = useToast();
   const extractMutation = useExtractConventions();
   const { mutate: patchMutation } = usePatchConvention();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
 
-  const list = candidates ?? [];
+  const { mutate: deleteMutation } = useDeleteConvention();
+  const { mutate: deleteResolvedMutation } = useDeleteResolvedConventions();
+
+  const list = React.useMemo(
+    () =>
+      [...(candidates ?? [])].sort(
+        (a, b) => b.confidence - a.confidence || a.id.localeCompare(b.id),
+      ),
+    [candidates],
+  );
   const acceptedCandidates = list.filter((c) => c.accepted);
   const acceptedCount = acceptedCandidates.length;
 
@@ -37,15 +51,33 @@ export function ConventionsView() {
     patchMutation({ id, patch });
   }
 
+  function handleRemove(id: string) {
+    const item = list.find((c) => c.id === id);
+    if (item?.accepted) {
+      deleteMutation(id);
+    } else {
+      setPendingRemoveId(id);
+    }
+  }
+
+  function confirmRemove() {
+    if (pendingRemoveId) deleteMutation(pendingRemoveId);
+    setPendingRemoveId(null);
+  }
+
   function handleDeselectAll() {
     acceptedCandidates.forEach((c) => {
-      patchMutation({ id: c.id, patch: { accepted: false } });
+      patchMutation({ id: c.id, patch: { accepted: null } });
     });
   }
 
   function handleRescan() {
     if (!repoId) return;
-    extractMutation.mutate(repoId);
+    extractMutation.mutate(repoId, {
+      onSuccess: (data) => {
+        if (data.length === 0) toast.info("Scan complete — no conventions detected");
+      },
+    });
   }
 
   const isExtracting = extractMutation.isPending;
@@ -61,7 +93,7 @@ export function ConventionsView() {
         {/* Header row */}
         <div style={s.header}>
           <div style={s.headerText}>
-            <h1 style={s.h1}>Conventions in {repoName}</h1>
+            <h1 style={s.h1}>Conventions in <span style={s.repoName}>{repoName}</span></h1>
             {list.length > 0 && (
               <p style={s.subtitle}>
                 {list.length} candidate{list.length !== 1 ? "s" : ""} detected
@@ -120,7 +152,7 @@ export function ConventionsView() {
         )}
 
         {/* Body */}
-        {isLoading && (
+        {(isLoading || isExtracting) && (
           <div style={s.list}>
             <Skeleton height={148} />
             <Skeleton height={148} />
@@ -128,7 +160,7 @@ export function ConventionsView() {
           </div>
         )}
 
-        {isError && (
+        {!isExtracting && isError && (
           <EmptyState
             icon="AlertTriangle"
             title="Failed to load conventions"
@@ -138,17 +170,17 @@ export function ConventionsView() {
           />
         )}
 
-        {!isLoading && !isError && list.length === 0 && (
+        {!isLoading && !isExtracting && !isError && list.length === 0 && (
           <div style={s.emptyState}>
             <p style={s.emptyStateTitle}>No conventions found yet</p>
             <p>Click Re-scan to analyze the repository and detect coding conventions.</p>
           </div>
         )}
 
-        {!isLoading && !isError && list.length > 0 && (
+        {!isLoading && !isExtracting && !isError && list.length > 0 && (
           <div style={s.list}>
             {list.map((c) => (
-              <ConventionCard key={c.id} convention={c} onPatch={handlePatch} />
+              <ConventionCard key={c.id} convention={c} onPatch={handlePatch} onRemove={handleRemove} />
             ))}
           </div>
         )}
@@ -158,7 +190,30 @@ export function ConventionsView() {
             repoName={repoName}
             accepted={acceptedCandidates}
             onClose={() => setShowCreateModal(false)}
+            onSuccess={() => {
+              if (repoId) deleteResolvedMutation(repoId);
+              setShowCreateModal(false);
+            }}
           />
+        )}
+
+        {pendingRemoveId && (
+          <div style={s.overlay}>
+            <div style={s.modal}>
+              <p style={s.modalTitle}>Remove convention?</p>
+              <p style={s.modalBody}>
+                This convention will be permanently removed from the list. This action cannot be undone.
+              </p>
+              <div style={s.modalActions}>
+                <Button kind="ghost" size="sm" onClick={() => setPendingRemoveId(null)}>
+                  Cancel
+                </Button>
+                <Button kind="danger" size="sm" onClick={confirmRemove}>
+                  Remove
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </AppShell>
