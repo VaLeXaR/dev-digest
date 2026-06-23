@@ -170,7 +170,14 @@ export class OpenRouterProvider implements LLMProvider {
       throw new Error(`OpenRouter returned no choices${errMsg ? `: ${errMsg}` : ''}`);
     }
 
-    const text = choice.message?.content ?? '';
+    // Some reasoning models (DeepSeek R1, V4 Flash, etc.) return the answer in
+    // reasoning_content or reasoning when content is null — fall back in order.
+    const msg = choice.message as {
+      content?: string | null;
+      reasoning_content?: string | null;
+      reasoning?: string | null;
+    };
+    const text = msg.content || msg.reasoning_content || msg.reasoning || '';
     const tokensIn = res.usage?.prompt_tokens ?? 0;
     const tokensOut = res.usage?.completion_tokens ?? 0;
     const apiCost = (res.usage as { cost?: number } | null | undefined)?.cost;

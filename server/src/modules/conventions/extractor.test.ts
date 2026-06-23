@@ -224,6 +224,20 @@ describe('callLLM', () => {
     expect(result[0]?.confidence).toBe(0.8);
   });
 
+  it('parses JSON array when LLM prepends explanatory text', async () => {
+    const validItem = {
+      rule: 'Use const for immutable bindings',
+      evidence_path: 'src/a.ts',
+      evidence_snippet: 'const x = 1;',
+      confidence: 0.85,
+    };
+    const preamble = 'Here are the conventions I found in the repository:\n\n';
+    const llm = makeLlm(preamble + JSON.stringify([validItem]));
+    const result = await callLLM(samples, llm, model, provider, repoName);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.rule).toBe('Use const for immutable bindings');
+  });
+
   it('clamps confidence 85 (percentage form) to 1', async () => {
     const validItem = {
       rule: 'Some rule',

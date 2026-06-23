@@ -23,6 +23,8 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/web`.
 
 - 2026-06-22: Native `<select>` dropdown is not styleable in dark mode — `color-scheme: dark` and all CSS custom properties are ignored for the browser-native open dropdown list. This affects both light text on white background (low contrast) and colored options. Only fix: replace with a fully custom component. A reusable `Select<T>` with portal rendering exists at `src/vendor/ui/kit/Select.tsx` — use it instead of any native `<select>`. (`src/vendor/ui/kit/Select.tsx`)
 
+- 2026-06-23: `extractMutation` in `ConventionsView.handleRescan` has no `onError` handler — if the POST `/repos/:id/conventions/extract` fails (LLM model not configured, bad API key, network error), the spinner stops and the page silently returns to "No conventions found yet" with zero user feedback. The `onSuccess(data.length === 0)` toast only fires on success. Fix: add `onError: (err) => toast.error(...)` to the `mutate` call. (`src/app/conventions/_components/ConventionsView/ConventionsView.tsx:74-81`)
+
 ## Codebase Patterns
 
 - 2026-06-26: To get the current workspace's repo (repoId + repo metadata) in any client component, use `useActiveRepo()` from `client/src/lib/repo-context.tsx` — it reads URL params first, then localStorage, then falls back to the first repo from the API. Returns `{ repoId: string | undefined, activeRepo: Repo | undefined }`. Do NOT try to derive the current repo from URL segments directly in new pages. (`src/lib/repo-context.tsx`)
@@ -51,6 +53,8 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/web`.
 - 2026-06-20: **Supersedes the entry above.** The canonical per-severity icons are defined in `src/vendor/ui/primitives/tokens.ts` as `SEV`: CRITICAL → `AlertOctagon`, WARNING → `AlertTriangle`, SUGGESTION → `Lightbulb`. Always derive the icon via `SEV[severity].icon` + `Icon[sev.icon]` — never hardcode `XCircle` or `Info` for severity. Previous session got this wrong; future divergence will show visually. (`src/vendor/ui/primitives/tokens.ts`)
 
 ## Session Notes
+
+- 2026-06-23: Added `onError` handler to `extractMutation` in `ConventionsView.handleRescan` — scan failures (bad LLM config, network error) now show `toast.error` instead of silently reverting to "No conventions found yet". (`src/app/conventions/_components/ConventionsView/ConventionsView.tsx:74`)
 
 - 2026-06-26: Implemented Conventions Extractor client (branch l-02-home-work). New page at `/conventions` with ConventionsView (Re-scan button, acceptance counter, Deselect all, list of ConventionCards with inline rule edit + Accept/Reject), CreateSkillModal (assembles markdown from accepted candidates → POST /skills), and Conventions sidebar nav link. Hooks: `useConventions`, `useExtractConventions`, `usePatchConvention`. (`src/app/conventions/`, `src/lib/hooks/conventions.ts`)
 

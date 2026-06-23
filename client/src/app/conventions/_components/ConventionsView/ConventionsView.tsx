@@ -77,6 +77,7 @@ export function ConventionsView() {
       onSuccess: (data) => {
         if (data.length === 0) toast.info("Scan complete — no conventions detected");
       },
+      onError: () => toast.error("Scan failed — check that a model is configured for Conventions"),
     });
   }
 

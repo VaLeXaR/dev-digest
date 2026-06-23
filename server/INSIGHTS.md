@@ -10,6 +10,10 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/api`.
 
 - 2026-06-20: `cost_usd` was deliberately removed from `agent_runs` in migration `0009_complex_runaways.sql` (`ALTER TABLE "agent_runs" DROP COLUMN "cost_usd"`). It was re-added in `0010_grey_naoko.sql`. If you see the column missing and old data showing "—", that is expected — only runs after migration 0010 have persisted cost.
 
+- 2026-06-23: `buildSamples` searches for config files (`tsconfig.json`, `.eslintrc.*`, etc.) only at the repo root — it never descends into subdirectories. Monorepos (DevDigest: `server/tsconfig.json`, `client/tsconfig.json`) get **0 config samples**. JavaScript SPAs with root-level configs get 1–2 at best. With an unindexed repo (no repo-intel), the LLM receives a near-empty input and returns `[]`. Fix: glob the config files recursively or add subdirectory paths to the search list. (`src/modules/conventions/extractor.ts:27-96`)
+
+- 2026-06-23: The conventions system prompt contains "Do NOT include generic best practices obvious to any TypeScript developer" — for JavaScript repos, the LLM treats most Prettier/ESLint conventions as "obvious JS knowledge" and discards them, silently producing `[]`. The prompt is implicitly TypeScript-only. (`src/modules/conventions/extractor.ts:100`)
+
 ## Codebase Patterns
 
 - 2026-06-22: The `conventions` table, `ConventionCandidate` Zod schema, and `FeatureModelId: 'conventions'` feature model config were all pre-built before the Conventions Extractor feature was implemented. If adding convention-related work, the schema (`src/db/schema/knowledge.ts`), shared contract (`src/vendor/shared/contracts/knowledge.ts`), and feature model entry (`src/modules/settings/feature-models.ts`) already exist — no new migration or contract needed. (`src/db/schema/knowledge.ts`, `src/vendor/shared/contracts/knowledge.ts`)
@@ -53,5 +57,9 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/api`.
 - 2026-06-23: `run-executor.ts` skills loading was silently removed in `15fa391 chore(part0): strip server to starter feature set`. Skills linked to an agent never appeared in logs or Prompt Assembly after that commit. Fix: in `runOneAgent`, call `this.agents.linkedSkills(agent.id)`, filter by `l.enabled && l.skill.enabled` (BOTH the agent-link flag AND the skill's global enabled flag), format each as `### ${skill.name}\n${skill.body}`, wrap in `runLog.step('Loading enabled skills', ...)`, pass result as `skills` to `reviewPullRequest`. Using only `l.skill.enabled` (the global flag) misses per-agent toggles; using only `l.enabled` misses globally disabled skills. (`src/modules/reviews/run-executor.ts:runOneAgent`)
 
 - 2026-06-23: `conventions` `listForRepo` query had `ORDER BY confidence DESC` with no secondary key — Postgres returns equal-confidence rows in non-deterministic order, and after UPDATE the modified row can move to a different position in the result. Fix: add `asc(t.conventions.id)` as tiebreaker so server output is fully deterministic regardless of which rows were recently updated. (`src/modules/conventions/repository.ts:listForRepo`)
+
+- 2026-06-23: Fixed Conventions extractor producing 0 results for monorepos and JS projects. (1) `buildSamples` now scans root + all immediate non-junk subdirs for config files (catches `server/tsconfig.json`, `client/tsconfig.json` etc.). (2) System prompt changed from "obvious to any TypeScript developer" → "obvious to any experienced developer" — JS projects no longer filtered out. (`src/modules/conventions/extractor.ts`)
+
+- 2026-06-23: Fixed Conventions extractor returning `[]` silently for reasoning models. Root cause: `OpenRouterProvider.complete()` returned empty `text` when `message.content` was null — reasoning models (DeepSeek V4 Flash, R1) put the answer in `reasoning_content`/`reasoning`. Fix is in `reviewer-core` (`src/llm/openrouter.ts`). Also: LLM responses that start with preamble text before `[` were silently failing `JSON.parse`; fix is to find the first `[` and last `]` in the full response. (`src/modules/conventions/extractor.ts:callLLM`)
 
 ## Open Questions
