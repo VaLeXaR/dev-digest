@@ -3,6 +3,7 @@ import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { ConventionCandidate } from '@devdigest/shared';
 import type { ConventionRow } from '../../db/rows.js';
+import { NotFoundError } from '../../platform/errors.js';
 
 export type { ConventionRow };
 
@@ -131,7 +132,7 @@ export class ConventionsRepository {
   }
 
   /**
-   * Update a convention's rule text or accepted flag.
+   * Delete all resolved (accepted or rejected) conventions for a repo.
    * Workspace-scoped to prevent cross-workspace data leaks.
    */
   async deleteResolved(repoId: string, workspaceId: string): Promise<void> {
@@ -165,7 +166,8 @@ export class ConventionsRepository {
       )
       .returning();
 
-    return this.mapRowToCandidate(row!);
+    if (!row) throw new NotFoundError('Convention not found');
+    return this.mapRowToCandidate(row);
   }
 
   /**

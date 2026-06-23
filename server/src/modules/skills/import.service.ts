@@ -37,19 +37,30 @@ export class SkillsImportService {
   }
 
   private async previewFromGitHubRepo(owner: string, repo: string): Promise<SkillPreview[]> {
+    const MAX_ZIP_BYTES = 50 * 1024 * 1024; // 50 MB
     for (const branch of ['main', 'master']) {
-      const url = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+      const url = `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/archive/refs/heads/${branch}.zip`;
       const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
       if (res.status === 404) continue;
       if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
+      const contentLength = Number(res.headers.get('content-length') || '0');
+      if (contentLength > MAX_ZIP_BYTES) throw new Error('Repository archive too large (> 50 MB)');
       const buffer = Buffer.from(await res.arrayBuffer());
+      if (buffer.byteLength > MAX_ZIP_BYTES) throw new Error('Repository archive too large (> 50 MB)');
       return this.previewFromZip(buffer);
     }
     throw new Error('Repository not found or has no main/master branch');
   }
 
   private previewFromZip(buffer: Buffer): SkillPreview[] {
+    const MAX_DECOMPRESSED_BYTES = 100 * 1024 * 1024; // 100 MB
     const raw = unzipSync(new Uint8Array(buffer));
+
+    let totalBytes = 0;
+    for (const data of Object.values(raw)) {
+      totalBytes += data.byteLength;
+      if (totalBytes > MAX_DECOMPRESSED_BYTES) throw new Error('ZIP archive decompresses to more than 100 MB');
+    }
 
     // Build path → decoded text map (reject path traversal)
     const fileMap = new Map<string, string>();

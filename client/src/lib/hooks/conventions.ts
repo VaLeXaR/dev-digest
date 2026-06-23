@@ -4,10 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import type { ConventionCandidate } from "@devdigest/shared";
 
-export function useConventions(repoId: string) {
+export function useConventions(repoId: string | null | undefined) {
   return useQuery({
-    queryKey: ["conventions", repoId],
-    queryFn: () => api.get<ConventionCandidate[]>(`/repos/${repoId}/conventions`),
+    queryKey: ["conventions", repoId ?? ""],
+    queryFn: () => api.get<ConventionCandidate[]>(`/repos/${repoId!}/conventions`),
     enabled: !!repoId,
   });
 }

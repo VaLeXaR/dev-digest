@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { SkillType, SkillPreview } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
-import { NotFoundError } from '../../platform/errors.js';
+import { NotFoundError, ValidationError } from '../../platform/errors.js';
 import { SkillsService } from './service.js';
 import { SkillsImportService } from './import.service.js';
 
@@ -88,7 +88,7 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
   app.post('/skills/import/preview-file', async (req) => {
     await getContext(app.container, req);
     const data = await req.file();
-    if (!data) throw new Error('No file in request');
+    if (!data) throw new ValidationError('No file in request');
     const buffer = await data.toBuffer();
     return importSvc.previewFromBuffer(buffer, data.filename);
   });

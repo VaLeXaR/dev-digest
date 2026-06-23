@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Modal, Button, Select } from "@devdigest/ui";
 import type { Skill, ConventionCandidate } from "@devdigest/shared";
 import { useCreateSkill } from "../../../../lib/hooks/skills";
@@ -58,13 +58,16 @@ export function CreateSkillModal({ repoName, accepted, onClose, onSuccess }: Cre
   const [enabled, setEnabled] = useState(true);
   const [body, setBody] = useState(defaultBody);
   const [success, setSuccess] = useState(false);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(closeTimerRef.current), []);
 
   const tokenCount = Math.ceil(body.length / 4);
 
   async function handleSubmit() {
     await createSkill.mutateAsync({ name, description, type, enabled, body, source: "manual" });
     setSuccess(true);
-    setTimeout(() => (onSuccess ?? onClose)(), 1500);
+    closeTimerRef.current = setTimeout(() => (onSuccess ?? onClose)(), 1500);
   }
 
   return (

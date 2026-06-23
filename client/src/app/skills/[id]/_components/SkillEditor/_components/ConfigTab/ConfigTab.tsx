@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -21,6 +21,13 @@ export function ConfigTab({ skill }: { skill: Skill }) {
   const [description, setDescription] = useState(skill.description);
   const [type, setType] = useState<Skill["type"]>(skill.type);
   const [body, setBody] = useState(skill.body);
+
+  useEffect(() => {
+    setName(skill.name);
+    setDescription(skill.description);
+    setType(skill.type);
+    setBody(skill.body);
+  }, [skill]);
 
   const isDirty =
     name !== skill.name ||

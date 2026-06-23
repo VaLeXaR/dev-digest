@@ -25,7 +25,7 @@ export function ConventionsView() {
     isLoading,
     isError,
     refetch,
-  } = useConventions(repoId ?? "");
+  } = useConventions(repoId);
 
   const toast = useToast();
   const extractMutation = useExtractConventions();
@@ -44,7 +44,7 @@ export function ConventionsView() {
       ),
     [candidates],
   );
-  const acceptedCandidates = list.filter((c) => c.accepted);
+  const acceptedCandidates = React.useMemo(() => list.filter((c) => c.accepted), [list]);
   const acceptedCount = acceptedCandidates.length;
 
   function handlePatch(id: string, patch: { rule?: string; accepted?: boolean }) {

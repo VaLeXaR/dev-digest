@@ -51,6 +51,7 @@ export function ImportSkillModal({ onClose }: { onClose: () => void }) {
   async function handleConfirm() {
     try {
       const created = await confirm.mutateAsync(previews);
+      onClose();
       router.replace(created[0] ? `/skills/${created[0].id}` : "/skills");
     } catch {
       // confirm.error is set by TanStack Query — displayed below
@@ -157,8 +158,8 @@ export function ImportSkillModal({ onClose }: { onClose: () => void }) {
           ⚠ Importing a skill adds its instructions to your agent&apos;s prompt. Only import skills
           from sources you trust.
         </div>
-        {previews.map((p, i) => (
-          <div key={i} style={s.previewCard}>
+        {previews.map((p) => (
+          <div key={`${p.name}::${p.type}`} style={s.previewCard}>
             <div style={s.previewHeader}>
               <span style={s.previewName}>{p.name}</span>
               <span style={s.previewType}>{p.type}</span>
