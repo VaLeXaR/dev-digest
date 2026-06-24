@@ -46,6 +46,8 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/api`.
 
 ## Session Notes
 
+- 2026-06-24: Fixed `/import/confirm` bypass (resolves Open Questions entry 2026-06-24). Added `max(200)` on `name`, `max(500)` on `description`, and `max(50_000)` on `body` to `SkillPreview` in the shared contract. Because `ImportConfirmBody = z.object({ previews: z.array(SkillPreview) })`, Fastify's Zod validation now enforces these limits at the confirm endpoint for any request origin. (`src/vendor/shared/contracts/knowledge.ts:SkillPreview`)
+
 - 2026-06-26: Implemented full Conventions Extractor feature (branch l-02-home-work). Server: `conventions/` module with repository (Drizzle CRUD), extractor (buildSamples + callLLM + verifyEvidence), service (sync pipeline), routes (POST /repos/:id/conventions/extract, GET, PATCH, DELETE), registered in `modules/index.ts`. 14 unit tests for extractor (verifyEvidence + callLLM parsing + path traversal). No new migration — `conventions` table pre-existed. (`src/modules/conventions/`)
 
 - 2026-06-22: Implemented conventions extractor (branch l-02-home-work, Task 2). `buildSamples` reads 9 config files + top-12 ranked files via `repoIntel.getConventionSamples`. `callLLM` uses `LLMProvider.complete()` (plain text, not `completeStructured`) — returns `[]` on parse errors per spec. `verifyEvidence` uses `fs.existsSync` + per-line includes search within ±5 lines of `evidenceLine`. All 3 functions + types exported. TypeScript compiles clean. (`src/modules/conventions/extractor.ts`)
@@ -63,3 +65,5 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/api`.
 - 2026-06-23: Fixed Conventions extractor returning `[]` silently for reasoning models. Root cause: `OpenRouterProvider.complete()` returned empty `text` when `message.content` was null — reasoning models (DeepSeek V4 Flash, R1) put the answer in `reasoning_content`/`reasoning`. Fix is in `reviewer-core` (`src/llm/openrouter.ts`). Also: LLM responses that start with preamble text before `[` were silently failing `JSON.parse`; fix is to find the first `[` and last `]` in the full response. (`src/modules/conventions/extractor.ts:callLLM`)
 
 ## Open Questions
+
+- 2026-06-24: **Security gap** — `/skills/import/confirm` accepts `previews: z.array(SkillPreview)` directly from the client body without re-running any sanitization. All import-time guards in `SkillsImportService` (SSRF, path traversal, content-type checks, ZIP size limits) can be bypassed by POSTing arbitrary `body` content straight to this endpoint. The import service validates the *source file*; the confirm endpoint trusts whatever the client sends. Fix: re-validate `body` length and strip/escape dangerous content server-side in `importConfirm()`, independent of what the import service did. (`src/modules/skills/routes.ts:96-100`, `src/modules/skills/service.ts:importConfirm`)
