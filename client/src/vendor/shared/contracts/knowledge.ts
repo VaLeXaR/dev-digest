@@ -152,13 +152,15 @@ export const SkillVersion = z.object({
 });
 export type SkillVersion = z.infer<typeof SkillVersion>;
 
+const MAX_SKILL_BODY_CHARS = 50_000;
+
 export const SkillPreview = z.object({
-  name: z.string(),
-  description: z.string(),
+  name: z.string().max(200),
+  description: z.string().max(500),
   type: SkillType,
-  body: z.string(),
+  body: z.string().max(MAX_SKILL_BODY_CHARS),
   source: SkillSource,
-  filename: z.string(),
+  filename: z.string().max(500),
 });
 export type SkillPreview = z.infer<typeof SkillPreview>;
 
