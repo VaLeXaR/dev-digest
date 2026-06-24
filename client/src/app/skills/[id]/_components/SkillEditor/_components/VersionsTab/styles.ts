@@ -125,4 +125,21 @@ export const s = {
     alignItems: "center",
     gap: 5,
   } as React.CSSProperties,
+
+  modalFooter: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 8,
+  } as React.CSSProperties,
+
+  modalBody: {
+    margin: 0,
+    padding: "20px 24px",
+    fontSize: 13,
+    lineHeight: 1.6,
+    color: "var(--text-primary)",
+    fontFamily: "var(--font-mono, monospace)",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+  } as React.CSSProperties,
 };

@@ -45,6 +45,8 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/web`.
 
 ## Recurring Errors & Fixes
 
+- 2026-06-24: The Edit tool converts ASCII single-quote string delimiters (`'` U+0027) to Unicode typographic quotes (U+2018/U+2019) when `old_string`/`new_string` contain string literals in `.tsx`/`.ts` files. TypeScript reports `TS1127: Invalid character` on every affected line. Fix: after any Edit touching string literals, run this PowerShell one-liner: `$p="path\to\file.ts"; $r=[IO.File]::ReadAllText($p,'UTF8'); [IO.File]::WriteAllText($p,$r.Replace([char]0x2018,[char]0x27).Replace([char]0x2019,[char]0x27),(New-Object Text.UTF8Encoding $false))`. Full details and alternative approach in `reviewer-core/INSIGHTS.md`.
+
 - 2026-06-26: All repo-scoped `useQuery` hooks MUST include `enabled: !!repoId` in the query options. Without it, when the component mounts before `useActiveRepo()` resolves, the hook fires `GET /repos//conventions` (empty path segment → 404). Every existing repo-scoped hook in `src/lib/hooks/` uses this guard — always add it. Caught in code review on `useConventions`. (`src/lib/hooks/conventions.ts`)
 
 - 2026-06-20: When adding a required (non-optional) field to `RunSummary`, existing test mocks that use `Partial<RunSummary>` as base will fail with `Type 'undefined' is not assignable to type 'X | null'`. Fix: add the new field with a default value (`null`) to the base mock object in the test. (`src/app/repos/[repoId]/pulls/[number]/_components/RunHistory/RunHistory.test.tsx:17`)
