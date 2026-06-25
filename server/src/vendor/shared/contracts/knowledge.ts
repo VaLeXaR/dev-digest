@@ -115,7 +115,7 @@ export type MemoryItem = z.infer<typeof MemoryItem>;
 export const SkillType = z.enum(['rubric', 'convention', 'security', 'custom']);
 export type SkillType = z.infer<typeof SkillType>;
 
-export const SkillSource = z.enum(['manual', 'imported_url', 'extracted', 'community']);
+export const SkillSource = z.enum(['manual', 'imported_url', 'imported_file', 'extracted', 'community']);
 export type SkillSource = z.infer<typeof SkillSource>;
 
 export const Skill = z.object({
@@ -127,7 +127,11 @@ export const Skill = z.object({
   body: z.string(),
   enabled: z.boolean(),
   version: z.number().int(),
+  created_at: z.string(),
   evidence_files: z.array(z.string()).nullish(),
+  agent_count: z.number().int().nullish(),
+  pull_pct: z.number().nullish(),
+  accept_pct: z.number().nullish(),
 });
 export type Skill = z.infer<typeof Skill>;
 
@@ -140,6 +144,29 @@ export const CommunitySkill = z.object({
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+const MAX_SKILL_BODY_CHARS = 50_000;
+
+export const SkillPreview = z.object({
+  name: z.string().max(200),
+  description: z.string().max(500),
+  type: SkillType,
+  body: z.string().max(MAX_SKILL_BODY_CHARS),
+  source: SkillSource,
+  filename: z.string().max(500),
+});
+export type SkillPreview = z.infer<typeof SkillPreview>;
+
+export const SkillAgent = z.object({ id: z.string(), name: z.string() });
+export type SkillAgent = z.infer<typeof SkillAgent>;
+
 // ---- Conventions ----
 export const ConventionCandidate = z.object({
   id: z.string(),
@@ -147,7 +174,7 @@ export const ConventionCandidate = z.object({
   evidence_path: z.string(),
   evidence_snippet: z.string(),
   confidence: z.number().min(0).max(1),
-  accepted: z.boolean(),
+  accepted: z.boolean().nullable(),
 });
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
 
@@ -195,6 +222,7 @@ export const AgentSkillLink = z.object({
   agent_id: z.string(),
   skill_id: z.string(),
   order: z.number().int(),
+  enabled: z.boolean(),
 });
 export type AgentSkillLink = z.infer<typeof AgentSkillLink>;
 

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { FormField, TextInput, SelectInput, SearchableSelect, Textarea, Toggle, Button } from "@devdigest/ui";
+import { FormField, TextInput, Select, SearchableSelect, Textarea, Toggle, Button } from "@devdigest/ui";
 import type { Agent, CiFailOn, Provider, ReviewStrategy } from "@devdigest/shared";
 import { useUpdateAgent, useProviderModels } from "../../../../../../../lib/hooks/agents";
 import { useToast } from "../../../../../../../lib/toast";
@@ -25,19 +25,6 @@ export function ConfigTab({ agent }: { agent: Agent }) {
   const [repoIntel, setRepoIntel] = React.useState(agent.repo_intel);
   const [enabled, setEnabled] = React.useState(agent.enabled);
 
-  // Reset local form when switching agents.
-  React.useEffect(() => {
-    setName(agent.name);
-    setDescription(agent.description);
-    setProvider(agent.provider);
-    setModel(agent.model);
-    setSystemPrompt(agent.system_prompt);
-    setStrategy(agent.strategy);
-    setCiFailOn(agent.ci_fail_on);
-    setRepoIntel(agent.repo_intel);
-    setEnabled(agent.enabled);
-  }, [agent.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const { data: models } = useProviderModels(provider);
   // Show the price (USD per 1M in/out tokens) in the label when the provider
   // exposes it (OpenRouter) so a cheap model is easy to pick; value stays the id.
@@ -48,9 +35,14 @@ export function ConfigTab({ agent }: { agent: Agent }) {
   // guide the user instead of showing a silent one-item dropdown.
   const noModels = models !== undefined && models.length === 0;
 
-  // Friendly labels for the strategy select (values come from constants).
-  const strategyOptions = STRATEGY_VALUES.map((v) => ({ value: v, label: t(`config.strategyOptions.${v}`) }));
-  const ciFailOnOptions = CI_FAIL_ON_VALUES.map((v) => ({ value: v, label: t(`config.ciFailOnOptions.${v}`) }));
+  const strategyOptions = React.useMemo(
+    () => STRATEGY_VALUES.map((v) => ({ value: v, label: t(`config.strategyOptions.${v}`) })),
+    [t],
+  );
+  const ciFailOnOptions = React.useMemo(
+    () => CI_FAIL_ON_VALUES.map((v) => ({ value: v, label: t(`config.ciFailOnOptions.${v}`) })),
+    [t],
+  );
 
   const save = () =>
     update.mutate(
@@ -91,7 +83,7 @@ export function ConfigTab({ agent }: { agent: Agent }) {
         <TextInput value={description} onChange={setDescription} />
       </FormField>
       <FormField label={t("config.provider")}>
-        <SelectInput
+        <Select
           value={provider}
           onChange={(v) => setProvider(v as Provider)}
           options={[...PROVIDER_OPTIONS]}
@@ -109,14 +101,14 @@ export function ConfigTab({ agent }: { agent: Agent }) {
         />
       </FormField>
       <FormField label={t("config.strategy")} hint={t("config.strategyHint")}>
-        <SelectInput
+        <Select
           value={strategy}
           onChange={(v) => setStrategy(v as ReviewStrategy)}
           options={strategyOptions}
         />
       </FormField>
       <FormField label={t("config.ciFailOn")} hint={t("config.ciFailOnHint")}>
-        <SelectInput
+        <Select
           value={ciFailOn}
           onChange={(v) => setCiFailOn(v as CiFailOn)}
           options={ciFailOnOptions}
@@ -131,7 +123,7 @@ export function ConfigTab({ agent }: { agent: Agent }) {
         <Textarea value={systemPrompt} onChange={setSystemPrompt} rows={8} mono />
       </FormField>
       <FormField label={t("config.outputSchema")}>
-        <SelectInput value={OUTPUT_SCHEMA_VALUE} options={[OUTPUT_SCHEMA_VALUE]} />
+        <Select value={OUTPUT_SCHEMA_VALUE} options={[OUTPUT_SCHEMA_VALUE]} disabled />
       </FormField>
       <div style={s.actions}>
         <Button kind="primary" icon="Check" onClick={save} disabled={update.isPending}>

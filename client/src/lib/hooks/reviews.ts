@@ -4,6 +4,8 @@
 
 import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+const POLL_INTERVAL_MS = 4000;
 import { api, API_BASE } from "../api";
 import { notify } from "../toast";
 import type {
@@ -30,7 +32,7 @@ export function usePrActiveRuns(prId: string | null | undefined) {
     queryKey: ["pr-active-runs", prId],
     queryFn: () => api.get<ActiveRun[]>(`/pulls/${prId}/runs/active`),
     enabled: !!prId,
-    refetchInterval: (query) => ((query.state.data?.length ?? 0) > 0 ? 4000 : false),
+    refetchInterval: (query) => ((query.state.data?.length ?? 0) > 0 ? POLL_INTERVAL_MS : false),
   });
 }
 
@@ -43,7 +45,7 @@ export function usePrRuns(prId: string | null | undefined) {
     queryFn: () => api.get<RunSummary[]>(`/pulls/${prId}/runs`),
     enabled: !!prId,
     refetchInterval: (query) =>
-      (query.state.data ?? []).some((r) => r.status === "running") ? 4000 : false,
+      (query.state.data ?? []).some((r) => r.status === "running") ? POLL_INTERVAL_MS : false,
   });
 }
 
@@ -176,10 +178,14 @@ export function useRunEvents(runIds: string[]) {
     setRunning(true);
     const sources: EventSource[] = [];
     let open = runIds.length;
+    // Prevent stale onerror handlers (from closed sources) from calling
+    // setRunning(false) after the effect re-runs with a new key.
+    let cancelled = false;
 
     for (const runId of runIds) {
       const es = new EventSource(`${API_BASE}/runs/${runId}/events`);
       const onMsg = (ev: MessageEvent) => {
+        if (cancelled) return;
         try {
           const parsed = JSON.parse(ev.data) as RunEvent;
           setEvents((prev) => [...prev, parsed]);
@@ -200,15 +206,17 @@ export function useRunEvents(runIds: string[]) {
       es.onerror = () => {
         es.close();
         open -= 1;
-        if (open <= 0) setRunning(false);
+        if (!cancelled && open <= 0) setRunning(false);
       };
       sources.push(es);
     }
 
     return () => {
+      cancelled = true;
       for (const es of sources) es.close();
       setRunning(false);
     };
+    // key = runIds.join(",") — stable dep that avoids array-reference churn
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 

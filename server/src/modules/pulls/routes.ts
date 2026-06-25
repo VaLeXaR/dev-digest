@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { PrMeta, PrDetail, GitHubClient, PrReviewComment } from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
@@ -113,11 +113,11 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
 
     // Latest-review SCORE per PR for the list's score ring. Computed on read
     // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // grouping is cheap.
     const prIds = rows.map((r) => r.id);
     const latestReviewByPr = new Map<string, { score: number | null }>();
     const latestRunCostByPr = new Map<string, number | null>();
+    const findingCountsByPr = new Map<string, { CRITICAL: number; WARNING: number; SUGGESTION: number }>();
     if (prIds.length > 0) {
       const reviewRows = await container.db
         .select({ prId: t.reviews.prId, score: t.reviews.score })
@@ -143,6 +143,29 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       for (const rc of runCostRows) {
         if (rc.prId && !latestRunCostByPr.has(rc.prId)) {
           latestRunCostByPr.set(rc.prId, rc.costUsd ?? null);
+        }
+      }
+
+      // Per-severity finding counts for the FINDINGS column.
+      const findingCounts = await container.db
+        .select({ prId: t.reviews.prId, severity: t.findings.severity, cnt: count() })
+        .from(t.findings)
+        .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+        .where(
+          and(
+            inArray(t.reviews.prId, prIds as [string, ...string[]]),
+            eq(t.reviews.kind, 'review'),
+            isNull(t.findings.dismissedAt),
+          ),
+        )
+        .groupBy(t.reviews.prId, t.findings.severity);
+      for (const row of findingCounts) {
+        if (!findingCountsByPr.has(row.prId)) {
+          findingCountsByPr.set(row.prId, { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 });
+        }
+        const entry = findingCountsByPr.get(row.prId)!;
+        if (row.severity === 'CRITICAL' || row.severity === 'WARNING' || row.severity === 'SUGGESTION') {
+          entry[row.severity] = Number(row.cnt);
         }
       }
     }
@@ -172,6 +195,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
         last_run_cost_usd: latestRunCostByPr.get(r.id) ?? null,
+        findings_counts: findingCountsByPr.get(r.id) ?? null,
       };
     });
   });

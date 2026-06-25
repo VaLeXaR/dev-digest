@@ -1,0 +1,2 @@
+export const INITIAL_SKILL_VERSION = 1;
+export const DEFAULT_SKILL_DESCRIPTION = '';

@@ -3,8 +3,9 @@
 import React, { useCallback } from "react";
 import { Icon, Badge, Button, SectionLabel, EmptyState } from "@devdigest/ui";
 import { RunStatus } from "../RunStatus";
-import { RunHistory } from "../RunHistory/RunHistory";
+import { RunHistory } from "../RunHistory";
 import { ReviewRunAccordion } from "../ReviewRunAccordion";
+import { SeverityFilterBar } from "./SeverityFilterBar";
 import { s } from "./styles";
 import type { FindingRecord, ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
 import type { UseMutationResult } from "@tanstack/react-query";
@@ -49,19 +50,22 @@ export function FindingsTab({
     if (liveRunIds[0]) onOpenTrace(liveRunIds[0]);
   }, [liveRunIds, onOpenTrace]);
 
-  const handleOpenTrace = useCallback(
-    (id: string) => {
-      onOpenTrace(id);
-    },
-    [onOpenTrace],
-  );
+  const [severityFilter, setSeverityFilter] = React.useState<string | null>(null);
+  const severityCounts = React.useMemo(() => {
+    const c: Record<string, number> = { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 };
+    for (const r of runs) for (const f of r.findings) c[f.severity] = (c[f.severity] ?? 0) + 1;
+    return c;
+  }, [runs]);
+  const handleSeverityToggle = (sev: string) =>
+    setSeverityFilter((prev) => (prev === sev ? null : sev));
 
-  const handleDelete = useCallback(
-    (id: string) => {
-      onDelete(id);
-    },
-    [onDelete],
-  );
+  const findingsByRunId = React.useMemo(() => {
+    const map = new Map<string, import("@devdigest/shared").FindingRecord[]>();
+    for (const r of runs) {
+      if (r.run_id) map.set(r.run_id, r.findings);
+    }
+    return map;
+  }, [runs]);
 
   // Timeline → Review-runs navigation: clicking an agent name in the timeline
   // opens + scrolls to that run's accordion below. The nonce re-triggers the
@@ -131,16 +135,25 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
-            onOpenTrace={handleOpenTrace}
+            findingsByRunId={findingsByRunId}
+            onOpenTrace={onOpenTrace}
             onGoToReview={handleGoToReview}
-            onDelete={handleDelete}
+            onDelete={onDelete}
+            repoFullName={repoFullName}
+            headSha={headSha}
           />
         </div>
       )}
 
       <SectionLabel
         icon="AlertOctagon"
-        right={<span style={{ fontSize: 12, color: "var(--text-muted)" }}>grouped by run · newest first</span>}
+        right={
+          <SeverityFilterBar
+            counts={severityCounts}
+            active={severityFilter}
+            onToggle={handleSeverityToggle}
+          />
+        }
       >
         Review runs
       </SectionLabel>
@@ -164,6 +177,7 @@ export function FindingsTab({
             headSha={headSha}
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
+            severityFilter={severityFilter}
           />
         ))
       )}

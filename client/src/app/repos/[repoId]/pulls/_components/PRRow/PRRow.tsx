@@ -9,57 +9,140 @@ import type { PrMeta } from "@/lib/types";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { formatCost, relativeTime, sizeOf } from "../../helpers";
 import { s } from "../../styles";
+import { FindingsPopover } from "../FindingsPopover/FindingsPopover";
 
-export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
+const SEV_ICON: Record<string, React.ComponentType<{ size?: number; style?: React.CSSProperties }>> = {
+  CRITICAL: Icon.AlertOctagon,
+  WARNING: Icon.AlertTriangle,
+  SUGGESTION: Icon.Lightbulb,
+};
+const SEV_COLOR: Record<string, string> = {
+  CRITICAL: "var(--crit)",
+  WARNING: "var(--warn)",
+  SUGGESTION: "var(--sugg)",
+};
+const SEVS = ["CRITICAL", "WARNING", "SUGGESTION"] as const;
+
+export function PRRow({ pr, repoId, repoFullName }: { pr: PrMeta; repoId: string; repoFullName?: string | null }) {
   const t = useTranslations("prReview");
   const router = useRouter();
   const [h, setH] = React.useState(false);
   const st = STATUS_META[pr.status] ?? STATUS_META.needs_review!;
   const { size, lines } = sizeOf(pr);
-  const reviewed = pr.score != null; // null score ⇒ PR has never been reviewed
+  const reviewed = pr.score != null;
+
+  const [popover, setPopover] = React.useState<{ anchor: DOMRect; severity: string | null } | null>(null);
+  const findingsCellRef = React.useRef<HTMLDivElement | null>(null);
+
+  const totalFindings = pr.findings_counts
+    ? pr.findings_counts.CRITICAL + pr.findings_counts.WARNING + pr.findings_counts.SUGGESTION
+    : 0;
+
+  function openPopover(severity: string | null, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!pr.id) return;
+    const anchor = (e.currentTarget as HTMLElement).closest("[data-findings-cell]")?.getBoundingClientRect()
+      ?? findingsCellRef.current?.getBoundingClientRect();
+    if (anchor) setPopover({ anchor, severity });
+  }
+
   return (
-    <div
-      onMouseEnter={() => setH(true)}
-      onMouseLeave={() => setH(false)}
-      onClick={() => router.push(`/repos/${repoId}/pulls/${pr.number}`)}
-      style={s.row(h)}
-    >
-      <div style={s.rowTitleCell}>
-        <Icon.GitPullRequest size={15} style={s.rowIcon(st.c)} />
-        <div style={s.rowTitleWrap}>
-          <div style={s.rowTitle(h)}>{pr.title}</div>
-          <span className="mono" style={s.rowNumber}>
-            #{pr.number}
-          </span>
+    <>
+      <div
+        onMouseEnter={() => setH(true)}
+        onMouseLeave={() => setH(false)}
+        onClick={() => router.push(`/repos/${repoId}/pulls/${pr.number}`)}
+        style={s.row(h)}
+      >
+        <div style={s.rowTitleCell}>
+          <Icon.GitPullRequest size={15} style={s.rowIcon(st.c)} />
+          <div style={s.rowTitleWrap}>
+            <div style={s.rowTitle(h)}>{pr.title}</div>
+            <span className="mono" style={s.rowNumber}>
+              #{pr.number}
+            </span>
+          </div>
         </div>
-      </div>
-      <div style={s.authorCell}>
-        <Avatar name={pr.author} size={18} />
-        {pr.author}
-      </div>
-      <div>
-        <Badge
-          color={SIZE_COLOR[size]}
-          bg="transparent"
-          style={s.sizeBadgeBorder(SIZE_COLOR[size]!)}
+        <div style={s.authorCell}>
+          <Avatar name={pr.author} size={18} />
+          {pr.author}
+        </div>
+        <div>
+          <Badge
+            color={SIZE_COLOR[size]}
+            bg="transparent"
+            style={s.sizeBadgeBorder(SIZE_COLOR[size]!)}
+          >
+            {size} · {lines}
+          </Badge>
+        </div>
+        <div style={s.scoreCell}>
+          {reviewed ? (
+            <CircularScore score={pr.score!} size={34} stroke={3} />
+          ) : (
+            <span style={s.muted}>—</span>
+          )}
+        </div>
+
+        {/* FINDINGS column */}
+        <div
+          ref={findingsCellRef}
+          data-findings-cell
+          onClick={(e) => e.stopPropagation()}
+          style={{ display: "flex", alignItems: "center", gap: 2 }}
         >
-          {size} · {lines}
-        </Badge>
+          {totalFindings > 0 && pr.findings_counts ? (
+            SEVS.filter((k) => pr.findings_counts![k] > 0).map((k) => {
+              const Ic = SEV_ICON[k]!;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  title={`${pr.findings_counts![k]} ${k}`}
+                  onClick={(e) => openPopover(k, e)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 3,
+                    padding: "1px 3px",
+                    borderRadius: 4,
+                    border: "none",
+                    background: "transparent",
+                    color: SEV_COLOR[k],
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  <Ic size={12} style={{ color: SEV_COLOR[k] }} />
+                  {pr.findings_counts![k]}
+                </button>
+              );
+            })
+          ) : (
+            <span style={s.muted}>—</span>
+          )}
+        </div>
+
+        <div>
+          <Badge dot color={st.c} bg="transparent">
+            {t(`list.status.${st.labelKey}`)}
+          </Badge>
+        </div>
+        <div className="mono" style={s.updatedCell}>{formatCost(pr.last_run_cost_usd)}</div>
+        <div style={s.updatedCell}>{relativeTime(pr.updated_at)}</div>
       </div>
-      <div style={s.scoreCell}>
-        {reviewed ? (
-          <CircularScore score={pr.score!} size={34} stroke={3} />
-        ) : (
-          <span style={s.muted}>—</span>
-        )}
-      </div>
-      <div>
-        <Badge dot color={st.c} bg="transparent">
-          {t(`list.status.${st.labelKey}`)}
-        </Badge>
-      </div>
-      <div className="mono" style={s.updatedCell}>{formatCost(pr.last_run_cost_usd)}</div>
-      <div style={s.updatedCell}>{relativeTime(pr.updated_at)}</div>
-    </div>
+
+      {popover && pr.id && (
+        <FindingsPopover
+          prId={pr.id}
+          anchor={popover.anchor}
+          initialSeverity={popover.severity}
+          onClose={() => setPopover(null)}
+          repoFullName={repoFullName}
+          headSha={pr.head_sha}
+        />
+      )}
+    </>
   );
 }

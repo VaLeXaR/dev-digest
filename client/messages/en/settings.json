@@ -22,11 +22,11 @@
   },
   "models": {
     "title": "Feature Models",
-    "body": "Choose the model each system feature uses. The list and live prices come from OpenRouter; a feature falls back to its default until you pick one.",
+    "body": "Choose the provider and model each system feature uses. A feature falls back to its registry default until you pick one.",
     "usingDefault": "default",
     "search": "Search models…",
-    "liveNote": "Prices are pulled live from OpenRouter — USD per 1M input/output tokens.",
-    "noKeyNote": "Add an OpenRouter API key under API Keys to load the model list and prices."
+    "liveNote": "Model prices are shown for OpenRouter models (USD per 1M tokens). For OpenAI and Anthropic, type or select a model ID.",
+    "noKeyNote": "No models loaded — check that the API key for the selected provider is configured under API Keys."
   },
   "workspace": {
     "title": "Workspace",

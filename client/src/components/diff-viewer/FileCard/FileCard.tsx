@@ -65,9 +65,7 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
           <span style={s.delText}>−{file.deletions}</span>
         </span>
         {commentCount > 0 && (
-          <span
-            style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)" }}
-          >
+          <span style={s.commentCount}>
             <Icon.MessageSquare size={12} />
             {commentCount}
           </span>
@@ -78,9 +76,9 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
           {lines.length === 0 ? (
             <div style={s.noDiff}>{t("diffViewer.noDiffText")}</div>
           ) : (
-            lines.map((ln, i) => (
+            lines.map((ln) => (
               <CodeLine
-                key={i}
+                key={ln.kind === "hunk" ? ln.text : `${ln.kind}-${ln.oldNo ?? ""}-${ln.newNo ?? ""}`}
                 ln={ln}
                 path={file.path}
                 threads={threadsForLine(ln, matched)}

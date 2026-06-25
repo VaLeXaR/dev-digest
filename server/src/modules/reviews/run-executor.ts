@@ -161,6 +161,16 @@ export class ReviewRunExecutor {
         { kind: 'tool' },
       );
 
+      // Load enabled skills linked to this agent; bodies are injected into the
+      // prompt as a "Skills / rules" section by assemblePrompt.
+      const skillBodies = await runLog.step('Loading enabled skills', async () => {
+        const links = await this.agents.linkedSkills(agent.id);
+        return links
+          .filter((l) => l.enabled && l.skill.enabled)
+          .map((l) => `### ${l.skill.name}\n${l.skill.body}`);
+      });
+      runLog.info(`${skillBodies.length} enabled skill(s) loaded`);
+
       // Per-agent repo-intel toggle (Agent editor). When an agent opts out we
       // skip all enrichment entirely so its prompt is identical to the
       // repo-intel-off baseline — independent of the global REPO_INTEL_ENABLED
@@ -203,6 +213,9 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // Linked skills — injected as "Skills / rules" section. Omitted when
+        // the agent has no enabled skills.
+        ...(skillBodies.length > 0 ? { skills: skillBodies } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),

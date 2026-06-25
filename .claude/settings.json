@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/skills/pr-self-review/scripts/check-gate.sh"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
