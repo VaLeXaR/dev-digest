@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Dev (all services)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "\"C:\\\\Program Files\\\\Git\\\\bin\\\\bash.exe\" ./scripts/dev.sh",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
