@@ -80,7 +80,7 @@ Example output:
 ## Action Items
 
 - **R3** (PARTIAL): Add a test in `server/src/modules/foo/extractor.test.ts` asserting `callLLM` returns confidence `0` when the model returns `-5` and `1` when it returns `2`.
-- **R4** (UNVERIFIED): Add a path traversal guard in `server/src/modules/foo/extractor.ts:verifyEvidence` — use `path.resolve(fullPath).startsWith(path.resolve(repoPath))` and skip paths that escape the repo root. Same pattern already used in `src/modules/skills/import.service.ts:39`.
+- **R4** (UNVERIFIED): Add a path traversal guard in `server/src/modules/foo/extractor.ts:verifyEvidence` — use `path.includes('..') || path.startsWith('/')` to reject paths that could escape the skill directory. Same pattern already used in `server/src/modules/skills/import.service.ts:68` (`if (path.includes('..') || path.startsWith('/')) continue`).
 ```
 
 ## What this skill is NOT

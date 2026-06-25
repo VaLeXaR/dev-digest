@@ -125,31 +125,26 @@ describe('MyService', () => {
 
 **Integration tests** (`.it.test.ts` suffix, Docker required):
 
-Before writing, read `server/src/test/helpers/pg.ts` for the exact `buildTestApp()` signature and container setup.
+Before writing, read `server/test/helpers/pg.ts` for the exact `startPg()` signature and container setup.
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { startPg, dockerAvailable, type PgFixture } from '../../../test/helpers/pg.js';
 
-describe('POST /repos/:id/things', () => {
-  let app: FastifyInstance;
+let pg: PgFixture;
 
-  beforeAll(async () => {
-    app = await buildTestApp(); // pattern from server/src/test/helpers/pg.ts
-  });
+beforeAll(async () => {
+  if (!(await dockerAvailable())) return;
+  pg = await startPg();
+});
 
-  afterAll(async () => {
-    await app.close();
-  });
+afterAll(async () => {
+  await pg?.stop();
+});
 
-  it('creates a thing and returns 201', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/repos/test-repo-id/things',
-      payload: { name: 'foo' },
-    });
-    expect(res.statusCode).toBe(201);
-    expect(res.json()).toMatchObject({ name: 'foo' });
-  });
+it('creates a thing and returns 201', async ({ skip }) => {
+  if (!pg) skip();
+  // ... test using pg.handle (the Drizzle client) directly
 });
 ```
 
