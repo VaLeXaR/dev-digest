@@ -37,18 +37,30 @@ paste skill contents into the plan — reference them by name.
 - **No product code.** The single file you may create is the plan, under `docs/plans/`. Use
   `Write` for nothing else — not `server/`, `client/`, `reviewer-core/`, `e2e/`, config, or
   contracts.
-- **Every step is concrete.** Each task names exact file paths and a runnable verification command.
-  Never write a step like "update the service" without the file and the check.
+- **Every task is self-contained.** Implementer agents have isolated context windows and no access
+  to the wider plan. Each task must carry everything it needs: exact file paths, the contract it
+  depends on, and a runnable acceptance check. Never write "see above" or "same as T-01".
+- **Task descriptions are specific, not abstract.** Bad: "Update the auth service." Good: "Add
+  rate-limiting to `server/src/modules/auth/routes.ts`: return 429 when a user exceeds 10
+  requests/minute. Store counts via the injected `CacheAdapter`."
+- **Goldilocks granularity.** Too large = wasted parallelism; too small = coordination overhead
+  beats the gain. A well-sized task touches one owned-path domain, modifies ≤5 files, and has
+  exactly one acceptance command. If a task spans two independent domains → split. If two tasks
+  always run together and cannot be parallelised → merge.
+- **Shorter tasks fail less.** Doubling task duration roughly quadruples failure rate. Keep tasks
+  atomic; put integration edge-cases (auth, rate limits, error formats) in their own explicit tasks
+  rather than hidden inside implementation tasks.
 - **Dependencies form a DAG.** Order tasks so each one's `Depends-on` points only to earlier
   tasks. No cycles. Independent tasks must be marked so they can run concurrently.
-- **Owned paths never overlap.** Implementers run in parallel on the same branch (no worktree
-  isolation), so two tasks that could run at once must not list the same file. If they must touch
-  the same file, make one depend on the other instead.
+- **Owned paths never overlap — at file AND directory level.** Implementers run in parallel on the
+  same branch (no worktree isolation), so two concurrent tasks must not list the same file OR
+  parent directory. If they must touch the same path, make one depend on the other instead.
 - **Acceptance is measurable.** No "fast", "clean", or "user-friendly" without a concrete check
   (a test name, a command result, an observable behavior). Every requirement maps to at least one
-  task.
-- **Stay in scope.** Plan the request asked for. Flag out-of-scope discoveries under Risks; do not
-  silently expand the work.
+  task. Binary pass/fail only — no vague success criteria.
+- **Stay in scope.** Plan the request asked for. Before building a multi-phase DAG, ask: would a
+  simple linear plan work? Use the minimum structure that satisfies the request. Flag out-of-scope
+  discoveries under Risks; do not silently expand the work.
 
 ## Clarify first
 
@@ -175,11 +187,14 @@ Write "None applicable" if nothing is relevant.>
 - [ ] Global Constraints have no internal contradictions (pre-flight: scan Requirements + Architecture notes before Task 1)
 - [ ] Every requirement maps to a task
 - [ ] Dependencies form a DAG (no cycles)
-- [ ] Concurrent tasks have non-overlapping Owned paths
-- [ ] Every Acceptance is measurable with a runnable command
+- [ ] Concurrent tasks have non-overlapping Owned paths **and non-overlapping parent directories**
+- [ ] Every task description names exact file paths — no abstract descriptions like "update the service"
+- [ ] Every task is self-contained: carries contract ref, owned paths, and acceptance (no "see T-01")
+- [ ] Every Acceptance is measurable with a runnable command (binary pass/fail)
 - [ ] Each phase produces a self-consistent, mergeable state
 - [ ] Shared contract changes assign the same-task update to both vendor copies
 - [ ] Schema changes include `pnpm db:generate` + `pnpm db:migrate` in the task
+- [ ] Integration edge-cases (auth, rate limits, error formats) are explicit tasks, not hidden in impl tasks
 ```
 
 ## When you cannot produce a plan

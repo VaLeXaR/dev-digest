@@ -107,11 +107,17 @@ only those relevant to your task type using the `Skill` tool. Use this mapping:
 - Both vendor copies — if a shared contract changes, update **both**
   `server/src/vendor/shared/` and `client/src/vendor/shared/` in the same step
 
-### Step 4 — Implement
+### Step 4 — Implement (TDD cycle)
 
-Write code within your Owned paths. Match the style of existing files in the same module.
-Do not add error handling for impossible cases. Do not add comments explaining what the code
-does — only why, when non-obvious.
+For every new behaviour the task requires, follow this cycle mechanically — do not skip to writing code first:
+
+1. **Write a failing test** that describes the expected behaviour.
+2. **Run the test and confirm it fails (red).** Paste the failing output in your internal working notes. If you cannot show a red run, you have no evidence the test tests anything.
+3. **Write the minimum implementation** to make the test pass.
+4. **Run the test again and confirm green.** Only then move to the next behaviour.
+5. **Refactor** if needed, keeping green.
+
+Match the style of existing files in the same module. Do not add error handling for impossible cases. Do not add comments explaining what the code does — only why, when non-obvious.
 
 If the task includes a schema change, run after generating:
 
@@ -139,7 +145,7 @@ Do not move to the next file while the current one's tests are red.
 
 ### Step 6 — Final verification (done gate)
 
-Before declaring done, run the full test command and typecheck one last time:
+Run ALL verification phases **before** stopping. Collect every failure first, then fix — do not fix the first issue and ask "what next?". Build a complete picture.
 
 ```bash
 # backend
@@ -150,10 +156,21 @@ cd client && pnpm test && pnpm typecheck
 cd reviewer-core && npm test && npm run typecheck
 ```
 
+After tests pass, do a **diff-review** of your own changes. Look for things tests do not catch:
+
+- Missing null checks or unhandled `undefined`
+- `async` function called without `await`
+- Hardcoded secrets, tokens, or environment-specific values
+- Unexpected file deletions or truncations
+- Files outside `Owned paths` that were accidentally modified
+
+If local verification passes, it must mirror CI — do not claim DONE if you skipped any phase.
+
 Confirm all of the following before outputting the result:
 
 - [ ] Tests pass (command from task's `Acceptance`)
 - [ ] TypeScript reports no errors
+- [ ] Diff-review clean (null checks, async/await, no secrets, no out-of-scope edits)
 - [ ] If schema changed: `pnpm db:migrate` was run
 - [ ] If shared contracts changed: both vendor copies are in sync
 - [ ] No files outside `Owned paths` were modified (unless noted in the report)
@@ -166,10 +183,14 @@ the next implementer reads it in Step 1.
 
 ## Output format
 
-Reply in the same language the request was written in. Return:
+Reply in the same language the request was written in. Start your response with exactly one of these status lines, then the matching block:
+
+---
+
+**`DONE`** — all gates green, diff clean.
 
 ```markdown
-## Implementer result — <task id / short name>
+## DONE — <task id / short name>
 
 ### Changed
 - `path/file.ts` — <what changed>
@@ -178,22 +199,57 @@ Reply in the same language the request was written in. Return:
 <comma-separated list of skills actually invoked>
 
 ### Verification
-- Tests: `<command>` — pass | fail (<detail if fail>)
-- Typecheck: `<command>` — pass | fail
+- Tests: `<command>` — pass
+- Typecheck: `<command>` — pass
+- Diff-review: clean
+
+### Touched paths
+<list every file actually modified — coordinator uses this to detect overlap with other parallel tasks>
 
 ### Out of scope / follow-ups
-- <anything you noticed but did not touch, or "none">
+- <anything noticed but not touched, or "none">
 ```
 
-If you cannot complete the task or a check fails and you cannot fix it within scope, return:
+---
+
+**`DONE_WITH_CONCERNS`** — implemented and tests green, but there is a medium-severity issue or observation the coordinator should know about before merge.
 
 ```markdown
-## TASK BLOCKED — <task id>
+## DONE_WITH_CONCERNS — <task id>
 
-**Reason:** <one sentence>
+### Concern
+<one paragraph: what the issue is, why it matters, what the coordinator should decide>
+
+### Changed / Verification / Touched paths
+<same blocks as DONE>
+```
+
+---
+
+**`NEEDS_CONTEXT`** — cannot proceed without information not in the task. Stop immediately; do not guess.
+
+```markdown
+## NEEDS_CONTEXT — <task id>
+
+### Missing information
+1. <specific question with exact file/interface/value needed>
+2. ...
+
+### What I have so far
+<what was read and understood before hitting the blocker>
+```
+
+---
+
+**`BLOCKED`** — need to edit outside Owned paths, touch a protected file, or an external dependency is unavailable.
+
+```markdown
+## BLOCKED — <task id>
+
+**Reason:** <one sentence — name the exact file or constraint>
 **Failing output:**
-<exact test or typecheck output>
+<exact test or typecheck output, or the specific protected path that must be changed>
 **Action needed:** <what the coordinator or user must resolve>
 ```
 
-An honest "blocked, here's why" is a valid result. Do not claim done when tests are red.
+An honest escalation is a valid result. Do not claim DONE when tests are red. Do not guess when context is missing. Do not silently edit outside Owned paths.
