@@ -5,7 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { notify } from "../toast";
-import type { PrIntentRecord } from "@devdigest/shared";
+import type { PrIntentRecord, PrRisksRecord } from "@devdigest/shared";
 
 export function useIntent(prId: string | null | undefined) {
   return useQuery({
@@ -26,5 +26,26 @@ export function useRecalculateIntent() {
       qc.invalidateQueries({ queryKey: ["intent", prId] });
     },
     onError: () => notify.error("Failed to recalculate intent"),
+  });
+}
+
+export function useRisks(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["risks", prId ?? ""],
+    queryFn: () => api.get<PrRisksRecord>(`/pulls/${prId!}/risks`),
+    enabled: !!prId,
+    retry: false,
+  });
+}
+
+export function useGenerateRisks() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prId: string) =>
+      api.post<PrRisksRecord>(`/pulls/${prId}/risks/generate`),
+    onSuccess: (_data, prId) => {
+      qc.invalidateQueries({ queryKey: ["risks", prId] });
+    },
+    onError: () => notify.error("Failed to generate risks"),
   });
 }

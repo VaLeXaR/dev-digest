@@ -109,7 +109,11 @@
     "outOfScope": "Out of scope",
     "recalculate": "Recalculate",
     "recalcError": "Failed to recalculate intent",
-    "empty": "No intent yet — click Recalculate to analyze this PR"
+    "empty": "No intent yet — click Recalculate to analyze this PR",
+    "riskAreas": "Risk areas",
+    "generateRisks": "Generate",
+    "recalcRisksError": "Failed to generate risks",
+    "emptyRisks": "No risks yet — click Generate to analyze this PR"
   },
   "timeline": {
     "goToReview": "Jump to this run’s findings below",

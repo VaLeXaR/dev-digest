@@ -72,6 +72,45 @@ export const s = {
     color: "var(--text-secondary)",
   } satisfies CSSProperties,
 
+  chipRiskHigh: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "3px 10px",
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: 500,
+    border: "1px solid var(--crit, #ef4444)",
+    background: "var(--crit-bg, #1c0a0a)",
+    color: "var(--crit, #ef4444)",
+  } satisfies CSSProperties,
+
+  chipRiskMedium: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "3px 10px",
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: 500,
+    border: "1px solid var(--warn, #f59e0b)",
+    background: "var(--warn-bg, #1c1200)",
+    color: "var(--warn, #f59e0b)",
+  } satisfies CSSProperties,
+
+  chipRiskLow: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "3px 10px",
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: 500,
+    border: "1px solid var(--border)",
+    background: "var(--bg-elevated)",
+    color: "var(--text-secondary)",
+  } satisfies CSSProperties,
+
   emptyIntentText: {
     fontSize: 14,
     color: "var(--text-muted)",
