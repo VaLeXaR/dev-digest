@@ -104,6 +104,11 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    const intentRecord = await this.repo.getIntent(pull.id).catch(() => undefined);
+    const intentBlock = intentRecord
+      ? { summary: intentRecord.intent, inScope: intentRecord.in_scope, outOfScope: intentRecord.out_of_scope }
+      : undefined;
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -111,7 +116,7 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, intentBlock, agent, runId, runLog);
         logger?.info(
           {
             runId,
@@ -140,6 +145,7 @@ export class ReviewRunExecutor {
     pull: PullRow,
     repo: typeof schema.repos.$inferSelect,
     diff: UnifiedDiff,
+    intentBlock: { summary: string; inScope: string[]; outOfScope: string[] } | undefined,
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
@@ -213,6 +219,9 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // Stored intent (summary + scope lists) — untrusted; delimiter-wrapped
+        // by assemblePrompt. Omitted when no intent has been set for this PR.
+        ...(intentBlock ? { intent: intentBlock } : {}),
         // Linked skills — injected as "Skills / rules" section. Omitted when
         // the agent has no enabled skills.
         ...(skillBodies.length > 0 ? { skills: skillBodies } : {}),

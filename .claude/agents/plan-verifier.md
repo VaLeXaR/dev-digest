@@ -87,6 +87,12 @@ Both must reflect the change for the requirement to be VERIFIED.
 
 ### Step 3: Implicit requirements (Pass 2)
 
+**Skip if already covered:** If the caller provides `## Architecture review: PASS` in the
+prompt (meaning a fresh `architecture-reviewer` run just completed with zero critical/high
+findings), omit the layering, DI, process.env, and contract-sync rows from the table below —
+those were already verified with file:line evidence. Still check error paths, wiring, CI
+weakening, new imports, and diff orphans.
+
 After the explicit per-requirement pass, sweep once for implicit concerns not stated in the plan. These are the most common AI-generated-code blind spots. Report in a separate table — do not mix into the per-requirement rows.
 
 | Concern | What to check |

@@ -395,6 +395,41 @@ sync, process.env leakage). Reports violations with rule citations; never edits 
 
 ---
 
+## Token-efficient agent chaining
+
+These patterns chain agents so each one receives only the context it actually needs, avoiding duplicate reads.
+
+### Pattern 1 — Researcher → Planner handoff (saves ~60–80k tokens)
+
+Call researcher with `output: compact-digest`. Pass the returned `## Research digest` block verbatim at the top of the planner prompt — the planner will skip re-reading the covered files.
+
+```
+Coordinator → researcher (output: compact-digest)
+                           │ compact-digest
+                           ▼
+              planner (## Research digest: <digest>)  ← skips Read-When phase
+```
+
+### Pattern 2 — Architecture reviewer skip (saves ~20–30k tokens)
+
+Add `## Architecture context:` to the arch-reviewer prompt with the relevant CLAUDE.md sections pasted inline. The reviewer skips Step 1 (reading CLAUDE.md files + loading 3 skills).
+
+Use when: auditing a diff where you already know which packages are touched.
+
+### Pattern 3 — Architecture reviewer → Plan verifier handoff (saves ~10–15k tokens)
+
+Run arch-review first. If it returns `Gate: PASS`, add `## Architecture review: PASS` to the plan-verifier prompt — the verifier skips layering, DI, process.env, and contract-sync checks.
+
+```
+architecture-reviewer → PASS → plan-verifier (## Architecture review: PASS)
+```
+
+### Pattern 4 — Implementer minimal path (saves ~20–30k tokens per config task)
+
+For pure config/constant changes, start the implementer prompt with `Task type: config-only`. The implementer goes straight to Read → Edit → Typecheck, skipping INSIGHTS, CLAUDE.md, and skill loading. **Do not use for tasks that add new logic or files.**
+
+---
+
 ## Parallel execution pattern
 
 ```

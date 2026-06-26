@@ -47,65 +47,6 @@ Expert guide for building type-safe database applications with Drizzle ORM. Cove
 6. **Handle transactions** - Wrap multi-step operations in transactions when needed
 7. **Set up migrations** - Configure Drizzle Kit for schema management
 
-## Examples
-
-### Example 1: Basic Schema and Query
-
-```typescript
-import { pgTable, serial, text } from 'drizzle-orm/pg-core';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { eq } from 'drizzle-orm';
-
-export const users = pgTable('users', {
-  id: serial('id').primaryKey(),
-  name: text('name').notNull(),
-  email: text('email').notNull().unique(),
-});
-
-const db = drizzle(process.env.DATABASE_URL);
-
-const [user] = await db.select().from(users).where(eq(users.id, 1));
-```
-
-### Example 2: CRUD Operations
-
-```typescript
-import { eq } from 'drizzle-orm';
-
-// Insert
-const [newUser] = await db.insert(users).values({
-  name: 'John',
-  email: 'john@example.com',
-}).returning();
-
-// Update
-await db.update(users)
-  .set({ name: 'John Updated' })
-  .where(eq(users.id, 1));
-
-// Delete
-await db.delete(users).where(eq(users.id, 1));
-```
-
-### Example 3: Transaction with Rollback
-
-```typescript
-await db.transaction(async (tx) => {
-  const [from] = await tx.select().from(accounts)
-    .where(eq(accounts.userId, fromId));
-
-  if (from.balance < amount) {
-    tx.rollback();
-  }
-
-  await tx.update(accounts)
-    .set({ balance: sql`${accounts.balance} - ${amount}` })
-    .where(eq(accounts.userId, fromId));
-});
-```
-
-See [references/transactions.md](references/transactions.md) for advanced transaction patterns.
-
 ## Best Practices
 
 1. **Type Safety**: Always use TypeScript and leverage `$inferInsert` / `$inferSelect`

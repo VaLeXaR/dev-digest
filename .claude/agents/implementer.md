@@ -35,7 +35,22 @@ Your task carries: `Action`, `Module`, `Type`, `Skills to use`, `Owned paths`, `
 `Known gotchas`, and `Acceptance`. You may also be given the list of **other tasks' owned paths**
 — do not edit those.
 
-## Workflow
+## Minimal path (pure config / constant changes)
+
+If the entire task is a **pure config or constant change** — changing an existing value in an
+existing field, no new logic, no new behaviour, no new file — use this shortened workflow:
+
+1. Read the target file(s) listed in `Owned paths`.
+2. Apply the edit.
+3. Run `tsc --noEmit` (or `pnpm typecheck`) on the affected package.
+4. Grep the changed value in all `Owned paths` to confirm it appears in all required places.
+5. Output `DONE`.
+
+Skip Steps 1–3 of the full workflow (INSIGHTS, CLAUDE.md, skill loading). You do not need to
+read INSIGHTS.md to change a string constant, and loading 3 skills to make a 2-line edit wastes
+20–30k tokens. Reserve the full workflow for tasks that introduce new logic or new files.
+
+## Full workflow
 
 ### Step 1 — Read INSIGHTS (mandatory before any code)
 

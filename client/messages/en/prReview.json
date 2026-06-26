@@ -103,6 +103,14 @@
     "emptyAllBody": "No open PRs found for this repo yet. Refresh to sync from GitHub.",
     "emptyStatusBody": "No PRs with status “{status}”."
   },
+  "intent": {
+    "title": "Intent",
+    "inScope": "In scope",
+    "outOfScope": "Out of scope",
+    "recalculate": "Recalculate",
+    "recalcError": "Failed to recalculate intent",
+    "empty": "No intent yet — click Recalculate to analyze this PR"
+  },
   "timeline": {
     "goToReview": "Jump to this run’s findings below",
     "openTrace": "Open run trace & logs",

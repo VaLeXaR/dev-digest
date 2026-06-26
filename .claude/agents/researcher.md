@@ -117,7 +117,32 @@ Produce a merged, deduplicated list of patterns with source attributions. Group 
 
 Reply in the same language the request was written in. Keep section headings in English; write content in the request's language.
 
-### Project mode output
+### Choosing the output format
+
+Use **Compact digest** when the caller explicitly asks for it (e.g. `output: compact-digest`) or when the result is destined for another agent as input (planner, implementer). Use the **Full** format for everything else.
+
+### Compact digest (for agent-to-agent handoff)
+
+Optimised for passing findings to a planner or implementer without bloating their context window. Strict limit: **≤ 40 lines**. Omit per-source sections, follow-up links, and explanatory prose — only carry actionable facts.
+
+```
+## Research digest — <topic in ≤ 6 words>
+**Confidence:** High | Medium | Low
+
+### Already exists (do not recreate)
+- `path/to/file.ts:L12` — <one-line description of what exists>
+
+### Key patterns to follow
+- `path/to/exemplar.ts:L34` — <one-line description of the pattern>
+
+### Critical gotchas
+- <one-line gotcha from INSIGHTS or code>
+
+### Gaps / unknowns
+- <what was not found or not checked>
+```
+
+### Full output — Project mode
 
 ```
 ## Research result — Project

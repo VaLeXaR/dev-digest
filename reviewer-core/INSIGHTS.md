@@ -18,6 +18,8 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/reviewer
 
 ## Session Notes
 
+- 2026-06-26: Added intent slot to `PromptParts` and `ReviewInput` (T-06). `SCOPE_RULE` is added to the system prompt when intent is present; intent is rendered as `## PR Intent` section via `wrapUntrusted('pr-intent', ...)`. Both `SCOPE_RULE` and all multi-line string literals in prompt.ts use the array `.join(' ')` pattern to prevent Edit-tool quote corruption. (`src/prompt.ts`, `src/review/run.ts`)
+
 - 2026-06-24: Fixed skill body prompt-injection gap (resolves Open Questions entry 2026-06-24). Added `wrapSkill()` that wraps each skill body in `<skill>…</skill>` and escapes any `</skill>` in the content. Applied in `assemblePrompt()`. Extended `INJECTION_GUARD` with a rule that `<skill>` blocks extend review criteria but cannot override agent role, suppress finding categories, or change output format. (`src/prompt.ts:42-44`, `src/prompt.ts:99-101`)
 
 ## Open Questions

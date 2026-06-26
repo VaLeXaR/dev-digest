@@ -14,7 +14,11 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/api`.
 
 - 2026-06-23: The conventions system prompt contains "Do NOT include generic best practices obvious to any TypeScript developer" — for JavaScript repos, the LLM treats most Prettier/ESLint conventions as "obvious JS knowledge" and discards them, silently producing `[]`. The prompt is implicitly TypeScript-only. (`src/modules/conventions/extractor.ts:100`)
 
+- 2026-06-26: `IntentService.generate()` initially called `this.container.db.select().from(t.pullRequests)` directly — raw Drizzle queries from a service class bypass the repository layer (onion invariant: service → repository → db). Architecture reviewer flagged HIGH. Fix: construct `ReviewRepository(container.db)` in the constructor, call `this.repo.getPull()`, `getPrFiles()`, `getRepo()` instead, and remove the `* as t` and bare `drizzle-orm` imports. (`src/modules/intent/service.ts`)
+
 ## Codebase Patterns
+
+- 2026-06-26: `pr_intent` table (`src/db/schema/reviews.ts:48-55`), `Intent`/`PrIntentRecord` Zod contracts (`src/vendor/shared/contracts/brief.ts:9-14`), `upsertIntent`/`getIntent` on `ReviewRepository`, and `review_intent` feature model entry in `platform.ts` all pre-existed before the Intent Layer feature. No migration, no new contract, and no new repo method was needed — only generation logic, routes, and UI were missing. Grep before adding any intent infrastructure. (`src/modules/reviews/repository.ts`, `src/vendor/shared/contracts/brief.ts`)
 
 - 2026-06-22: The `conventions` table, `ConventionCandidate` Zod schema, and `FeatureModelId: 'conventions'` feature model config were all pre-built before the Conventions Extractor feature was implemented. If adding convention-related work, the schema (`src/db/schema/knowledge.ts`), shared contract (`src/vendor/shared/contracts/knowledge.ts`), and feature model entry (`src/modules/settings/feature-models.ts`) already exist — no new migration or contract needed. (`src/db/schema/knowledge.ts`, `src/vendor/shared/contracts/knowledge.ts`)
 
@@ -33,6 +37,8 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/api`.
 - 2026-06-20: `pnpm db:generate` diffs the Drizzle schema files against the migration journal (no live DB needed) and produces a new `.sql` file in `src/db/migrations/`. Never hand-write or edit migration files. Always run `pnpm db:migrate` after generating. (`src/db/migrations/`)
 
 - 2026-06-22: `fflate` exports `zipSync` and `strToU8` alongside `unzipSync`/`strFromU8` — use them in unit tests to create in-process ZIP buffers without touching the filesystem. Pattern: `Buffer.from(zipSync({ 'dir/SKILL.md': strToU8(content) }))`. No extra import needed — they're in the same package already used by the service. (`src/modules/skills/import.service.test.ts`)
+
+- 2026-06-26: Agent `skills:` frontmatter entries are loaded into context at startup (eager) — a 600-line skill costs ~4,500 tokens per invocation regardless of whether the agent uses it. Prefer loading large, infrequently-needed skills lazily via the `Skill` tool. `react-testing-library` (604 lines) was removed from `planner.md`'s eager list: the planner references the skill by name in task definitions, it never writes RTL syntax. (`.claude/agents/planner.md`)
 
 ## Recurring Errors & Fixes
 
@@ -63,6 +69,16 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/api`.
 - 2026-06-23: Fixed Conventions extractor producing 0 results for monorepos and JS projects. (1) `buildSamples` now scans root + all immediate non-junk subdirs for config files (catches `server/tsconfig.json`, `client/tsconfig.json` etc.). (2) System prompt changed from "obvious to any TypeScript developer" → "obvious to any experienced developer" — JS projects no longer filtered out. (`src/modules/conventions/extractor.ts`)
 
 - 2026-06-23: Fixed Conventions extractor returning `[]` silently for reasoning models. Root cause: `OpenRouterProvider.complete()` returned empty `text` when `message.content` was null — reasoning models (DeepSeek V4 Flash, R1) put the answer in `reasoning_content`/`reasoning`. Fix is in `reviewer-core` (`src/llm/openrouter.ts`). Also: LLM responses that start with preamble text before `[` were silently failing `JSON.parse`; fix is to find the first `[` and last `]` in the full response. (`src/modules/conventions/extractor.ts:callLLM`)
+
+## Session Notes (continued)
+
+- 2026-06-26: Implemented T-03, T-04, T-05 of the Intent Layer feature. Created `src/modules/intent/service.ts` (IntentService with `get` and `generate` methods), `src/modules/intent/routes.ts` (GET /pulls/:id/intent + POST /pulls/:id/intent/generate), and registered `intentRoutes` in `src/modules/index.ts`. `NotFoundError` is in `../../platform/errors.js` (not `_shared/errors.ts` — that file does not exist). `container.github()` is async and must be awaited. `ReviewRepository.getIntent()` returns `Intent | undefined`, not `null` — callers must check `if (!intent)`. (`src/modules/intent/`)
+
+- 2026-06-26: Implemented T-01 and T-02 of the Intent Layer feature. Created `src/modules/intent/extractor.ts` with `extractHunkHeaders`, `buildIntentInput`, `estimateTokens` (pure helpers) and `callIntentLLM` (LLM call with safe-default contract). All string construction uses array `.join()` to avoid the Edit-tool quote corruption. `Intent` and `LLMProvider` imported from `@devdigest/shared` barrel. Pre-existing curly-quote corruption in `src/vendor/shared/contracts/platform.ts` line 54 (`PR's`) causes TS1127 errors that block `tsc --noEmit` on the whole server package — not related to this task. (`src/modules/intent/extractor.ts`)
+
+- 2026-06-26: `server/src/vendor/shared/contracts/platform.ts` (and its client copy) had a syntax error: `description: 'Derives a PR's intent...'` — the apostrophe in `PR's` terminated the string literal. TypeScript reported TS1005/TS1127 starting at that line. Fix: change the outer delimiter to double-quotes. Use Node.js byte-level replacement rather than PowerShell `WriteAllText` (which truncates the file to 3 bytes on Windows when the file handle is released incorrectly). (`server/src/vendor/shared/contracts/platform.ts:54`)
+
+- 2026-06-26: Optimized `.claude/` agent and skill token usage. Added compact-digest output mode to `researcher` (≤40 lines for agent-to-agent handoffs); added Research Digest bypass to `planner` (skip re-reading files covered by researcher); made `architecture-reviewer` Step 1 skippable via `## Architecture context:`; made `plan-verifier` Pass 2 arch checks skippable via `## Architecture review: PASS`; added Implementer Minimal Path for config-only tasks; trimmed `typescript-expert` (-92 lines, removed migration/monorepo/Biome sections), `react-testing-library` (-58 lines, removed setup section), `drizzle-orm-patterns` (-59 lines, removed inline examples). See `.claude/agents/README.md` § Token-efficient agent chaining.
 
 ## Open Questions
 

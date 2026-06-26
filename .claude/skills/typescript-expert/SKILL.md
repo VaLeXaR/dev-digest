@@ -178,79 +178,7 @@ type NestedArray<T, D extends number = 5> =
   - Node ESM: Use loader alternatives or avoid TS paths at runtime
   - Production: Pre-compile with resolved paths
 
-### Migration Expertise
-
-**JavaScript to TypeScript Migration**
-```bash
-# Incremental migration strategy
-# 1. Enable allowJs and checkJs (merge into existing tsconfig.json):
-# Add to existing tsconfig.json:
-# {
-#   "compilerOptions": {
-#     "allowJs": true,
-#     "checkJs": true
-#   }
-# }
-
-# 2. Rename files gradually (.js → .ts)
-# 3. Add types file by file using AI assistance
-# 4. Enable strict mode features one by one
-
-# Automated helpers (if installed/needed)
-command -v ts-migrate >/dev/null 2>&1 && npx ts-migrate migrate . --sources 'src/**/*.js'
-command -v typesync >/dev/null 2>&1 && npx typesync  # Install missing @types packages
-```
-
-**Tool Migration Decisions**
-
-| From | To | When | Migration Effort |
-|------|-----|------|-----------------|
-| ESLint + Prettier | Biome | Need much faster speed, okay with fewer rules | Low (1 day) |
-| TSC for linting | Type-check only | Have 100+ files, need faster feedback | Medium (2-3 days) |
-| Lerna | Nx/Turborepo | Need caching, parallel builds | High (1 week) |
-| CJS | ESM | Node 18+, modern tooling | High (varies) |
-
-### Monorepo Management
-
-**Nx vs Turborepo Decision Matrix**
-- Choose **Turborepo** if: Simple structure, need speed, <20 packages
-- Choose **Nx** if: Complex dependencies, need visualization, plugins required
-- Performance: Nx often performs better on large monorepos (>50 packages)
-
-**TypeScript Monorepo Configuration**
-```json
-// Root tsconfig.json
-{
-  "references": [
-    { "path": "./packages/core" },
-    { "path": "./packages/ui" },
-    { "path": "./apps/web" }
-  ],
-  "compilerOptions": {
-    "composite": true,
-    "declaration": true,
-    "declarationMap": true
-  }
-}
-```
-
-## Modern Tooling Expertise
-
-### Biome vs ESLint
-
-**Use Biome when:**
-- Speed is critical (often faster than traditional setups)
-- Want single tool for lint + format
-- TypeScript-first project
-- Okay with 64 TS rules vs 100+ in typescript-eslint
-
-**Stay with ESLint when:**
-- Need specific rules/plugins
-- Have complex custom rules
-- Working with Vue/Angular (limited Biome support)
-- Need type-aware linting (Biome doesn't have this yet)
-
-### Type Testing Strategies
+## Type Testing Strategies
 
 **Vitest Type Testing (Recommended)**
 ```typescript
@@ -400,25 +328,6 @@ Slow builds? → Check bundler config, enable caching
 Slow tests? → Vitest with threads, avoid type checking in tests
 Slow language server? → Exclude node_modules, limit files in tsconfig
 ```
-
-## Expert Resources
-
-### Performance
-- [TypeScript Wiki Performance](https://github.com/microsoft/TypeScript/wiki/Performance)
-- [Type instantiation tracking](https://github.com/microsoft/TypeScript/pull/48077)
-
-### Advanced Patterns
-- [Type Challenges](https://github.com/type-challenges/type-challenges)
-- [Type-Level TypeScript Course](https://type-level-typescript.com)
-
-### Tools
-- [Biome](https://biomejs.dev) - Fast linter/formatter
-- [TypeStat](https://github.com/JoshuaKGoldberg/TypeStat) - Auto-fix TypeScript types
-- [ts-migrate](https://github.com/airbnb/ts-migrate) - Migration toolkit
-
-### Testing
-- [Vitest Type Testing](https://vitest.dev/guide/testing-types)
-- [tsd](https://github.com/tsdjs/tsd) - Standalone type testing
 
 Always validate changes don't break existing functionality before considering the issue resolved.
 
