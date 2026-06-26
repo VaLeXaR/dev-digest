@@ -46,6 +46,10 @@ Use only project agents from `.claude/agents/` by default:
 
 Spawn a generic agent only if explicitly asked.
 
+## Skills
+
+Use only skills defined in `.claude/skills/` (project skills) by default. Do **not** invoke external or third-party skills (e.g. `superpowers:*`, `andrej-karpathy-skills:*`, or any skill not under `.claude/skills/`) unless the user explicitly requests one.
+
 ## Read when
 
 - Overall architecture, full flow from PR to findings → [README.md](README.md)
