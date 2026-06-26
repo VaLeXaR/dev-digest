@@ -113,7 +113,7 @@
     "riskAreas": "Risk areas",
     "generateRisks": "Generate",
     "recalcRisksError": "Failed to generate risks",
-    "emptyRisks": "No risks yet — click Generate to analyze this PR"
+    "emptyRisks": "No risk areas detected"
   },
   "timeline": {
     "goToReview": "Jump to this run’s findings below",
