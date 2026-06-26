@@ -4,7 +4,7 @@ import React from "react";
 import { SectionLabel, Button, Icon } from "@devdigest/ui";
 import type { IconName } from "@devdigest/ui";
 import { useTranslations } from "next-intl";
-import { useIntent, useRecalculateIntent, useRisks, useGenerateRisks } from "../../../../../../../lib/hooks/brief";
+import { useIntent, useRecalculateIntent, useRisks } from "../../../../../../../lib/hooks/brief";
 import type { RiskSeverity } from "@devdigest/shared";
 import { s } from "./styles";
 
@@ -18,7 +18,6 @@ export function OverviewTab({ prBody, prId }: OverviewTabProps) {
   const { data: intentData, isLoading: intentLoading } = useIntent(prId);
   const recalcMutation = useRecalculateIntent();
   const { data: risksData, isLoading: risksLoading } = useRisks(prId);
-  const generateRisks = useGenerateRisks();
 
   const RISK_ICON: Record<RiskSeverity, IconName> = {
     high: "AlertOctagon",
@@ -107,18 +106,7 @@ export function OverviewTab({ prBody, prId }: OverviewTabProps) {
                       })}
                     </div>
                   ) : (
-                    <>
-                      <p style={s.emptyIntentText}>{t("intent.emptyRisks")}</p>
-                      <Button
-                        kind="secondary"
-                        size="sm"
-                        icon="Sparkles"
-                        loading={generateRisks.isPending}
-                        onClick={() => generateRisks.mutate(prId)}
-                      >
-                        {t("intent.generateRisks")}
-                      </Button>
-                    </>
+                    <p style={s.emptyIntentText}>{t("intent.emptyRisks")}</p>
                   )}
                 </div>
               )}
