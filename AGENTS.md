@@ -39,6 +39,13 @@ docker compose down # stop Postgres — NEVER add -v (destroys all data permanen
 
 > **Self-improving:** When a new project-wide operational constraint is confirmed — a destructive command, a silent failure mode, a credentials invariant — append it above. Format: `**NEVER/ALWAYS** [why] → [rule]`. Monthly: remove rules no longer relevant. Not a crutch — if a gotcha recurs because the tooling is awkward, fix the root cause instead.
 
+## Agents
+
+Use only project agents from `.claude/agents/` by default:
+`planner`, `implementer`, `researcher`, `architecture-reviewer`, `plan-verifier`, `doc-writer`, `test-writer`.
+
+Spawn a generic agent only if explicitly asked.
+
 ## Read when
 
 - Overall architecture, full flow from PR to findings → [README.md](README.md)

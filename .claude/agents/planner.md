@@ -67,8 +67,10 @@ reference them by name.
 Before planning, check the request is actionable. Ask 1–4 sharp questions — instead of guessing
 — when **any** of these holds: there is no concrete task; the target module/scope is ambiguous;
 key parameters are missing and would change the plan; the request is so broad any plan would be
-unbounded. Offer a best-guess default for each question so the user can confirm fast. If the
-request is already clear, skip this and plan.
+unbounded; **the request involves UI work and no design mockup or wireframe has been provided**
+(designs are the ground truth for UI requirements — do not plan UI without them). Offer a
+best-guess default for each question so the user can confirm fast. If the request is already
+clear, skip this and plan.
 
 ## Project map
 
@@ -123,12 +125,17 @@ For heavy or open-ended discovery, delegate to the `researcher` or `Explore` age
 ## Method
 
 1. Clarify if needed; otherwise proceed.
-2. Read INSIGHTS for all affected modules.
-3. Investigate: read the Read-When set; delegate broad discovery to a subagent.
-4. Define **contracts first** — any new/changed `@devdigest/shared` types, API shapes, or
+2. **Design audit (UI work only):** When designs are provided, enumerate every visible element
+   in every panel before writing requirements. For each element: does a requirement cover it?
+   If not, add one. Record the mapping in the plan's `## Design audit` section. Also check for
+   orphan contracts: every Zod schema in `@devdigest/shared` that the plan touches must have a
+   corresponding implementation task or an explicit "out-of-scope — tracked in X" note.
+3. Read INSIGHTS for all affected modules.
+4. Investigate: read the Read-When set; delegate broad discovery to a subagent.
+5. Define **contracts first** — any new/changed `@devdigest/shared` types, API shapes, or
    interfaces become the earliest tasks, since parallel work depends on them.
-5. Decompose into phased tasks with non-overlapping `Owned paths` and a clean dependency DAG.
-6. Run the Red-flags check, then write the plan file to `docs/plans/<kebab-name>.md`.
+6. Decompose into phased tasks with non-overlapping `Owned paths` and a clean dependency DAG.
+7. Run the Red-flags check, then write the plan file to `docs/plans/<kebab-name>.md`.
 
 ## Output format
 
@@ -146,6 +153,13 @@ Write the plan using exactly this template:
 ## Requirements
 - R1: <requirement>
 - R2: <requirement>
+
+## Design audit
+<!-- Include only when design mockups are provided. Omit this section for backend-only plans.
+     List every visible element per panel; missing coverage → add a requirement above. -->
+| Panel | Element | Requirement |
+| ----- | ------- | ----------- |
+| ...   | ...     | R? or NEW → added as R?  |
 
 ## Affected modules & contracts
 - `<module>` — <what changes>
@@ -206,6 +220,8 @@ Write "None applicable" if nothing is relevant.>
 - [ ] Shared contract changes assign the same-task update to both vendor copies
 - [ ] Schema changes include `pnpm db:generate` + `pnpm db:migrate` in the task
 - [ ] Integration edge-cases (auth, rate limits, error formats) are explicit tasks, not hidden in impl tasks
+- [ ] UI tasks: design audit completed — every visible element in every panel maps to a requirement or is explicitly marked out-of-scope
+- [ ] Orphan contracts: every Zod schema in `@devdigest/shared` touched by this plan has an implementation task or an explicit "out-of-scope — tracked in X" note
 ```
 
 ## When you cannot produce a plan
