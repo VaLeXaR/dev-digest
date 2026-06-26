@@ -33,7 +33,9 @@ const intentRoutes: FastifyPluginAsync = async (appBase) => {
       const { workspaceId } = await getContext(app.container, req);
       const [intent] = await Promise.all([
         intentService.generate(req.params.id, workspaceId),
-        risksService.generate(req.params.id, workspaceId),
+        risksService.generate(req.params.id, workspaceId).catch((err: unknown) => {
+          console.error('[intent] risks generation failed (non-fatal):', err);
+        }),
       ]);
       return intent;
     },
