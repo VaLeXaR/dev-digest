@@ -24,6 +24,7 @@ export function useRecalculateIntent() {
       api.post<PrIntentRecord>(`/pulls/${prId}/intent/generate`),
     onSuccess: (_data, prId) => {
       qc.invalidateQueries({ queryKey: ["intent", prId] });
+      qc.invalidateQueries({ queryKey: ["risks", prId] });
     },
     onError: () => notify.error("Failed to recalculate intent"),
   });
