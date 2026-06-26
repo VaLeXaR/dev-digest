@@ -53,7 +53,7 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     label: 'PR Review · Intent',
     description: 'Derives a PR’s intent and scope before review.',
     defaultProvider: 'openrouter',
-    defaultModel: 'google/gemini-2.0-flash-001',
+    defaultModel: 'deepseek/deepseek-v4-flash',
   },
   {
     id: 'risk_brief',
