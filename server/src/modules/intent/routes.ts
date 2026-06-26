@@ -3,10 +3,12 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { IntentService } from './service.js';
+import { RisksService } from '../risks/service.js';
 
 const intentRoutes: FastifyPluginAsync = async (appBase) => {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
-  const service = new IntentService(app.container);
+  const intentService = new IntentService(app.container);
+  const risksService = new RisksService(app.container);
 
   // GET /pulls/:id/intent
   // Returns the stored intent for a PR, or 404 when none has been generated yet.
@@ -15,20 +17,25 @@ const intentRoutes: FastifyPluginAsync = async (appBase) => {
     { schema: { params: IdParams } },
     async (req, reply) => {
       const { workspaceId } = await getContext(app.container, req);
-      const result = await service.get(req.params.id, workspaceId);
+      const result = await intentService.get(req.params.id, workspaceId);
       if (!result) return reply.status(404).send({ error: 'Not found' });
       return result;
     },
   );
 
   // POST /pulls/:id/intent/generate
-  // Runs the full intent-generation pipeline for a PR and returns the result.
+  // Runs intent + risks generation in parallel and returns the intent record.
+  // Risks are written to the DB as a side effect; the risks query is invalidated client-side.
   app.post(
     '/pulls/:id/intent/generate',
     { schema: { params: IdParams } },
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
-      return service.generate(req.params.id, workspaceId);
+      const [intent] = await Promise.all([
+        intentService.generate(req.params.id, workspaceId),
+        risksService.generate(req.params.id, workspaceId),
+      ]);
+      return intent;
     },
   );
 };
