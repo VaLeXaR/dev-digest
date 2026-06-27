@@ -5,7 +5,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { notify } from "../toast";
-import type { PrIntentRecord, PrRisksRecord } from "@devdigest/shared";
+import type { PrIntentRecord, PrRisksRecord, SecretsStatus } from "@devdigest/shared";
+import { FEATURE_MODELS, PROVIDER_LABELS } from "../feature-models";
 
 export function useIntent(prId: string | null | undefined) {
   return useQuery({
@@ -42,11 +43,28 @@ export function useRisks(prId: string | null | undefined) {
 export function useGenerateRisks() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (prId: string) =>
-      api.post<PrRisksRecord>(`/pulls/${prId}/risks/generate`),
+    mutationFn: async (prId: string) => {
+      const status = qc.getQueryData<SecretsStatus>(["secrets-status"]);
+      if (status) {
+        const feature = FEATURE_MODELS.find((f) => f.id === "risk_brief");
+        const provider = feature?.defaultProvider as keyof SecretsStatus | undefined;
+        if (provider && !status[provider]) {
+          const providerLabel = PROVIDER_LABELS[provider] ?? provider;
+          notify.error(
+            `${feature!.label} requires a ${providerLabel} API key — configure it in Settings → API Keys`,
+          );
+          throw new Error("config_blocked");
+        }
+      }
+      return api.post<PrRisksRecord>(`/pulls/${prId}/risks/generate`);
+    },
     onSuccess: (_data, prId) => {
       qc.invalidateQueries({ queryKey: ["risks", prId] });
     },
-    onError: () => notify.error("Failed to generate risks"),
+    onError: (err) => {
+      if ((err as Error).message !== "config_blocked") {
+        notify.error("Failed to generate risks");
+      }
+    },
   });
 }

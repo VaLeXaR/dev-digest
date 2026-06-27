@@ -4,8 +4,10 @@ import React from "react";
 import { SectionLabel, Button, Icon } from "@devdigest/ui";
 import type { IconName } from "@devdigest/ui";
 import { useTranslations } from "next-intl";
-import { useIntent, useRecalculateIntent, useRisks } from "../../../../../../../lib/hooks/brief";
-import type { RiskSeverity } from "@devdigest/shared";
+import { useIntent, useRecalculateIntent, useRisks, useSecretsStatus } from "../../../../../../../lib/hooks";
+import { FEATURE_MODELS, PROVIDER_LABELS } from "../../../../../../../lib/feature-models";
+import { notify } from "../../../../../../../lib/toast";
+import type { RiskSeverity, SecretsStatus } from "@devdigest/shared";
 import { s } from "./styles";
 
 interface OverviewTabProps {
@@ -18,6 +20,24 @@ export function OverviewTab({ prBody, prId }: OverviewTabProps) {
   const { data: intentData, isLoading: intentLoading } = useIntent(prId);
   const recalcMutation = useRecalculateIntent();
   const { data: risksData, isLoading: risksLoading } = useRisks(prId);
+  const { data: secretsStatus } = useSecretsStatus();
+
+  const handleRecalculate = () => {
+    if (secretsStatus) {
+      for (const featureId of ["review_intent", "risk_brief"] as const) {
+        const feature = FEATURE_MODELS.find((f) => f.id === featureId);
+        if (!feature) continue;
+        const provider = feature.defaultProvider as keyof SecretsStatus;
+        if (!secretsStatus[provider]) {
+          notify.error(
+            `${feature.label} requires a ${PROVIDER_LABELS[provider] ?? provider} API key — configure it in Settings → API Keys`,
+          );
+          if (featureId === "review_intent") return;
+        }
+      }
+    }
+    recalcMutation.mutate(prId);
+  };
 
   const RISK_ICON: Record<RiskSeverity, IconName> = {
     high: "AlertOctagon",
@@ -40,7 +60,7 @@ export function OverviewTab({ prBody, prId }: OverviewTabProps) {
       size="sm"
       icon="RefreshCw"
       loading={recalcMutation.isPending}
-      onClick={() => recalcMutation.mutate(prId)}
+      onClick={handleRecalculate}
     >
       {t("intent.recalculate")}
     </Button>

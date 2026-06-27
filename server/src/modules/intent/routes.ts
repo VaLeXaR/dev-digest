@@ -4,6 +4,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { IntentService } from './service.js';
 import { RisksService } from '../risks/service.js';
+import { ConfigError } from '../../platform/errors.js';
 
 const intentRoutes: FastifyPluginAsync = async (appBase) => {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
@@ -34,7 +35,11 @@ const intentRoutes: FastifyPluginAsync = async (appBase) => {
       const [intent] = await Promise.all([
         intentService.generate(req.params.id, workspaceId),
         risksService.generate(req.params.id, workspaceId).catch((err: unknown) => {
-          console.error('[intent] risks generation failed (non-fatal):', err);
+          if (err instanceof ConfigError) {
+            req.log.warn('[intent] risks skipped — provider key not configured: %s', (err as Error).message);
+          } else {
+            req.log.error({ err }, '[intent] risks generation failed (non-fatal)');
+          }
         }),
       ]);
       return intent;

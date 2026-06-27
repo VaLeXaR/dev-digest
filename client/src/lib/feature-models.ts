@@ -10,6 +10,12 @@ import type { FeatureModelDef } from "./types";
  * registry here (same pattern as the vendored `vendor/shared` / `vendor/ui`).
  * Keep this in sync with the shared registry.
  */
+export const PROVIDER_LABELS: Record<string, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  openrouter: "OpenRouter",
+};
+
 export const FEATURE_MODELS: FeatureModelDef[] = [
   {
     id: "onboarding",
