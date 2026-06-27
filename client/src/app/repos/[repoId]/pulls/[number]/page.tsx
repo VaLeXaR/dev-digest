@@ -14,6 +14,7 @@ import { PrDetailHeader } from "./_components/PrDetailHeader";
 import { OverviewTab } from "./_components/OverviewTab";
 import { FindingsTab } from "./_components/FindingsTab";
 import { DiffTab } from "./_components/DiffTab";
+import { SmartDiffViewer } from "./_components/SmartDiffViewer";
 import RunTraceDrawer from "./_components/RunTraceDrawer";
 import { usePullDetail, usePulls } from "../../../../../lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
@@ -86,7 +87,7 @@ export default function PRDetailPage() {
     { label: `#${number}`, mono: true },
   ];
 
-  // Stale/unknown :repoId → friendly empty state instead of a 404 error.
+  // Stale/unknown :repoId — friendly empty state instead of a 404 error.
   if (repoNotFound) {
     return (
       <AppShell crumb={crumb}>
@@ -160,6 +161,8 @@ export default function PRDetailPage() {
             }}
           />
         )}
+
+        {tab === "smart-diff" && <SmartDiffViewer prId={prId ?? ""} repoFullName={repoFullName} />}
 
         {tab === "diff" && (
           <DiffTab
