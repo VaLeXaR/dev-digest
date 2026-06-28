@@ -8,12 +8,10 @@ vi.mock("@/lib/hooks", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useParams: vi.fn(),
-  useRouter: vi.fn(),
+  useParams: () => ({ repoId: "r1", number: "42" }),
 }));
 
 import { useSmartDiff } from "@/lib/hooks";
-import { useParams, useRouter } from "next/navigation";
 import { SmartDiffViewer } from "./SmartDiffViewer";
 
 afterEach(cleanup);
@@ -32,10 +30,11 @@ const BASE_DATA = {
       role: "core" as const,
       files: [
         {
-          path: "src/core/auth.ts",
-          additions: 10,
-          deletions: 2,
-          finding_lines: [] as number[],
+          path: "src/middleware/rateLimit.ts",
+          additions: 84,
+          deletions: 8,
+          patch: "@@ -24,3 +24,5 @@\n context\n+const key = bucketKey(req);\n+const count = await redis.incr(key);",
+          findings: [{ line: 25, severity: "WARNING" }],
           pseudocode_summary: null,
         },
       ],
@@ -44,10 +43,11 @@ const BASE_DATA = {
       role: "wiring" as const,
       files: [
         {
-          path: "src/routes/auth.ts",
-          additions: 5,
-          deletions: 0,
-          finding_lines: [] as number[],
+          path: "src/server.ts",
+          additions: 8,
+          deletions: 1,
+          patch: "@@ -1,1 +1,1 @@\n ctx",
+          findings: [] as { line: number; severity: string }[],
           pseudocode_summary: null,
         },
       ],
@@ -56,10 +56,11 @@ const BASE_DATA = {
       role: "boilerplate" as const,
       files: [
         {
-          path: "src/generated/types.ts",
-          additions: 30,
-          deletions: 30,
-          finding_lines: [] as number[],
+          path: "package-lock.json",
+          additions: 92,
+          deletions: 24,
+          patch: null,
+          findings: [] as { line: number; severity: string }[],
           pseudocode_summary: null,
         },
       ],
@@ -67,142 +68,127 @@ const BASE_DATA = {
   ],
   split_suggestion: {
     too_big: false,
-    total_lines: 77,
+    total_lines: 209,
     proposed_splits: [] as { name: string; files: string[] }[],
   },
 };
 
 describe("SmartDiffViewer", () => {
-  it("renders three role section labels when data is present", () => {
+  it("renders REVIEWER-ORDERED DIFF header", () => {
     vi.mocked(useSmartDiff).mockReturnValue({
       data: BASE_DATA,
       isLoading: false,
     } as unknown as ReturnType<typeof useSmartDiff>);
-    vi.mocked(useParams).mockReturnValue({ repoId: "42", number: "7" });
-    vi.mocked(useRouter).mockReturnValue({ push: vi.fn() } as unknown as ReturnType<typeof useRouter>);
 
-    renderWithIntl(<SmartDiffViewer prId="pr1" repoFullName="acme/repo" />);
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
 
-    expect(screen.getByText("Core")).toBeInTheDocument();
+    expect(screen.getByText("REVIEWER-ORDERED DIFF")).toBeInTheDocument();
+  });
+
+  it("renders total stats line with file count and additions/deletions", () => {
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: BASE_DATA,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    // 3 total files across all groups
+    expect(screen.getByText(/3 files/)).toBeInTheDocument();
+    // +184 additions (84+8+92)
+    expect(screen.getByText(/\+184/)).toBeInTheDocument();
+    // -33 deletions (8+1+24)
+    expect(screen.getByText(/−33/)).toBeInTheDocument();
+  });
+
+  it("renders Core logic, Wiring, Boilerplate section headers", () => {
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: BASE_DATA,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    expect(screen.getByText("Core logic")).toBeInTheDocument();
     expect(screen.getByText("Wiring")).toBeInTheDocument();
     expect(screen.getByText("Boilerplate")).toBeInTheDocument();
   });
 
-  it("boilerplate section body is hidden until header is clicked (collapsed by default)", () => {
+  it("boilerplate is collapsed by default; clicking its header reveals it", () => {
     vi.mocked(useSmartDiff).mockReturnValue({
       data: BASE_DATA,
       isLoading: false,
     } as unknown as ReturnType<typeof useSmartDiff>);
-    vi.mocked(useParams).mockReturnValue({ repoId: "42", number: "7" });
-    vi.mocked(useRouter).mockReturnValue({ push: vi.fn() } as unknown as ReturnType<typeof useRouter>);
 
-    renderWithIntl(<SmartDiffViewer prId="pr1" repoFullName="acme/repo" />);
-
-    // Core and wiring files should be visible (expanded by default)
-    expect(screen.getByTitle("src/core/auth.ts")).toBeInTheDocument();
-    expect(screen.getByTitle("src/routes/auth.ts")).toBeInTheDocument();
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
 
     // Boilerplate file should NOT be visible (collapsed by default)
-    expect(screen.queryByTitle("src/generated/types.ts")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("package-lock.json")).not.toBeInTheDocument();
 
-    // Click the Boilerplate header to expand
+    // Core and wiring files should be visible (expanded by default)
+    expect(screen.getByTitle("src/middleware/rateLimit.ts")).toBeInTheDocument();
+    expect(screen.getByTitle("src/server.ts")).toBeInTheDocument();
+
+    // Click Boilerplate header to expand
     fireEvent.click(screen.getByText("Boilerplate").closest("[role=button]")!);
 
-    // Now the boilerplate file should be visible
-    expect(screen.getByTitle("src/generated/types.ts")).toBeInTheDocument();
+    // Now boilerplate file should be visible
+    expect(screen.getByTitle("package-lock.json")).toBeInTheDocument();
   });
 
-  it("shows findings badge for files with finding_lines; clicking it calls router.push", () => {
-    const pushMock = vi.fn();
+  it("shows severity badge for lines matching findings", () => {
     vi.mocked(useSmartDiff).mockReturnValue({
-      data: {
-        ...BASE_DATA,
-        groups: [
-          {
-            role: "core" as const,
-            files: [
-              {
-                path: "src/core/auth.ts",
-                additions: 10,
-                deletions: 2,
-                finding_lines: [42, 99],
-                pseudocode_summary: null,
-              },
-            ],
-          },
-        ],
-      },
+      data: BASE_DATA,
       isLoading: false,
     } as unknown as ReturnType<typeof useSmartDiff>);
-    vi.mocked(useParams).mockReturnValue({ repoId: "42", number: "7" });
-    vi.mocked(useRouter).mockReturnValue({ push: pushMock } as unknown as ReturnType<typeof useRouter>);
 
-    renderWithIntl(<SmartDiffViewer prId="pr1" repoFullName="acme/repo" />);
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
 
-    const badge = screen.getByRole("button", {
-      name: /findings in src\/core\/auth\.ts/,
-    });
-    expect(badge).toBeInTheDocument();
-
-    fireEvent.click(badge);
-
-    expect(pushMock).toHaveBeenCalledWith(
-      "/repos/acme/repo/pulls/7?tab=findings",
-    );
+    // The patch has line 25 with WARNING finding — badge should show "warning"
+    expect(screen.getByText("warning")).toBeInTheDocument();
   });
 
-  it("renders split banner when too_big is true", () => {
-    vi.mocked(useSmartDiff).mockReturnValue({
-      data: {
-        ...BASE_DATA,
-        split_suggestion: {
-          too_big: true,
-          total_lines: 1200,
-          proposed_splits: [
-            { name: "auth-core", files: ["src/core/auth.ts"] },
-            { name: "auth-wiring", files: ["src/routes/auth.ts"] },
+  it("shows summary button when pseudocode_summary is non-null, hidden when null", () => {
+    const dataWithSummary = {
+      ...BASE_DATA,
+      groups: [
+        {
+          role: "core" as const,
+          files: [
+            {
+              path: "src/middleware/rateLimit.ts",
+              additions: 84,
+              deletions: 8,
+              patch: null,
+              findings: [] as { line: number; severity: string }[],
+              pseudocode_summary: "This function rate-limits by bucket key",
+            },
           ],
         },
-      },
-      isLoading: false,
-    } as unknown as ReturnType<typeof useSmartDiff>);
-    vi.mocked(useParams).mockReturnValue({ repoId: "42", number: "7" });
-    vi.mocked(useRouter).mockReturnValue({ push: vi.fn() } as unknown as ReturnType<typeof useRouter>);
+      ],
+    };
 
-    renderWithIntl(<SmartDiffViewer prId="pr1" repoFullName="acme/repo" />);
-
-    expect(screen.getByText(/This PR is large/)).toBeInTheDocument();
-    expect(screen.getByText("auth-core")).toBeInTheDocument();
-    expect(screen.getByText("auth-wiring")).toBeInTheDocument();
-  });
-
-  it("loading state renders without crashing; empty state (no groups) renders without crashing", () => {
-    // Loading state
     vi.mocked(useSmartDiff).mockReturnValue({
-      data: undefined,
-      isLoading: true,
-    } as unknown as ReturnType<typeof useSmartDiff>);
-    vi.mocked(useParams).mockReturnValue({ repoId: "42", number: "7" });
-    vi.mocked(useRouter).mockReturnValue({ push: vi.fn() } as unknown as ReturnType<typeof useRouter>);
-
-    const { unmount } = renderWithIntl(
-      <SmartDiffViewer prId="pr1" repoFullName="acme/repo" />,
-    );
-    // Should render skeleton without crashing — no role labels visible
-    expect(screen.queryByText("Core")).not.toBeInTheDocument();
-    unmount();
-
-    // Empty state: data with no groups
-    vi.mocked(useSmartDiff).mockReturnValue({
-      data: {
-        groups: [],
-        split_suggestion: { too_big: false, total_lines: 0, proposed_splits: [] },
-      },
+      data: dataWithSummary,
       isLoading: false,
     } as unknown as ReturnType<typeof useSmartDiff>);
 
-    renderWithIntl(<SmartDiffViewer prId="pr1" repoFullName={null} />);
-    // Shows the groupedByRole label as empty state text
-    expect(screen.getByText("Smart Diff · grouped by role")).toBeInTheDocument();
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    // summary button should be visible
+    expect(screen.getByRole("button", { name: /summary/i })).toBeInTheDocument();
+
+    cleanup();
+
+    // Now render with null summary
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: BASE_DATA,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    // summary button should NOT be visible (all files have null pseudocode_summary)
+    expect(screen.queryByRole("button", { name: /summary/i })).not.toBeInTheDocument();
   });
 });

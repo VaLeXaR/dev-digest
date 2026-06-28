@@ -3,14 +3,13 @@
 import React, { useState } from "react";
 import { Skeleton, SectionLabel } from "@devdigest/ui";
 import { useTranslations } from "next-intl";
-import { useParams, useRouter } from "next/navigation";
 import { useSmartDiff } from "@/lib/hooks";
-import type { SmartDiffRole } from "@devdigest/shared";
+import type { SmartDiffRole, SmartDiffFile } from "@devdigest/shared";
 import { s } from "./styles";
+import { parsePatch } from "./parsePatch";
 
 interface SmartDiffViewerProps {
   prId: string;
-  repoFullName: string | null;
 }
 
 const ROLE_COLOR: Record<SmartDiffRole, string> = {
@@ -25,26 +24,84 @@ const ROLE_SUBTITLE: Record<SmartDiffRole, string> = {
   boilerplate: "Generated / mechanical — skim",
 };
 
+const SEVERITY_BADGE: Record<string, { label: string; color: string }> = {
+  CRITICAL: { label: "blocker", color: "var(--error)" },
+  WARNING: { label: "warning", color: "var(--warn)" },
+  SUGGESTION: { label: "suggestion", color: "var(--accent-text)" },
+};
+
+function FileCardBody({ file }: { file: SmartDiffFile }) {
+  const diffLines = parsePatch(file.patch);
+  if (diffLines.length === 0) return null;
+
+  return (
+    <div style={s.diffBlock}>
+      {diffLines.map((line, i) => {
+        const badge =
+          line.type === "+" && line.lineNo != null
+            ? file.findings.find((f) => f.line === line.lineNo)
+            : undefined;
+
+        const lineBg =
+          line.type === "+"
+            ? s.diffLineAdd
+            : line.type === "-"
+              ? s.diffLineDel
+              : undefined;
+
+        const signColor =
+          line.type === "+"
+            ? s.lineSignAdd
+            : line.type === "-"
+              ? s.lineSignDel
+              : undefined;
+
+        const badgeMeta =
+          badge != null
+            ? (SEVERITY_BADGE[badge.severity] ?? {
+                label: badge.severity.toLowerCase(),
+                color: "var(--text-muted)",
+              })
+            : null;
+
+        return (
+          <div key={i} style={{ ...s.diffLine, ...lineBg }}>
+            <span style={s.lineNo}>
+              {line.lineNo != null ? line.lineNo : " "}
+            </span>
+            <span style={{ ...s.lineSign, ...signColor }}>{line.type}</span>
+            <span style={s.lineContent}>{line.content}</span>
+            {badgeMeta != null && (
+              <span
+                style={{ ...s.severityBadge, background: badgeMeta.color }}
+              >
+                {badgeMeta.label}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function GroupSection({
   role,
   files,
   defaultExpanded,
-  repoFullName,
-  prNumber,
   tFiles,
-  tFindings,
+  t,
 }: {
   role: SmartDiffRole;
-  files: import("@devdigest/shared").SmartDiffFile[];
+  files: SmartDiffFile[];
   defaultExpanded: boolean;
-  repoFullName: string | null;
-  prNumber: string;
   tFiles: (count: number) => string;
-  tFindings: (count: number) => string;
+  t: ReturnType<typeof useTranslations<"prReview">>;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const router = useRouter();
-  const t = useTranslations("prReview");
+  const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>(
+    {},
+  );
 
   const roleLabel =
     role === "core"
@@ -52,6 +109,10 @@ function GroupSection({
       : role === "wiring"
         ? t("smartDiff.wiringLabel")
         : t("smartDiff.boilerplateLabel");
+
+  function toggleFile(path: string) {
+    setExpandedFiles((prev) => ({ ...prev, [path]: !(prev[path] ?? true) }));
+  }
 
   return (
     <div style={s.section}>
@@ -78,30 +139,30 @@ function GroupSection({
       {expanded && (
         <div style={s.fileList}>
           {files.map((file) => {
-            const hasFindingLines = file.finding_lines.length > 0;
+            const isFileExpanded = expandedFiles[file.path] ?? true;
+            const hasPatch = file.patch != null && file.patch.length > 0;
+
             return (
               <div key={file.path} style={s.fileCard}>
-                <span style={s.filePath} title={file.path}>
-                  {file.path}
-                </span>
-                <span style={s.diffBadge}>
-                  +{file.additions} -{file.deletions}
-                </span>
-                {hasFindingLines && (
-                  <button
-                    style={s.findingsBadge}
-                    aria-label={`${file.finding_lines.length} findings in ${file.path}`}
-                    onClick={() => {
-                      if (repoFullName) {
-                        router.push(
-                          `/repos/${repoFullName}/pulls/${prNumber}?tab=findings`,
-                        );
-                      }
-                    }}
-                  >
-                    {tFindings(file.finding_lines.length)}
-                  </button>
-                )}
+                <div style={s.fileCardHeader}>
+                  <span style={s.filePath} title={file.path}>
+                    {file.path}
+                  </span>
+                  <span style={s.diffBadge}>
+                    +{file.additions} -{file.deletions}
+                  </span>
+                  {file.pseudocode_summary != null && (
+                    <button
+                      type="button"
+                      style={s.summaryButton}
+                      onClick={() => toggleFile(file.path)}
+                      aria-label={`summary for ${file.path}`}
+                    >
+                      {t("smartDiff.summary")}
+                    </button>
+                  )}
+                </div>
+                {hasPatch && isFileExpanded && <FileCardBody file={file} />}
               </div>
             );
           })}
@@ -111,10 +172,8 @@ function GroupSection({
   );
 }
 
-export function SmartDiffViewer({ prId, repoFullName }: SmartDiffViewerProps) {
+export function SmartDiffViewer({ prId }: SmartDiffViewerProps) {
   const t = useTranslations("prReview");
-  const params = useParams();
-  const prNumber = params["number"] as string;
   const { data, isLoading } = useSmartDiff(prId);
 
   if (isLoading) {
@@ -129,18 +188,42 @@ export function SmartDiffViewer({ prId, repoFullName }: SmartDiffViewerProps) {
     );
   }
 
-  const hasContent = data && data.groups.length > 0 && data.groups.some((g) => g.files.length > 0);
+  const hasContent =
+    data &&
+    data.groups.length > 0 &&
+    data.groups.some((g) => g.files.length > 0);
 
   if (!hasContent) {
     return <p style={s.emptyText}>{t("smartDiff.groupedByRole")}</p>;
   }
 
+  // Compute totals during render (not state)
+  let totalFiles = 0;
+  let totalAdditions = 0;
+  let totalDeletions = 0;
+  for (const group of data.groups) {
+    totalFiles += group.files.length;
+    for (const file of group.files) {
+      totalAdditions += file.additions;
+      totalDeletions += file.deletions;
+    }
+  }
+
   const tFiles = (count: number) => t("smartDiff.filesCount", { count });
-  const tFindings = (count: number) => t("smartDiff.findingLines", { count });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <SectionLabel icon="GitBranch">{t("smartDiff.groupedByRole")}</SectionLabel>
+    <div style={s.viewerRoot}>
+      <SectionLabel icon="GitBranch">
+        {t("smartDiff.reviewerOrderedDiff")}
+      </SectionLabel>
+
+      <p style={s.statsLine}>
+        {t("smartDiff.statsLine", {
+          files: totalFiles,
+          additions: totalAdditions,
+          deletions: totalDeletions,
+        })}
+      </p>
 
       {data.split_suggestion.too_big && (
         <div style={s.banner}>
@@ -166,10 +249,8 @@ export function SmartDiffViewer({ prId, repoFullName }: SmartDiffViewerProps) {
           role={group.role}
           files={group.files}
           defaultExpanded={group.role !== "boilerplate"}
-          repoFullName={repoFullName}
-          prNumber={prNumber}
           tFiles={tFiles}
-          tFindings={tFindings}
+          t={t}
         />
       ))}
     </div>

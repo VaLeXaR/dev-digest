@@ -23,6 +23,7 @@ export const s = {
     height: 8,
     borderRadius: "50%",
     flexShrink: 0,
+    // background set dynamically per role
   } satisfies CSSProperties,
 
   roleLabel: {
@@ -58,13 +59,20 @@ export const s = {
 
   fileCard: {
     display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "6px 10px",
+    flexDirection: "column",
+    gap: 0,
     borderRadius: 6,
     background: "var(--bg-elevated)",
     border: "1px solid var(--border)",
     fontSize: 13,
+    overflow: "hidden",
+  } satisfies CSSProperties,
+
+  fileCardHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "6px 10px",
   } satisfies CSSProperties,
 
   filePath: {
@@ -94,6 +102,18 @@ export const s = {
     color: "var(--warn)",
     background: "var(--warn-bg, #1c1200)",
     border: "1px solid var(--warn)",
+    borderRadius: 4,
+    padding: "1px 6px",
+    cursor: "pointer",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
+  summaryButton: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: "var(--accent-text)",
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
     borderRadius: 4,
     padding: "1px 6px",
     cursor: "pointer",
@@ -146,5 +166,92 @@ export const s = {
     fontSize: 12,
     color: "var(--text-muted)",
     marginLeft: 4,
+  } satisfies CSSProperties,
+
+  // Stats line below the header
+  statsLine: {
+    fontSize: 12,
+    color: "var(--text-muted)",
+    marginBottom: 8,
+    fontVariantNumeric: "tabular-nums",
+  } satisfies CSSProperties,
+
+  // Inline diff block container
+  diffBlock: {
+    overflowX: "auto",
+    fontFamily: "monospace",
+    fontSize: 12,
+    lineHeight: "18px",
+    borderTop: "1px solid var(--border)",
+  } satisfies CSSProperties,
+
+  // One row in the diff
+  diffLine: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "0 8px",
+    minHeight: 18,
+    // background set dynamically per line type (+/-/ )
+  } satisfies CSSProperties,
+
+  // Addition diff line background
+  diffLineAdd: {
+    background: "rgba(0,180,0,0.06)",
+  } satisfies CSSProperties,
+
+  // Deletion diff line background
+  diffLineDel: {
+    background: "rgba(220,0,0,0.06)",
+  } satisfies CSSProperties,
+
+  lineNo: {
+    minWidth: 32,
+    color: "var(--text-muted)",
+    textAlign: "right",
+    userSelect: "none",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
+  lineSign: {
+    minWidth: 12,
+    textAlign: "center",
+    flexShrink: 0,
+    userSelect: "none",
+    // color set dynamically per line type
+  } satisfies CSSProperties,
+
+  lineSignAdd: {
+    color: "var(--success)",
+  } satisfies CSSProperties,
+
+  lineSignDel: {
+    color: "var(--error)",
+  } satisfies CSSProperties,
+
+  lineContent: {
+    flex: 1,
+    whiteSpace: "pre",
+    color: "var(--text-secondary)",
+  } satisfies CSSProperties,
+
+  severityBadge: {
+    fontSize: 10,
+    fontWeight: 700,
+    fontFamily: "sans-serif",
+    padding: "0 4px",
+    borderRadius: 3,
+    color: "#fff",
+    flexShrink: 0,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.04em",
+    // background set dynamically per severity
+  } satisfies CSSProperties,
+
+  // Wrapper for the whole viewer
+  viewerRoot: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
   } satisfies CSSProperties,
 } as const;
