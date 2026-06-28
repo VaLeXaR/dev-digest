@@ -75,6 +75,13 @@ Also read the module's `CLAUDE.md`:
 - `client/CLAUDE.md` — App Router conventions, TanStack Query keys, i18n via next-intl
 - `reviewer-core/CLAUDE.md` — pure engine rules, groundFindings gate
 
+**If the task includes a UI design reference** (screenshot path, mockup image, or design description):
+treat the visual design as authoritative — it overrides any conflicting text description. Before
+writing the first line of component code, extract every visible element from the design:
+section headers, labels, badges, button states, default collapsed/expanded state, toggle placement,
+inline content vs badge-on-card differences, empty/loading states. List them explicitly in your
+working notes. A component that passes tests but ignores the design is wrong.
+
 ### Step 3 — Apply the skill set for your Type
 
 `engineering-insights` is preloaded from the `skills:` frontmatter — its knowledge is already
