@@ -45,6 +45,10 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/web`.
 
 ## Recurring Errors & Fixes
 
+- 2026-06-28: `vi.mock("next/navigation")` — when the component under test no longer calls `useRouter`, drop it from the mock factory entirely. Vitest throws "No 'useRouter' export is defined on the mock" at render time if the module mock provides only some exports but the component's import still resolves to a missing function. Safest pattern when you only need `useParams` with a static value: `vi.mock("next/navigation", () => ({ useParams: () => ({ repoId: "r1", number: "42" }) }))` — no `vi.fn()` needed, no `vi.mocked(...)` calls. (`src/app/repos/[repoId]/pulls/[number]/_components/SmartDiffViewer/SmartDiffViewer.test.tsx`)
+
+- 2026-06-28: The IDE linter in this project flags **every** `style={...}` JSX attribute as "CSS inline styles should not be used" — including `style={s.foo}` references to named constants from `styles.ts`. This is a project-wide linter misconfiguration; the entire codebase uses the inline-style-via-styles.ts pattern intentionally. Do not attempt to remove or restructure styles to silence these warnings — they are not TypeScript errors and do not affect tests or build.
+
 - 2026-06-24: The Edit tool converts ASCII single-quote string delimiters (`'` U+0027) to Unicode typographic quotes (U+2018/U+2019) when `old_string`/`new_string` contain string literals in `.tsx`/`.ts` files. TypeScript reports `TS1127: Invalid character` on every affected line. Fix: after any Edit touching string literals, run this PowerShell one-liner: `$p="path\to\file.ts"; $r=[IO.File]::ReadAllText($p,'UTF8'); [IO.File]::WriteAllText($p,$r.Replace([char]0x2018,[char]0x27).Replace([char]0x2019,[char]0x27),(New-Object Text.UTF8Encoding $false))`. Full details and alternative approach in `reviewer-core/INSIGHTS.md`.
 
 - 2026-06-26: `Icon` in `@devdigest/ui` has no index signature — `Icon[someString]` causes TS7053. When indexing `Icon` dynamically, type the key as `IconName` (exported from `@devdigest/ui`) so TypeScript accepts it. Pattern: `const RISK_ICON: Record<RiskSeverity, IconName> = { ... }; const RiskIcon = Icon[RISK_ICON[risk.severity]];`. (`src/vendor/ui/icons.tsx`, `src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/OverviewTab.tsx`)
@@ -59,6 +63,8 @@ Accumulated lessons, gotchas, and non-obvious decisions for `@devdigest/web`.
 - 2026-06-20: **Supersedes the entry above.** The canonical per-severity icons are defined in `src/vendor/ui/primitives/tokens.ts` as `SEV`: CRITICAL → `AlertOctagon`, WARNING → `AlertTriangle`, SUGGESTION → `Lightbulb`. Always derive the icon via `SEV[severity].icon` + `Icon[sev.icon]` — never hardcode `XCircle` or `Info` for severity. Previous session got this wrong; future divergence will show visually. (`src/vendor/ui/primitives/tokens.ts`)
 
 ## Session Notes
+
+- 2026-06-28: Implemented T-05 (SmartDiffViewer rewrite). Added colocated `parsePatch.ts` utility that parses unified diff hunks into `DiffLine[]` tracking new-file line numbers across multiple hunks. Component renders inline diff with +/- row coloring and per-line severity badges from `findings[]{line,severity}` (new contract shape replacing `finding_lines`). `SmartDiffViewer` props reduced to `{ prId }` only — `repoFullName` removed. Stats line computed during render with for-loop (not state). `coreLabel` i18n key changed to "Core logic"; added `reviewerOrderedDiff`, `statsLine`, `summary` keys to `prReview.json` smartDiff section. 3 parsePatch + 6 component tests, all green. (`src/app/repos/[repoId]/pulls/[number]/_components/SmartDiffViewer/`)
 
 - 2026-06-23: Added `onError` handler to `extractMutation` in `ConventionsView.handleRescan` — scan failures (bad LLM config, network error) now show `toast.error` instead of silently reverting to "No conventions found yet". (`src/app/conventions/_components/ConventionsView/ConventionsView.tsx:74`)
 
