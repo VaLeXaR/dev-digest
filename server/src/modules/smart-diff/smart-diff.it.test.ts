@@ -98,6 +98,12 @@ d('SmartDiff endpoint (Testcontainers pg)', () => {
     // Response must parse through SmartDiff Zod schema without errors
     expect(() => SmartDiff.parse(res.json())).not.toThrow();
 
+    // A file with a non-null patch must round-trip through the response
+    const body = res.json() as { groups: { files: { patch: string | null }[] }[] };
+    const allFiles = body.groups.flatMap((g) => g.files);
+    const withPatch = allFiles.find((f) => f.patch !== null && f.patch !== '');
+    expect(withPatch).toBeDefined();
+
     await app.close();
   });
 
@@ -138,7 +144,7 @@ d('SmartDiff endpoint (Testcontainers pg)', () => {
     await app.close();
   });
 
-  it('A file with a seeded finding has non-empty finding_lines', async () => {
+  it('A file with a seeded finding has non-empty findings with line and severity', async () => {
     const app = await buildSmartDiffApp();
     const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
 
@@ -194,8 +200,9 @@ d('SmartDiff endpoint (Testcontainers pg)', () => {
     const allFiles = body.groups.flatMap((g) => g.files);
     const found = allFiles.find((f) => f.path === CORE_FILE);
     expect(found).toBeDefined();
-    expect(found!.finding_lines.length).toBeGreaterThan(0);
-    expect(found!.finding_lines).toContain(42);
+    expect(found!.findings.length).toBeGreaterThan(0);
+    expect(found!.findings[0]!.line).toBe(42);
+    expect(found!.findings[0]!.severity).toBe('WARNING');
 
     await app.close();
   });
