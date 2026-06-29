@@ -21,7 +21,7 @@ export class SmartDiffService {
     const files = await this.repo.getPrFiles(prId);
 
     // Step 3: build findingsByFile from the most recent review
-    const findingsByFile = new Map<string, { line: number; severity: string }[]>();
+    const findingsByFile = new Map<string, { line: number; severity: string; id?: string }[]>();
     const reviews = await this.repo.reviewsForPull(prId);
     const mostRecent = reviews[0];
     if (mostRecent) {
@@ -29,7 +29,7 @@ export class SmartDiffService {
         // Only include non-dismissed findings
         if (finding.dismissedAt != null) continue;
         const existing = findingsByFile.get(finding.file) ?? [];
-        existing.push({ line: finding.startLine, severity: finding.severity });
+        existing.push({ line: finding.startLine, severity: finding.severity, id: finding.id });
         findingsByFile.set(finding.file, existing);
       }
     }

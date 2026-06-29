@@ -33,6 +33,8 @@ export function ReviewRunAccordion({
   targetNonce = 0,
   severityFilter,
   onGoToDiff,
+  targetFindingId,
+  targetFindingNonce = 0,
 }: {
   review: ReviewRecord;
   prId: string;
@@ -45,6 +47,8 @@ export function ReviewRunAccordion({
   targetNonce?: number;
   severityFilter?: string | null;
   onGoToDiff?: (file: string, line: number) => void;
+  targetFindingId?: string | null;
+  targetFindingNonce?: number;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
@@ -55,6 +59,12 @@ export function ReviewRunAccordion({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetRunId, targetNonce, review.run_id]);
+  React.useEffect(() => {
+    if (targetFindingId && review.findings.some((f) => f.id === targetFindingId)) {
+      setOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetFindingId, targetFindingNonce]);
   const del = useDeleteReview(prId);
   const findings = review.findings;
   const blockers = findings.filter((f) => f.severity === "CRITICAL" && !f.dismissed_at).length;
@@ -158,6 +168,8 @@ export function ReviewRunAccordion({
             headSha={headSha}
             severityFilter={severityFilter}
             onGoToDiff={onGoToDiff}
+            targetFindingId={targetFindingId}
+            targetFindingNonce={targetFindingNonce}
           />
         </div>
       )}

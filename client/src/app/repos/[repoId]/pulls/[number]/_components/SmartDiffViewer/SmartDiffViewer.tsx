@@ -13,6 +13,7 @@ interface SmartDiffViewerProps {
   targetFile?: string;
   targetLine?: number;
   targetNonce?: number;
+  onFindingClick?: (findingId: string) => void;
 }
 
 const ROLE_COLOR: Record<SmartDiffRole, string> = {
@@ -36,7 +37,7 @@ const SEVERITY_BADGE: Record<
   SUGGESTION: { label: "suggestion", color: "var(--sugg)", bg: "var(--sugg-bg)", icon: "%" },
 };
 
-function FileCardBody({ file }: { file: SmartDiffFile }) {
+function FileCardBody({ file, onFindingClick }: { file: SmartDiffFile; onFindingClick?: (findingId: string) => void }) {
   const diffLines = parsePatch(file.patch);
   if (diffLines.length === 0) return null;
 
@@ -90,15 +91,32 @@ function FileCardBody({ file }: { file: SmartDiffFile }) {
             <span style={{ ...s.lineSign, ...signColor }}>{line.type}</span>
             <span style={s.lineContent}>{line.content}</span>
             {badgeMeta != null && (
-              <span
-                style={{
-                  ...s.severityBadge,
-                  color: badgeMeta.color,
-                  background: badgeMeta.bg,
-                }}
-              >
-                {badgeMeta.icon} {badgeMeta.label}
-              </span>
+              badge?.id && onFindingClick ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onFindingClick(badge.id!); }}
+                  style={{
+                    ...s.severityBadge,
+                    color: badgeMeta.color,
+                    background: badgeMeta.bg,
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                  aria-label={`Go to finding on line ${line.lineNo}`}
+                >
+                  {badgeMeta.icon} {badgeMeta.label}
+                </button>
+              ) : (
+                <span
+                  style={{
+                    ...s.severityBadge,
+                    color: badgeMeta.color,
+                    background: badgeMeta.bg,
+                  }}
+                >
+                  {badgeMeta.icon} {badgeMeta.label}
+                </span>
+              )
             )}
           </div>
         );
@@ -115,6 +133,7 @@ function GroupSection({
   t,
   targetFile,
   targetNonce,
+  onFindingClick,
 }: {
   role: SmartDiffRole;
   files: SmartDiffFile[];
@@ -123,6 +142,7 @@ function GroupSection({
   t: ReturnType<typeof useTranslations<"prReview">>;
   targetFile?: string;
   targetNonce?: number;
+  onFindingClick?: (findingId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
@@ -224,7 +244,7 @@ function GroupSection({
                     {file.pseudocode_summary}
                   </div>
                 )}
-                {hasPatch && isExpanded && <FileCardBody file={file} />}
+                {hasPatch && isExpanded && <FileCardBody file={file} onFindingClick={onFindingClick} />}
               </div>
             );
           })}
@@ -234,7 +254,7 @@ function GroupSection({
   );
 }
 
-export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce }: SmartDiffViewerProps) {
+export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onFindingClick }: SmartDiffViewerProps) {
   const t = useTranslations("prReview");
   const { data, isLoading } = useSmartDiff(prId);
   const viewerRef = React.useRef<HTMLDivElement>(null);
@@ -332,6 +352,7 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce }: S
           t={t}
           targetFile={targetFile}
           targetNonce={targetNonce}
+          onFindingClick={onFindingClick}
         />
       ))}
     </div>

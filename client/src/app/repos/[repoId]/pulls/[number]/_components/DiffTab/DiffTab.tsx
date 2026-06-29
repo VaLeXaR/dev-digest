@@ -17,9 +17,10 @@ interface DiffTabProps {
   targetFile?: string;
   targetLine?: number;
   targetNonce?: number;
+  onFindingClick?: (findingId: string) => void;
 }
 
-export function DiffTab({ prId, filesCount, files, canComment, targetFile, targetLine, targetNonce }: DiffTabProps) {
+export function DiffTab({ prId, filesCount, files, canComment, targetFile, targetLine, targetNonce, onFindingClick }: DiffTabProps) {
   const { data: comments } = usePrComments(prId);
   const create = useCreatePrComment(prId);
   // Comments start hidden so the diff is clean by default — toggle to reveal.
@@ -84,7 +85,7 @@ export function DiffTab({ prId, filesCount, files, canComment, targetFile, targe
         Files changed · {filesCount} files
       </SectionLabel>
       {smartOrder
-        ? <SmartDiffViewer prId={prId ?? ""} targetFile={targetFile} targetLine={targetLine} targetNonce={targetNonce} />
+        ? <SmartDiffViewer prId={prId ?? ""} targetFile={targetFile} targetLine={targetLine} targetNonce={targetNonce} onFindingClick={onFindingClick} />
         : <DiffViewer files={files} commenting={commenting} />
       }
     </section>

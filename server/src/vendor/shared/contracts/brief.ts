@@ -84,6 +84,7 @@ export type SmartDiffRole = z.infer<typeof SmartDiffRole>;
 export const SmartDiffFileFinding = z.object({
   line: z.number().int(),
   severity: z.string(),
+  id: z.string().optional(),
 });
 export type SmartDiffFileFinding = z.infer<typeof SmartDiffFileFinding>;
 

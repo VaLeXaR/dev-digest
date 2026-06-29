@@ -58,6 +58,7 @@ export default function PRDetailPage() {
   };
 
   const [diffTarget, setDiffTarget] = React.useState<{ file: string; line: number; n: number } | null>(null);
+  const [findingTarget, setFindingTarget] = React.useState<{ id: string; n: number } | null>(null);
 
   const tab = search.get("tab") ?? "overview";
   const traceRunId = search.get("trace");
@@ -71,6 +72,13 @@ export default function PRDetailPage() {
   const handleGoToDiff = (file: string, line: number) => {
     setDiffTarget((prev) => ({ file, line, n: (prev?.n ?? 0) + 1 }));
     setTab("diff");
+  };
+  const handleFindingClick = (fId: string) => {
+    setFindingTarget((prev) => ({ id: fId, n: (prev?.n ?? 0) + 1 }));
+    const sp = new URLSearchParams(search.toString());
+    sp.set("tab", "findings");
+    sp.set("findingId", fId);
+    router.replace(`/repos/${repoId}/pulls/${number}?${sp.toString()}`);
   };
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
@@ -165,6 +173,8 @@ export default function PRDetailPage() {
               refetchReviews();
             }}
             onGoToDiff={handleGoToDiff}
+            targetFindingId={findingTarget?.id ?? null}
+            targetFindingNonce={findingTarget?.n ?? 0}
           />
         )}
 
@@ -177,6 +187,7 @@ export default function PRDetailPage() {
             targetFile={diffTarget?.file}
             targetLine={diffTarget?.line}
             targetNonce={diffTarget?.n}
+            onFindingClick={handleFindingClick}
           />
         )}
       </div>
