@@ -11,6 +11,7 @@ export const BOILERPLATE_PATTERNS: RegExp[] = [
   /\.generated\./,
   /\.min\.js$/,
   /\.map$/,
+  /\d+_.*\.sql$/,
 ];
 
 export const WIRING_PATTERNS: RegExp[] = [
