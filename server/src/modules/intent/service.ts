@@ -89,19 +89,35 @@ export class IntentService {
       'review_intent',
     );
     const llm = await this.container.llm(provider);
+
+    // Cascade log #1: cheap classifier call — hunk-headers only, no patch bodies
+    console.log(
+      [
+        "[intent:call]",
+        "prId=" + prId,
+        "provider=" + provider,
+        "model=" + model,
+        "files=" + String(prFiles.length),
+        "patch=hunk-headers-only",
+      ].join(" "),
+    );
+
     const { intent, tokensIn } = await callIntentLLM(input, llm, model);
 
     const fullDiffTokens = estimateTokens(
-      prFiles.map((f) => f.patch ?? '').join('\n'),
+      prFiles.map((f) => f.patch ?? "").join("\n"),
     );
+    // Cascade log #2: cheap classifier result + token savings vs full diff
     console.log(
       [
-        '[intent]',
-        'prId=' + prId,
-        'tokensIn=' + String(tokensIn),
-        'fullDiffEstimate=' + String(fullDiffTokens),
-        'saved=' + String(Math.round((1 - tokensIn / fullDiffTokens) * 100)) + '%',
-      ].join(' '),
+        "[intent:done]",
+        "prId=" + prId,
+        "provider=" + provider,
+        "model=" + model,
+        "tokensIn=" + String(tokensIn),
+        "fullDiffEstimate=" + String(fullDiffTokens),
+        "saved=" + String(Math.round((1 - tokensIn / fullDiffTokens) * 100)) + "%",
+      ].join(" "),
     );
 
     await this.repo.upsertIntent(prId, intent);

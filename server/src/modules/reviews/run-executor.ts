@@ -109,6 +109,23 @@ export class ReviewRunExecutor {
       ? { summary: intentRecord.intent, inScope: intentRecord.in_scope, outOfScope: intentRecord.out_of_scope }
       : undefined;
 
+    // Cascade log: intent (cheap classifier, flash model) visible here, review
+    // agent (main model) visible in the per-agent log lines below — two models,
+    // two budgets in one run timeline.
+    if (intentBlock) {
+      const preview =
+        intentBlock.summary.length > 80
+          ? intentBlock.summary.slice(0, 80) + "..."
+          : intentBlock.summary;
+      runLog.info(
+        `Intent (flash classifier): "${preview}" — ${intentBlock.inScope.length} in-scope, ${intentBlock.outOfScope.length} out-of-scope — injected into all ${jobs.length} agent(s)`,
+      );
+    } else {
+      runLog.info(
+        `No stored intent — ${jobs.length} agent(s) will review without scope guidance`,
+      );
+    }
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
