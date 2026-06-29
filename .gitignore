@@ -26,3 +26,6 @@ test-results/
 
 # pr-self-review: per-developer local gate state
 .pr-self-review.json
+
+# Claude Code agent worktrees (local scratch space)
+.claude/worktrees/
