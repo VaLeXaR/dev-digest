@@ -132,7 +132,9 @@ function GroupSection({
     if (!files.some((f) => f.path === targetFile)) return;
     setExpanded(true);
     setExpandedFiles((prev) => ({ ...prev, [targetFile]: true }));
-  }, [targetFile, targetNonce, files]);
+    // files intentionally excluded — only re-run when target changes, not on every data refresh
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetFile, targetNonce]);
   const [summaryVisible, setSummaryVisible] = useState<Record<string, boolean>>({});
 
   const roleLabel =
@@ -166,14 +168,14 @@ function GroupSection({
 
       {expanded && (
         <div style={s.fileList}>
-          {files.map((file) => {
+          {files.map((file, fileIdx) => {
             const defaultFileExpanded = file.findings.length > 0;
             const isExpanded = expandedFiles[file.path] ?? defaultFileExpanded;
             const isSum = summaryVisible[file.path] ?? true;
             const hasPatch = file.patch != null && file.patch.length > 0;
 
             return (
-              <div key={file.path} data-file-path={file.path} style={s.fileCard}>
+              <div key={`${fileIdx}:${file.path}`} data-file-path={file.path} style={s.fileCard}>
                 <div
                   style={s.fileCardHeader}
                   onClick={() =>
