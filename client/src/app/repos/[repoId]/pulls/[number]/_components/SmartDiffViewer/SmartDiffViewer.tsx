@@ -24,10 +24,13 @@ const ROLE_SUBTITLE: Record<SmartDiffRole, string> = {
   boilerplate: "Generated / mechanical — skim",
 };
 
-const SEVERITY_BADGE: Record<string, { label: string; color: string }> = {
-  CRITICAL: { label: "blocker", color: "var(--error)" },
-  WARNING: { label: "warning", color: "var(--warn)" },
-  SUGGESTION: { label: "suggestion", color: "var(--accent-text)" },
+const SEVERITY_BADGE: Record<
+  string,
+  { label: string; color: string; bg: string; icon: string }
+> = {
+  CRITICAL: { label: "blocker", color: "var(--crit)", bg: "var(--crit-bg)", icon: "⊘" },
+  WARNING: { label: "warning", color: "var(--warn)", bg: "var(--warn-bg)", icon: "⚠" },
+  SUGGESTION: { label: "suggestion", color: "var(--sugg)", bg: "var(--sugg-bg)", icon: "%" },
 };
 
 function FileCardBody({ file }: { file: SmartDiffFile }) {
@@ -61,11 +64,22 @@ function FileCardBody({ file }: { file: SmartDiffFile }) {
             ? (SEVERITY_BADGE[badge.severity] ?? {
                 label: badge.severity.toLowerCase(),
                 color: "var(--text-muted)",
+                bg: "var(--bg-elevated)",
+                icon: "•",
               })
             : null;
 
         return (
-          <div key={i} style={{ ...s.diffLine, ...lineBg }}>
+          <div
+            key={i}
+            style={{
+              ...s.diffLine,
+              ...lineBg,
+              borderLeft: badgeMeta != null
+                ? `3px solid ${badgeMeta.color}`
+                : "3px solid transparent",
+            }}
+          >
             <span style={s.lineNo}>
               {line.lineNo != null ? line.lineNo : " "}
             </span>
@@ -73,9 +87,13 @@ function FileCardBody({ file }: { file: SmartDiffFile }) {
             <span style={s.lineContent}>{line.content}</span>
             {badgeMeta != null && (
               <span
-                style={{ ...s.severityBadge, background: badgeMeta.color }}
+                style={{
+                  ...s.severityBadge,
+                  color: badgeMeta.color,
+                  background: badgeMeta.bg,
+                }}
               >
-                {badgeMeta.label}
+                {badgeMeta.icon} {badgeMeta.label}
               </span>
             )}
           </div>
@@ -99,9 +117,8 @@ function GroupSection({
   t: ReturnType<typeof useTranslations<"prReview">>;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>(
-    {},
-  );
+  const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
+  const [summaryVisible, setSummaryVisible] = useState<Record<string, boolean>>({});
 
   const roleLabel =
     role === "core"
@@ -109,10 +126,6 @@ function GroupSection({
       : role === "wiring"
         ? t("smartDiff.wiringLabel")
         : t("smartDiff.boilerplateLabel");
-
-  function toggleFile(path: string) {
-    setExpandedFiles((prev) => ({ ...prev, [path]: !(prev[path] ?? true) }));
-  }
 
   return (
     <div style={s.section}>
@@ -139,12 +152,32 @@ function GroupSection({
       {expanded && (
         <div style={s.fileList}>
           {files.map((file) => {
-            const isFileExpanded = expandedFiles[file.path] ?? true;
+            const defaultFileExpanded = file.findings.length > 0;
+            const isExpanded = expandedFiles[file.path] ?? defaultFileExpanded;
+            const isSum = summaryVisible[file.path] ?? true;
             const hasPatch = file.patch != null && file.patch.length > 0;
 
             return (
               <div key={file.path} style={s.fileCard}>
-                <div style={s.fileCardHeader}>
+                <div
+                  style={s.fileCardHeader}
+                  onClick={() =>
+                    setExpandedFiles((prev) => ({
+                      ...prev,
+                      [file.path]: !isExpanded,
+                    }))
+                  }
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ")
+                      setExpandedFiles((prev) => ({
+                        ...prev,
+                        [file.path]: !isExpanded,
+                      }));
+                  }}
+                  aria-expanded={isExpanded}
+                >
                   <span style={s.filePath} title={file.path}>
                     {file.path}
                   </span>
@@ -155,14 +188,26 @@ function GroupSection({
                     <button
                       type="button"
                       style={s.summaryButton}
-                      onClick={() => toggleFile(file.path)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSummaryVisible((prev) => ({
+                          ...prev,
+                          [file.path]: !isSum,
+                        }));
+                      }}
                       aria-label={`summary for ${file.path}`}
                     >
-                      {t("smartDiff.summary")}
+                      % {t("smartDiff.summary")}
                     </button>
                   )}
                 </div>
-                {hasPatch && isFileExpanded && <FileCardBody file={file} />}
+                {file.pseudocode_summary != null && isSum && (
+                  <div style={s.summaryText}>
+                    <span style={s.summaryLabel}>What this does:</span>{" "}
+                    {file.pseudocode_summary}
+                  </div>
+                )}
+                {hasPatch && isExpanded && <FileCardBody file={file} />}
               </div>
             );
           })}
@@ -197,7 +242,6 @@ export function SmartDiffViewer({ prId }: SmartDiffViewerProps) {
     return <p style={s.emptyText}>{t("smartDiff.groupedByRole")}</p>;
   }
 
-  // Compute totals during render (not state)
   let totalFiles = 0;
   let totalAdditions = 0;
   let totalDeletions = 0;
@@ -218,11 +262,9 @@ export function SmartDiffViewer({ prId }: SmartDiffViewerProps) {
       </SectionLabel>
 
       <p style={s.statsLine}>
-        {t("smartDiff.statsLine", {
-          files: totalFiles,
-          additions: totalAdditions,
-          deletions: totalDeletions,
-        })}
+        {totalFiles} files ·{" "}
+        <span style={s.statsAdd}>+{totalAdditions}</span>{" "}
+        <span style={s.statsDel}>-{totalDeletions}</span>
       </p>
 
       {data.split_suggestion.too_big && (

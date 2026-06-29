@@ -23,7 +23,6 @@ export const s = {
     height: 8,
     borderRadius: "50%",
     flexShrink: 0,
-    // background set dynamically per role
   } satisfies CSSProperties,
 
   roleLabel: {
@@ -73,6 +72,8 @@ export const s = {
     alignItems: "center",
     gap: 8,
     padding: "6px 10px",
+    cursor: "pointer",
+    userSelect: "none",
   } satisfies CSSProperties,
 
   filePath: {
@@ -100,7 +101,7 @@ export const s = {
     fontSize: 11,
     fontWeight: 600,
     color: "var(--warn)",
-    background: "var(--warn-bg, #1c1200)",
+    background: "var(--warn-bg)",
     border: "1px solid var(--warn)",
     borderRadius: 4,
     padding: "1px 6px",
@@ -120,21 +121,36 @@ export const s = {
     flexShrink: 0,
   } satisfies CSSProperties,
 
+  summaryText: {
+    fontSize: 12,
+    color: "var(--text-muted)",
+    padding: "5px 10px 7px",
+    borderTop: "1px solid var(--border)",
+    fontStyle: "italic",
+    lineHeight: "1.5",
+  } satisfies CSSProperties,
+
+  summaryLabel: {
+    fontWeight: 600,
+    fontStyle: "normal",
+    color: "var(--text-secondary)",
+  } satisfies CSSProperties,
+
   banner: {
     display: "flex",
     flexDirection: "column",
     gap: 8,
     padding: "12px 16px",
     borderRadius: 8,
-    background: "var(--warn-bg, #1c1200)",
-    border: "1px solid var(--warn, #f59e0b)",
+    background: "var(--warn-bg)",
+    border: "1px solid var(--warn)",
     marginBottom: 8,
   } satisfies CSSProperties,
 
   bannerTitle: {
     fontSize: 13,
     fontWeight: 700,
-    color: "var(--warn, #f59e0b)",
+    color: "var(--warn)",
   } satisfies CSSProperties,
 
   bannerBody: {
@@ -168,7 +184,6 @@ export const s = {
     marginLeft: 4,
   } satisfies CSSProperties,
 
-  // Stats line below the header
   statsLine: {
     fontSize: 12,
     color: "var(--text-muted)",
@@ -176,7 +191,16 @@ export const s = {
     fontVariantNumeric: "tabular-nums",
   } satisfies CSSProperties,
 
-  // Inline diff block container
+  statsAdd: {
+    color: "var(--ok)",
+    fontVariantNumeric: "tabular-nums",
+  } satisfies CSSProperties,
+
+  statsDel: {
+    color: "var(--crit)",
+    fontVariantNumeric: "tabular-nums",
+  } satisfies CSSProperties,
+
   diffBlock: {
     overflowX: "auto",
     fontFamily: "monospace",
@@ -185,22 +209,19 @@ export const s = {
     borderTop: "1px solid var(--border)",
   } satisfies CSSProperties,
 
-  // One row in the diff
   diffLine: {
     display: "flex",
     alignItems: "center",
     gap: 4,
     padding: "0 8px",
     minHeight: 18,
-    // background set dynamically per line type (+/-/ )
+    borderLeft: "3px solid transparent",
   } satisfies CSSProperties,
 
-  // Addition diff line background
   diffLineAdd: {
     background: "rgba(0,180,0,0.06)",
   } satisfies CSSProperties,
 
-  // Deletion diff line background
   diffLineDel: {
     background: "rgba(220,0,0,0.06)",
   } satisfies CSSProperties,
@@ -218,15 +239,14 @@ export const s = {
     textAlign: "center",
     flexShrink: 0,
     userSelect: "none",
-    // color set dynamically per line type
   } satisfies CSSProperties,
 
   lineSignAdd: {
-    color: "var(--success)",
+    color: "var(--ok)",
   } satisfies CSSProperties,
 
   lineSignDel: {
-    color: "var(--error)",
+    color: "var(--crit)",
   } satisfies CSSProperties,
 
   lineContent: {
@@ -239,16 +259,13 @@ export const s = {
     fontSize: 10,
     fontWeight: 700,
     fontFamily: "sans-serif",
-    padding: "0 4px",
+    padding: "1px 5px",
     borderRadius: 3,
-    color: "#fff",
     flexShrink: 0,
+    letterSpacing: "0.03em",
     textTransform: "uppercase" as const,
-    letterSpacing: "0.04em",
-    // background set dynamically per severity
   } satisfies CSSProperties,
 
-  // Wrapper for the whole viewer
   viewerRoot: {
     display: "flex",
     flexDirection: "column",
