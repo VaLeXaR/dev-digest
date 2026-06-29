@@ -110,6 +110,7 @@ export function RunHistory({
   onDelete,
   repoFullName,
   headSha,
+  onGoToDiff,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
@@ -122,6 +123,7 @@ export function RunHistory({
   onDelete?: (runId: string) => void;
   repoFullName?: string | null;
   headSha?: string | null;
+  onGoToDiff?: (file: string, line: number) => void;
 }) {
   const t = useTranslations("prReview");
   const [popover, setPopover] = React.useState<{
@@ -323,6 +325,7 @@ export function RunHistory({
           onClose={() => setPopover(null)}
           repoFullName={repoFullName}
           headSha={headSha}
+          onGoToDiff={onGoToDiff}
         />
       )}
     </>

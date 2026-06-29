@@ -14,9 +14,12 @@ interface DiffTabProps {
   files: PrFile[];
   /** Inline commenting is offered only on open PRs (GitHub rejects otherwise). */
   canComment?: boolean;
+  targetFile?: string;
+  targetLine?: number;
+  targetNonce?: number;
 }
 
-export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
+export function DiffTab({ prId, filesCount, files, canComment, targetFile, targetLine, targetNonce }: DiffTabProps) {
   const { data: comments } = usePrComments(prId);
   const create = useCreatePrComment(prId);
   // Comments start hidden so the diff is clean by default — toggle to reveal.
@@ -81,7 +84,7 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
         Files changed · {filesCount} files
       </SectionLabel>
       {smartOrder
-        ? <SmartDiffViewer prId={prId ?? ""} />
+        ? <SmartDiffViewer prId={prId ?? ""} targetFile={targetFile} targetLine={targetLine} targetNonce={targetNonce} />
         : <DiffViewer files={files} commenting={commenting} />
       }
     </section>

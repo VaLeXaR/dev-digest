@@ -32,6 +32,7 @@ export function ReviewRunAccordion({
   targetRunId = null,
   targetNonce = 0,
   severityFilter,
+  onGoToDiff,
 }: {
   review: ReviewRecord;
   prId: string;
@@ -43,6 +44,7 @@ export function ReviewRunAccordion({
   targetRunId?: string | null;
   targetNonce?: number;
   severityFilter?: string | null;
+  onGoToDiff?: (file: string, line: number) => void;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
@@ -155,6 +157,7 @@ export function ReviewRunAccordion({
             repoFullName={repoFullName}
             headSha={headSha}
             severityFilter={severityFilter}
+            onGoToDiff={onGoToDiff}
           />
         </div>
       )}

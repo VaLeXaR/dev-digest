@@ -10,6 +10,9 @@ import { parsePatch } from "./parsePatch";
 
 interface SmartDiffViewerProps {
   prId: string;
+  targetFile?: string;
+  targetLine?: number;
+  targetNonce?: number;
 }
 
 const ROLE_COLOR: Record<SmartDiffRole, string> = {
@@ -72,6 +75,7 @@ function FileCardBody({ file }: { file: SmartDiffFile }) {
         return (
           <div
             key={i}
+            data-line-no={line.lineNo ?? undefined}
             style={{
               ...s.diffLine,
               ...lineBg,
@@ -109,15 +113,26 @@ function GroupSection({
   defaultExpanded,
   tFiles,
   t,
+  targetFile,
+  targetNonce,
 }: {
   role: SmartDiffRole;
   files: SmartDiffFile[];
   defaultExpanded: boolean;
   tFiles: (count: number) => string;
   t: ReturnType<typeof useTranslations<"prReview">>;
+  targetFile?: string;
+  targetNonce?: number;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
+
+  React.useEffect(() => {
+    if (!targetFile) return;
+    if (!files.some((f) => f.path === targetFile)) return;
+    setExpanded(true);
+    setExpandedFiles((prev) => ({ ...prev, [targetFile]: true }));
+  }, [targetFile, targetNonce, files]);
   const [summaryVisible, setSummaryVisible] = useState<Record<string, boolean>>({});
 
   const roleLabel =
@@ -158,7 +173,7 @@ function GroupSection({
             const hasPatch = file.patch != null && file.patch.length > 0;
 
             return (
-              <div key={file.path} style={s.fileCard}>
+              <div key={file.path} data-file-path={file.path} style={s.fileCard}>
                 <div
                   style={s.fileCardHeader}
                   onClick={() =>
@@ -217,9 +232,29 @@ function GroupSection({
   );
 }
 
-export function SmartDiffViewer({ prId }: SmartDiffViewerProps) {
+export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce }: SmartDiffViewerProps) {
   const t = useTranslations("prReview");
   const { data, isLoading } = useSmartDiff(prId);
+  const viewerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!targetFile || isLoading || !data) return;
+    const timer = setTimeout(() => {
+      const scope = viewerRef.current;
+      if (!scope) return;
+      const fileEl = Array.from(scope.querySelectorAll("[data-file-path]")).find(
+        (el) => el.getAttribute("data-file-path") === targetFile,
+      );
+      const lineEl =
+        targetLine != null && fileEl
+          ? Array.from(fileEl.querySelectorAll("[data-line-no]")).find(
+              (el) => el.getAttribute("data-line-no") === String(targetLine),
+            )
+          : undefined;
+      (lineEl ?? fileEl)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [targetFile, targetLine, targetNonce, data, isLoading]);
 
   if (isLoading) {
     return (
@@ -256,7 +291,7 @@ export function SmartDiffViewer({ prId }: SmartDiffViewerProps) {
   const tFiles = (count: number) => t("smartDiff.filesCount", { count });
 
   return (
-    <div style={s.viewerRoot}>
+    <div ref={viewerRef} style={s.viewerRoot}>
       <SectionLabel icon="GitBranch">
         {t("smartDiff.reviewerOrderedDiff")}
       </SectionLabel>
@@ -293,6 +328,8 @@ export function SmartDiffViewer({ prId }: SmartDiffViewerProps) {
           defaultExpanded={group.role !== "boilerplate"}
           tFiles={tFiles}
           t={t}
+          targetFile={targetFile}
+          targetNonce={targetNonce}
         />
       ))}
     </div>

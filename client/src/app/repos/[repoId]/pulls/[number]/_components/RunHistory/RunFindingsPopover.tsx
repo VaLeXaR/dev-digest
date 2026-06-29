@@ -19,9 +19,10 @@ interface Props {
   onClose: () => void;
   repoFullName?: string | null;
   headSha?: string | null;
+  onGoToDiff?: (file: string, line: number) => void;
 }
 
-export function RunFindingsPopover({ findings, anchor, initialSeverity, onClose, repoFullName, headSha }: Props) {
+export function RunFindingsPopover({ findings, anchor, initialSeverity, onClose, repoFullName, headSha, onGoToDiff }: Props) {
   const [severityFilter, setSeverityFilter] = React.useState<string | null>(initialSeverity);
   const popRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -133,7 +134,7 @@ export function RunFindingsPopover({ findings, anchor, initialSeverity, onClose,
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 3, minWidth: 0 }}>
                 {(() => {
-                  const fileUrl = repoFullName && headSha
+                  const fileUrl = !onGoToDiff && repoFullName && headSha
                     ? githubBlobUrl(repoFullName, headSha, f.file, f.start_line, f.end_line)
                     : undefined;
                   const pathStyle: React.CSSProperties = {
@@ -148,6 +149,19 @@ export function RunFindingsPopover({ findings, anchor, initialSeverity, onClose,
                     textAlign: "left",
                     textDecoration: "none",
                   };
+                  if (onGoToDiff) {
+                    return (
+                      <button
+                        type="button"
+                        className="mono"
+                        title={`${f.file}:${f.start_line}`}
+                        onClick={() => { onClose(); onGoToDiff(f.file, f.start_line); }}
+                        style={{ ...pathStyle, background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                      >
+                        {f.file}:{f.start_line}
+                      </button>
+                    );
+                  }
                   return fileUrl ? (
                     <a
                       className="mono"

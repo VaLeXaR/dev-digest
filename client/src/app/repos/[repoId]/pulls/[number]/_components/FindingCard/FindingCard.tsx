@@ -31,6 +31,7 @@ export function FindingCard({
   pending,
   repoFullName,
   headSha,
+  onGoToDiff,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -39,12 +40,13 @@ export function FindingCard({
   pending?: boolean;
   repoFullName?: string | null;
   headSha?: string | null;
+  onGoToDiff?: (file: string, line: number) => void;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
   const sevColor = SEV_COLOR[f.severity] ?? SEV_COLOR_FALLBACK;
   const fileHref =
-    repoFullName && headSha
+    !onGoToDiff && repoFullName && headSha
       ? githubBlobUrl(repoFullName, headSha, f.file, f.start_line, f.end_line)
       : undefined;
   const accepted = !!f.accepted_at;
@@ -65,7 +67,10 @@ export function FindingCard({
             {dismissed && <span style={s.dismissedTag}>{t("finding.dismissed")}</span>}
           </div>
           <div style={s.metaRow}>
-            <MonoLink href={fileHref}>
+            <MonoLink
+              href={fileHref}
+              onClick={onGoToDiff ? () => onGoToDiff(f.file, f.start_line) : undefined}
+            >
               {f.file}:{lineLabel(f)}
             </MonoLink>
             <ConfidenceNum value={f.confidence} />
