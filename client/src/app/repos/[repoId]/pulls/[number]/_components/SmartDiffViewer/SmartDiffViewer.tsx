@@ -44,7 +44,7 @@ function FileCardBody({ file }: { file: SmartDiffFile }) {
     <div style={s.diffBlock}>
       {diffLines.map((line, i) => {
         const badge =
-          line.type === "+" && line.lineNo != null
+          line.lineNo != null
             ? file.findings.find((f) => f.line === line.lineNo)
             : undefined;
 
