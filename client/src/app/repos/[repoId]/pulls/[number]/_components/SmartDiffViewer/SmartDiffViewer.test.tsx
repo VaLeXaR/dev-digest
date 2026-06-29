@@ -98,7 +98,7 @@ describe("SmartDiffViewer", () => {
     // +184 additions (84+8+92)
     expect(screen.getByText(/\+184/)).toBeInTheDocument();
     // -33 deletions (8+1+24)
-    expect(screen.getByText(/−33/)).toBeInTheDocument();
+    expect(screen.getByText(/-33/)).toBeInTheDocument();
   });
 
   it("renders Core logic, Wiring, Boilerplate section headers", () => {
@@ -144,8 +144,8 @@ describe("SmartDiffViewer", () => {
 
     renderWithIntl(<SmartDiffViewer prId="pr1" />);
 
-    // The patch has line 25 with WARNING finding — badge should show "warning"
-    expect(screen.getByText("warning")).toBeInTheDocument();
+    // The patch has line 25 with WARNING finding — badge shows "⚠ warning" in one span
+    expect(screen.getByText(/warning/)).toBeInTheDocument();
   });
 
   it("shows summary button when pseudocode_summary is non-null, hidden when null", () => {
@@ -175,8 +175,8 @@ describe("SmartDiffViewer", () => {
 
     renderWithIntl(<SmartDiffViewer prId="pr1" />);
 
-    // summary button should be visible
-    expect(screen.getByRole("button", { name: /summary/i })).toBeInTheDocument();
+    // summary button should be visible (aria-label starts with "summary for")
+    expect(screen.getByRole("button", { name: /^summary for/i })).toBeInTheDocument();
 
     cleanup();
 
@@ -189,6 +189,6 @@ describe("SmartDiffViewer", () => {
     renderWithIntl(<SmartDiffViewer prId="pr1" />);
 
     // summary button should NOT be visible (all files have null pseudocode_summary)
-    expect(screen.queryByRole("button", { name: /summary/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^summary for/i })).not.toBeInTheDocument();
   });
 });
