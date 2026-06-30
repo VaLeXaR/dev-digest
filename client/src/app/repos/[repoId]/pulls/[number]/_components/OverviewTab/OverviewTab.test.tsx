@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../../../../messages/en/prReview.json";
@@ -8,6 +8,7 @@ vi.mock("../../../../../../../lib/hooks", () => ({
   useRecalculateIntent: vi.fn(),
   useRisks: vi.fn(),
   useSecretsStatus: vi.fn(),
+  useSettings: vi.fn(),
 }));
 
 vi.mock("../../../../../../../lib/toast", () => ({
@@ -19,10 +20,14 @@ vi.mock("../../../../../../../lib/feature-models", () => ({
   PROVIDER_LABELS: {},
 }));
 
-import { useIntent, useRecalculateIntent, useRisks, useSecretsStatus } from "../../../../../../../lib/hooks";
+import { useIntent, useRecalculateIntent, useRisks, useSecretsStatus, useSettings } from "../../../../../../../lib/hooks";
 import { OverviewTab } from "./OverviewTab";
 
 afterEach(cleanup);
+
+beforeEach(() => {
+  vi.mocked(useSettings).mockReturnValue({ data: undefined } as ReturnType<typeof useSettings>);
+});
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
