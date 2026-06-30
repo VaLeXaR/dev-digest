@@ -18,12 +18,18 @@ export function FindingsPanel({
   repoFullName,
   headSha,
   severityFilter,
+  onGoToDiff,
+  targetFindingId,
+  targetFindingNonce,
 }: {
   findings: FindingRecord[];
   prId: string;
   repoFullName?: string | null;
   headSha?: string | null;
   severityFilter?: string | null;
+  onGoToDiff?: (file: string, line: number) => void;
+  targetFindingId?: string | null;
+  targetFindingNonce?: number;
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
@@ -73,6 +79,9 @@ export function FindingsPanel({
               repoFullName={repoFullName}
               headSha={headSha}
               onAction={(act) => action.mutate({ findingId: f.id, action: act, prId })}
+              onGoToDiff={onGoToDiff}
+              targetId={targetFindingId}
+              targetNonce={targetFindingNonce}
             />
           ))
         )}

@@ -51,14 +51,17 @@
     "blockers": " · {count} blockers"
   },
   "smartDiff": {
-    "coreLabel": "Core",
+    "reviewerOrderedDiff": "REVIEWER-ORDERED DIFF",
+    "coreLabel": "Core logic",
     "wiringLabel": "Wiring",
     "boilerplateLabel": "Boilerplate",
     "largeTitle": "This PR is large ({lines} changed lines)",
     "largeBody": "Consider splitting it into smaller, focused PRs for easier review:",
     "filesCount": "{count} files",
+    "statsLine": "{files} files · +{additions} −{deletions}",
     "findingLines": "{count} finding-lines",
-    "groupedByRole": "Smart Diff · grouped by role"
+    "groupedByRole": "Smart Diff · grouped by role",
+    "summary": "summary"
   },
   "list": {
     "breadcrumb": "Pull Requests",
@@ -102,6 +105,18 @@
     "emptyTitle": "No pull requests",
     "emptyAllBody": "No open PRs found for this repo yet. Refresh to sync from GitHub.",
     "emptyStatusBody": "No PRs with status “{status}”."
+  },
+  "intent": {
+    "title": "Intent",
+    "inScope": "In scope",
+    "outOfScope": "Out of scope",
+    "recalculate": "Recalculate",
+    "recalcError": "Failed to recalculate intent",
+    "empty": "No intent yet — click Recalculate to analyze this PR",
+    "riskAreas": "Risk areas",
+    "generateRisks": "Generate",
+    "recalcRisksError": "Failed to generate risks",
+    "emptyRisks": "No risk areas detected"
   },
   "timeline": {
     "goToReview": "Jump to this run’s findings below",

@@ -57,6 +57,9 @@ export default function PRDetailPage() {
     if (prId) qc.invalidateQueries({ queryKey: ["pr-runs", prId] });
   };
 
+  const [diffTarget, setDiffTarget] = React.useState<{ file: string; line: number; n: number } | null>(null);
+  const [findingTarget, setFindingTarget] = React.useState<{ id: string; n: number } | null>(null);
+
   const tab = search.get("tab") ?? "overview";
   const traceRunId = search.get("trace");
   const setParam = (key: string, val: string | null) => {
@@ -66,6 +69,17 @@ export default function PRDetailPage() {
     router.replace(`/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`);
   };
   const setTab = (t: string) => setParam("tab", t);
+  const handleGoToDiff = (file: string, line: number) => {
+    setDiffTarget((prev) => ({ file, line, n: (prev?.n ?? 0) + 1 }));
+    setTab("diff");
+  };
+  const handleFindingClick = (fId: string) => {
+    setFindingTarget((prev) => ({ id: fId, n: (prev?.n ?? 0) + 1 }));
+    const sp = new URLSearchParams(search.toString());
+    sp.set("tab", "findings");
+    sp.set("findingId", fId);
+    router.replace(`/repos/${repoId}/pulls/${number}?${sp.toString()}`);
+  };
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
@@ -86,7 +100,7 @@ export default function PRDetailPage() {
     { label: `#${number}`, mono: true },
   ];
 
-  // Stale/unknown :repoId → friendly empty state instead of a 404 error.
+  // Stale/unknown :repoId — friendly empty state instead of a 404 error.
   if (repoNotFound) {
     return (
       <AppShell crumb={crumb}>
@@ -134,7 +148,7 @@ export default function PRDetailPage() {
       />
 
       <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
-        {tab === "overview" && <OverviewTab prBody={pr.body} />}
+        {tab === "overview" && <OverviewTab prBody={pr.body} prId={prId ?? ""} />}
 
         {tab === "findings" && (
           <FindingsTab
@@ -158,6 +172,9 @@ export default function PRDetailPage() {
               invalidateRunHistory();
               refetchReviews();
             }}
+            onGoToDiff={handleGoToDiff}
+            targetFindingId={findingTarget?.id ?? null}
+            targetFindingNonce={findingTarget?.n ?? 0}
           />
         )}
 
@@ -167,6 +184,10 @@ export default function PRDetailPage() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            targetFile={diffTarget?.file}
+            targetLine={diffTarget?.line}
+            targetNonce={diffTarget?.n}
+            onFindingClick={handleFindingClick}
           />
         )}
       </div>

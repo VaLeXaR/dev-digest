@@ -81,12 +81,20 @@ export type PrHistory = z.infer<typeof PrHistory>;
 export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);
 export type SmartDiffRole = z.infer<typeof SmartDiffRole>;
 
+export const SmartDiffFileFinding = z.object({
+  line: z.number().int(),
+  severity: z.string(),
+  id: z.string().optional(),
+});
+export type SmartDiffFileFinding = z.infer<typeof SmartDiffFileFinding>;
+
 export const SmartDiffFile = z.object({
   path: z.string(),
   pseudocode_summary: z.string().nullish(),
   additions: z.number().int(),
   deletions: z.number().int(),
-  finding_lines: z.array(z.number().int()),
+  patch: z.string().nullish(),
+  findings: z.array(SmartDiffFileFinding),
 });
 export type SmartDiffFile = z.infer<typeof SmartDiffFile>;
 

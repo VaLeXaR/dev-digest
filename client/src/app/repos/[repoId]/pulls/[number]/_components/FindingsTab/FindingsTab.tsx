@@ -25,6 +25,9 @@ interface FindingsTabProps {
   onOpenTrace: (id: string) => void;
   onDelete: (id: string) => void;
   onRunDone: () => void;
+  onGoToDiff?: (file: string, line: number) => void;
+  targetFindingId?: string | null;
+  targetFindingNonce?: number;
 }
 
 export function FindingsTab({
@@ -41,6 +44,9 @@ export function FindingsTab({
   onOpenTrace,
   onDelete,
   onRunDone,
+  onGoToDiff,
+  targetFindingId,
+  targetFindingNonce,
 }: FindingsTabProps) {
   const handleCancelAll = useCallback(() => {
     liveRunIds.forEach((id) => cancelMutation.mutate(id));
@@ -141,6 +147,7 @@ export function FindingsTab({
             onDelete={onDelete}
             repoFullName={repoFullName}
             headSha={headSha}
+            onGoToDiff={onGoToDiff}
           />
         </div>
       )}
@@ -178,6 +185,9 @@ export function FindingsTab({
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
             severityFilter={severityFilter}
+            onGoToDiff={onGoToDiff}
+            targetFindingId={targetFindingId}
+            targetFindingNonce={targetFindingNonce}
           />
         ))
       )}

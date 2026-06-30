@@ -61,6 +61,11 @@ function FeatureModelRow({
     chosen?.provider ?? feature.defaultProvider,
   );
   const [model, setModel] = React.useState(chosen?.model ?? feature.defaultModel);
+
+  React.useEffect(() => {
+    setProvider(chosen?.provider ?? feature.defaultProvider);
+    setModel(chosen?.model ?? feature.defaultModel);
+  }, [chosen?.provider, chosen?.model, feature.defaultProvider, feature.defaultModel]);
   const { data: models } = useProviderModels(provider);
   const isDefault = !chosen;
   const baseOptions = toModelOptions(models);

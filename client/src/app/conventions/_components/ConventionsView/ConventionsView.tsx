@@ -11,7 +11,10 @@ import {
   useDeleteConvention,
   useDeleteResolvedConventions,
 } from "../../../../lib/hooks/conventions";
+import { useSecretsStatus } from "../../../../lib/hooks";
+import { FEATURE_MODELS, PROVIDER_LABELS } from "../../../../lib/feature-models";
 import { useToast } from "../../../../lib/toast";
+import type { SecretsStatus } from "../../../../lib/types";
 import { ConventionCard } from "../ConventionCard/ConventionCard";
 import { CreateSkillModal } from "../CreateSkillModal/CreateSkillModal";
 import { s } from "./styles";
@@ -28,6 +31,7 @@ export function ConventionsView() {
   } = useConventions(repoId);
 
   const toast = useToast();
+  const { data: secretsStatus } = useSecretsStatus();
   const extractMutation = useExtractConventions();
   const { mutate: patchMutation } = usePatchConvention();
 
@@ -73,6 +77,16 @@ export function ConventionsView() {
 
   function handleRescan() {
     if (!repoId) return;
+    if (secretsStatus) {
+      const feature = FEATURE_MODELS.find((f) => f.id === "conventions");
+      const provider = feature?.defaultProvider as keyof SecretsStatus | undefined;
+      if (provider && !secretsStatus[provider]) {
+        toast.error(
+          `${feature!.label} requires a ${PROVIDER_LABELS[provider] ?? provider} API key — configure it in Settings → API Keys`,
+        );
+        return;
+      }
+    }
     extractMutation.mutate(repoId, {
       onSuccess: (data) => {
         if (data.length === 0) toast.info("Scan complete — no conventions detected");

@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { Intent } from '@devdigest/shared';
+import { Risks } from '@devdigest/shared';
 import type { PullRow } from '../../../db/rows.js';
 
 // ---- PR lookup (workspace-scoped) -----------------------------------------
@@ -65,4 +66,24 @@ export async function getIntent(db: Db, prId: string): Promise<Intent | undefine
   const [row] = await db.select().from(t.prIntent).where(eq(t.prIntent.prId, prId));
   if (!row) return undefined;
   return { intent: row.intent, in_scope: row.inScope, out_of_scope: row.outOfScope };
+}
+
+// ---- risks ----------------------------------------------------------------
+
+export async function upsertRisks(db: Db, prId: string, risks: Risks): Promise<void> {
+  await db
+    .insert(t.prBrief)
+    .values({ prId, json: risks })
+    .onConflictDoUpdate({ target: t.prBrief.prId, set: { json: risks } });
+}
+
+export async function getRisks(db: Db, prId: string): Promise<Risks | undefined> {
+  const row = await db
+    .select()
+    .from(t.prBrief)
+    .where(eq(t.prBrief.prId, prId))
+    .then((rows) => rows[0]);
+  if (!row) return undefined;
+  const parsed = Risks.safeParse(row.json);
+  return parsed.success ? parsed.data : undefined;
 }

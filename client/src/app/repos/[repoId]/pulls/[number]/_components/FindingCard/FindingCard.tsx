@@ -31,6 +31,9 @@ export function FindingCard({
   pending,
   repoFullName,
   headSha,
+  onGoToDiff,
+  targetId,
+  targetNonce,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -39,12 +42,26 @@ export function FindingCard({
   pending?: boolean;
   repoFullName?: string | null;
   headSha?: string | null;
+  onGoToDiff?: (file: string, line: number) => void;
+  targetId?: string | null;
+  targetNonce?: number;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
+  const cardRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (targetId && f.id === targetId) {
+      setExpanded(true);
+      setTimeout(() => {
+        cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 50);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetId, targetNonce]);
   const sevColor = SEV_COLOR[f.severity] ?? SEV_COLOR_FALLBACK;
   const fileHref =
-    repoFullName && headSha
+    !onGoToDiff && repoFullName && headSha
       ? githubBlobUrl(repoFullName, headSha, f.file, f.start_line, f.end_line)
       : undefined;
   const accepted = !!f.accepted_at;
@@ -52,7 +69,7 @@ export function FindingCard({
   const muted = accepted || dismissed;
 
   return (
-    <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
+    <div ref={cardRef} data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
       <div onClick={() => setExpanded((e) => !e)} style={s.header}>
         <div style={s.badgeWrap}>
           <SeverityBadge severity={f.severity as Severity} compact />
@@ -65,7 +82,10 @@ export function FindingCard({
             {dismissed && <span style={s.dismissedTag}>{t("finding.dismissed")}</span>}
           </div>
           <div style={s.metaRow}>
-            <MonoLink href={fileHref}>
+            <MonoLink
+              href={fileHref}
+              onClick={onGoToDiff ? () => onGoToDiff(f.file, f.start_line) : undefined}
+            >
               {f.file}:{lineLabel(f)}
             </MonoLink>
             <ConfidenceNum value={f.confidence} />

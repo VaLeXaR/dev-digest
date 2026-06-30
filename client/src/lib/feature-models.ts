@@ -10,6 +10,12 @@ import type { FeatureModelDef } from "./types";
  * registry here (same pattern as the vendored `vendor/shared` / `vendor/ui`).
  * Keep this in sync with the shared registry.
  */
+export const PROVIDER_LABELS: Record<string, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  openrouter: "OpenRouter",
+};
+
 export const FEATURE_MODELS: FeatureModelDef[] = [
   {
     id: "onboarding",
@@ -22,8 +28,8 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     id: "review_intent",
     label: "PR Review · Intent",
     description: "Derives a PR’s intent and scope before review.",
-    defaultProvider: "openai",
-    defaultModel: "gpt-4.1",
+    defaultProvider: "openrouter",
+    defaultModel: "deepseek/deepseek-v4-flash",
   },
   {
     id: "risk_brief",

@@ -42,7 +42,7 @@ export function MonoLink({
   return (
     <button
       className="mono"
-      onClick={onClick}
+      onClick={(e) => { e.stopPropagation(); onClick?.(); }}
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
       style={style}

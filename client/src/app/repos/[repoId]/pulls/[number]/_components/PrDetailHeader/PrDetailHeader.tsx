@@ -70,7 +70,7 @@ export function PrDetailHeader({
             </span>
             <span className="mono tnum">
               <span style={{ color: "var(--code-add-text)" }}>+{pr.additions}</span>{" "}
-              <span style={{ color: "var(--code-del-text)" }}>−{pr.deletions}</span>
+              <span style={{ color: "var(--code-del-text)" }}>-{pr.deletions}</span>
             </span>
             <Badge dot bg="transparent" color={statusColor}>
               {pr.status}
@@ -103,7 +103,7 @@ export function PrDetailHeader({
         <div style={s.staleBanner}>
           <Icon.AlertTriangle size={13} style={{ color: "var(--warn)", flexShrink: 0 }} />
           <span>
-            This PR is already {pr.status} — running a review is informational and won't affect the
+            This PR is already {pr.status} - running a review is informational and won't affect the
             merged code.
           </span>
         </div>
