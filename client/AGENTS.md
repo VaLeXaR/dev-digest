@@ -11,7 +11,7 @@ Next.js 15 (App Router) · React 19 · TanStack Query · next-intl · Vitest + j
 ## Commands
 
 ```sh
-pnpm dev       # :3000
+pnpm dev       # :4000
 pnpm test      # vitest + jsdom (fetch mocked — no API needed)
 pnpm typecheck
 ```

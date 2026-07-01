@@ -19,15 +19,15 @@ Cross-package code: tsconfig path aliases, not published modules.
 
 | Folder | Package | Port |
 | --- | --- | --- |
-| `server/` | `@devdigest/api` | :3001 |
-| `client/` | `@devdigest/web` | :3000 |
+| `server/` | `@devdigest/api` | :4001 |
+| `client/` | `@devdigest/web` | :4000 |
 | `reviewer-core/` | `@devdigest/reviewer-core` | — |
 | `e2e/` | `@devdigest/e2e` | — |
 
 ## Commands
 
 ```sh
-./scripts/dev.sh    # start everything: Postgres + API :3001 + web :3000
+./scripts/dev.sh    # start everything: Postgres + API :4001 + web :4000
 docker compose down # stop Postgres — NEVER add -v (destroys all data permanently)
 ```
 
@@ -36,6 +36,7 @@ docker compose down # stop Postgres — NEVER add -v (destroys all data permanen
 - **IMPORTANT:** Migrations do NOT run on boot → `cd server && pnpm db:migrate` after every schema change
 - **NEVER** `docker compose down -v` — deletes the pgdata volume with all imported repos and reviews
 - Secrets (API keys, GITHUB_TOKEN) → `~/.devdigest/secrets.json` (mode 0600), not `.env` and not DB
+- API/web run on :4001/:4000 (`server/.env`, `client/.env`), not :3001/:3000 → if the devdigest MCP server can't reach the API, check `.mcp.json`'s `DEVDIGEST_API_URL` matches
 
 > **Self-improving:** When a new project-wide operational constraint is confirmed — a destructive command, a silent failure mode, a credentials invariant — append it above. Format: `**NEVER/ALWAYS** [why] → [rule]`. Monthly: remove rules no longer relevant. Not a crutch — if a gotcha recurs because the tooling is awkward, fix the root cause instead.
 
@@ -45,6 +46,8 @@ Use only project agents from `.claude/agents/` by default:
 `planner`, `implementer`, `researcher`, `architecture-reviewer`, `plan-verifier`, `doc-writer`, `test-writer`.
 
 Spawn a generic agent only if explicitly asked.
+
+**ALWAYS** delegate to `researcher` first for any request about external best practices, documentation, library APIs, or technology standards — before reading any project files or calling WebSearch directly.
 
 ## Skills
 

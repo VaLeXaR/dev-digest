@@ -11,7 +11,7 @@ Fastify 5 · Drizzle ORM · Postgres pgvector · Zod via fastify-type-provider-z
 ## Commands
 
 ```sh
-pnpm dev          # :3001
+pnpm dev          # :4001
 pnpm db:migrate   # IMPORTANT: run after every schema change — not auto on boot
 pnpm db:seed      # idempotent demo data (acme/payments-api, PR #482)
 pnpm test         # unit + integration

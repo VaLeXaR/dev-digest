@@ -76,8 +76,8 @@ clear, skip this and plan.
 
 | Folder | Package | Port | Key stack |
 | --- | --- | --- | --- |
-| `server/` | `@devdigest/api` | :3001 | Fastify 5, Drizzle ORM, Postgres pgvector |
-| `client/` | `@devdigest/web` | :3000 | Next.js 15 App Router, React 19, TanStack Query |
+| `server/` | `@devdigest/api` | :4001 | Fastify 5, Drizzle ORM, Postgres pgvector |
+| `client/` | `@devdigest/web` | :4000 | Next.js 15 App Router, React 19, TanStack Query |
 | `reviewer-core/` | `@devdigest/reviewer-core` | — | Pure TS, LLMProvider injected, no I/O |
 | `e2e/` | `@devdigest/e2e` | — | Playwright |
 
