@@ -51,6 +51,11 @@ Read the plan document completely. Extract every verifiable requirement:
 - Test requirements (`'N unit tests cover scenario X'`)
 - Performance or operational constraints if stated
 - **Wiring/registration** — even if not stated in the plan, these are implicit in any backend feature: module registered in `modules/index.ts`, route mounted, migration applied
+- **Claims about pre-existing/untouched code** — statements in `## Architecture notes` or
+  `## Grilling decisions` asserting existing code already satisfies a behavior (e.g., "existing X
+  already caps to N per Y", "zero changes needed because Z already does W") — even when no task in
+  the plan touches that code. These are exactly the claims most likely to be wrong, because no
+  task's acceptance criteria will ever exercise them.
 
 Number each requirement `R1`, `R2`, … This is your verification checklist.
 
@@ -104,6 +109,7 @@ After the explicit per-requirement pass, sweep once for implicit concerns not st
 | **CI weakening** | Does the diff delete tests, lower coverage thresholds, add `// @ts-ignore`, `it.skip`, or `retry: N`? |
 | **New imports** | Do all new `import … from '…'` references resolve to real, already-present dependencies? |
 | **Diff orphans** | Are there files in `git diff` that map to no requirement? Flag as potential scope creep or unspecified change. |
+| **Aggregate/scale claims** | For any stated per-entity limit ("top-N", "max-M per X"), trace the actual grouping/slicing logic — is the cap applied within each group, or once globally across all groups after merging? A well-named constant (e.g. `MAX_PER_SYMBOL`) does not guarantee correct scope. Also check: does any existing test actually exercise ≥2 groups/entities at once? A fixture with only one group cannot distinguish a correct per-group cap from an incorrect global one. |
 
 ### Step 4: Output
 

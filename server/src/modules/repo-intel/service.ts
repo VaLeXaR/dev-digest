@@ -98,6 +98,14 @@ const PHANTOM_GLOBALS_ALLOWLIST: ReadonlySet<string> = new Set([
   'afterAll', 'afterEach', 'vi', 'jest',
 ]);
 
+/**
+ * Symbol kinds that can actually be invoked. `interface`/`type` declarations
+ * (e.g. `FooProps`) are never "called" — including them as blast-radius
+ * changed-symbols always yields a permanently-empty (0 callers) row. Mirrors
+ * the existing filter in `getCallerSignatures` below.
+ */
+const CALLABLE_SYMBOL_KINDS: ReadonlySet<string> = new Set(['function', 'method', 'class']);
+
 export class RepoIntelService implements RepoIntel {
   private readonly repo: RepoIntelRepository;
 
@@ -247,10 +255,13 @@ export class RepoIntelService implements RepoIntel {
     }
 
     // changed symbols = declared in any changed file (dedup by name+file).
+    // Only callable kinds — interface/type declarations can never have
+    // callers, so including them just produces permanently-empty rows.
     const changedSymbols: BlastChangedSymbol[] = [];
     const seen = new Set<string>();
     for (const s of allSymbols) {
       if (!changedSet.has(s.path)) continue;
+      if (!CALLABLE_SYMBOL_KINDS.has(s.kind)) continue;
       const key = `${s.name}:${s.path}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -320,13 +331,16 @@ export class RepoIntelService implements RepoIntel {
     if (!state || (state.status !== 'full' && state.status !== 'partial')) return null;
 
     // Changed symbols = declared in a changed file. Skip the qualified
-    // `Class.method` dual-emit (the bare form already covers the name).
+    // `Class.method` dual-emit (the bare form already covers the name) and
+    // non-callable kinds (interface/type — they can never have callers, see
+    // CALLABLE_SYMBOL_KINDS).
     const declRows = await this.repo.getSymbolRows(repoId, changedFiles);
     const changedSymbols: BlastChangedSymbol[] = [];
     const nameSet = new Set<string>();
     const seenSym = new Set<string>();
     for (const s of declRows) {
       if (s.name.includes('.')) continue;
+      if (!CALLABLE_SYMBOL_KINDS.has(s.kind)) continue;
       const key = `${s.name}:${s.path}`;
       if (!seenSym.has(key)) {
         seenSym.add(key);
@@ -351,7 +365,7 @@ export class RepoIntelService implements RepoIntel {
       else symsByFile.set(s.path, [s]);
     }
 
-    const callers: BlastCallerRow[] = [];
+    const dedupedCallers: BlastCallerRow[] = [];
     const seenCaller = new Set<string>();
     for (const c of callerRows) {
       const enclosing =
@@ -361,7 +375,7 @@ export class RepoIntelService implements RepoIntel {
       const key = `${c.fromPath}|${enclosing}|${c.toSymbol}`;
       if (seenCaller.has(key)) continue;
       seenCaller.add(key);
-      callers.push({
+      dedupedCallers.push({
         file: c.fromPath,
         symbol: enclosing,
         viaSymbol: c.toSymbol,
@@ -369,7 +383,23 @@ export class RepoIntelService implements RepoIntel {
         rank: c.rank,
       });
     }
-    callers.sort((a, b) => b.rank - a.rank);
+
+    // Cap callers to MAX_CALLERS_PER_SYMBOL PER changed symbol (`viaSymbol`),
+    // sorted by file rank within each group — not a single global top-N slice.
+    // A global slice starves every symbol except the handful with the
+    // highest-ranked callers, leaving most changed symbols at 0 callers even
+    // when real callers exist.
+    const byViaSymbol = new Map<string, BlastCallerRow[]>();
+    for (const c of dedupedCallers) {
+      const arr = byViaSymbol.get(c.viaSymbol);
+      if (arr) arr.push(c);
+      else byViaSymbol.set(c.viaSymbol, [c]);
+    }
+    const callers: BlastCallerRow[] = [];
+    for (const group of byViaSymbol.values()) {
+      group.sort((a, b) => b.rank - a.rank);
+      callers.push(...group.slice(0, MAX_CALLERS_PER_SYMBOL));
+    }
 
     // Precomputed facts per caller file (endpoints + crons), so consumers can
     // attribute them to the changed symbol whose callers live in that file.
@@ -383,7 +413,7 @@ export class RepoIntelService implements RepoIntel {
 
     return {
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
+      callers,
       impactedEndpoints: [...endpoints],
       factsByFile,
       degraded: false,

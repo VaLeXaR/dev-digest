@@ -87,3 +87,27 @@ export async function getRisks(db: Db, prId: string): Promise<Risks | undefined>
   const parsed = Risks.safeParse(row.json);
   return parsed.success ? parsed.data : undefined;
 }
+
+// ---- blast summary ---------------------------------------------------------
+
+export async function upsertBlastSummary(db: Db, prId: string, summary: string): Promise<void> {
+  await db
+    .insert(t.prBlastSummary)
+    .values({ prId, summary, generatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: t.prBlastSummary.prId,
+      set: { summary, generatedAt: new Date() },
+    });
+}
+
+export async function getBlastSummary(
+  db: Db,
+  prId: string,
+): Promise<{ summary: string; generatedAt: Date } | undefined> {
+  const [row] = await db
+    .select()
+    .from(t.prBlastSummary)
+    .where(eq(t.prBlastSummary.prId, prId));
+  if (!row) return undefined;
+  return { summary: row.summary, generatedAt: row.generatedAt };
+}

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Finding, Verdict } from './findings.js';
-import { Intent, Risks, SmartDiff } from './brief.js';
+import { BlastRadius, Intent, Risks, SmartDiff } from './brief.js';
 
 /**
  * A2 — Review-Core API surface contracts. These extend the core
@@ -63,6 +63,14 @@ export type PrIntentRecord = z.infer<typeof PrIntentRecord>;
 /** Risks persisted for a PR (the Risks plus the pr_id it scopes). */
 export const PrRisksRecord = Risks.extend({ pr_id: z.string() });
 export type PrRisksRecord = z.infer<typeof PrRisksRecord>;
+
+/** Blast Radius persisted for a PR (the BlastRadius plus the pr_id it scopes and an honest degraded/reason signal). */
+export const PrBlastRecord = BlastRadius.extend({
+  pr_id: z.string(),
+  degraded: z.boolean().optional(),
+  reason: z.string().optional(),
+});
+export type PrBlastRecord = z.infer<typeof PrBlastRecord>;
 
 /** Smart-diff response for a PR (the SmartDiff). */
 export const SmartDiffResponse = SmartDiff;

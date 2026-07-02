@@ -145,6 +145,16 @@ export class ReviewRepository {
     return pullRepo.getRisks(this.db, prId);
   }
 
+  // ---- blast summary ----
+
+  upsertBlastSummary(prId: string, summary: string): Promise<void> {
+    return pullRepo.upsertBlastSummary(this.db, prId, summary);
+  }
+
+  getBlastSummary(prId: string): Promise<{ summary: string; generatedAt: Date } | undefined> {
+    return pullRepo.getBlastSummary(this.db, prId);
+  }
+
   // ---- observability: agent_runs + run_traces ----------------------------
 
   /** Create an agent_runs row in `running` state; returns its id (= the runId). */

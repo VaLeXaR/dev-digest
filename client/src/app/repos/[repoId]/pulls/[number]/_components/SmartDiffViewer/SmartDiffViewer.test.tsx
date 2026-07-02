@@ -191,4 +191,69 @@ describe("SmartDiffViewer", () => {
     // summary button should NOT be visible (all files have null pseudocode_summary)
     expect(screen.queryByRole("button", { name: /^summary for/i })).not.toBeInTheDocument();
   });
+
+  it("scrolls to the exact target line, not just the file, even when the file starts collapsed", async () => {
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: BASE_DATA,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    const scrolled: string[] = [];
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this.getAttribute("data-line-no") ?? `file:${this.getAttribute("data-file-path")}`);
+    });
+
+    // "src/server.ts" (wiring) has findings: [] → collapsed by default. Its
+    // one patch line resolves to lineNo 1 (see parsePatch: hunk "+1,1" then
+    // one context line). This is exactly the race the fix addresses: the
+    // line element does not exist in the DOM until GroupSection's own effect
+    // expands the file.
+    renderWithIntl(
+      <SmartDiffViewer prId="pr1" targetFile="src/server.ts" targetLine={1} targetNonce={1} />,
+    );
+
+    // Wait for the MutationObserver-driven retry to find the now-mounted line.
+    await vi.waitFor(() => {
+      expect(scrolled).toContain("1");
+    });
+
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+  });
+
+  it("falls back to scrolling the file when the target line is outside every rendered diff hunk", async () => {
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: BASE_DATA,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    const scrolled: string[] = [];
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this.getAttribute("data-line-no") ?? `file:${this.getAttribute("data-file-path")}`);
+    });
+
+    // "src/middleware/rateLimit.ts" (core) is expanded by default and its
+    // patch only ever produces lineNo values around 25-27 — a blast-radius
+    // caller line far outside the shown hunk (e.g. 9999) can never mount a
+    // [data-line-no="9999"] element. Before this fix, the effect waited
+    // forever for a line that structurally cannot appear and never scrolled
+    // at all — the accordion opened with no movement. It must still land on
+    // the file itself instead of silently doing nothing.
+    renderWithIntl(
+      <SmartDiffViewer
+        prId="pr1"
+        targetFile="src/middleware/rateLimit.ts"
+        targetLine={9999}
+        targetNonce={1}
+      />,
+    );
+
+    await vi.waitFor(() => {
+      expect(scrolled).toContain("file:src/middleware/rateLimit.ts");
+    });
+    expect(scrolled).not.toContain("9999");
+
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+  });
 });

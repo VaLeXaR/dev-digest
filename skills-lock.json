@@ -25,6 +25,12 @@
       "skillPath": ".agents/skills/github-workflow-automation/SKILL.md",
       "computedHash": "7a9543669bb172b9f76ad64a617f935996dcb6fdbef15857adab6ae06994bc67"
     },
+    "grilling": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/grilling/SKILL.md",
+      "computedHash": "ef685a6fa0bbe73b05bbd8dc1ec97258191587f07c6aa7dbc9006675ceb8f90f"
+    },
     "next-best-practices": {
       "source": "vercel-labs/next-skills",
       "sourceType": "github",

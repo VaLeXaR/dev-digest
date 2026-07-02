@@ -261,21 +261,60 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
 
   React.useEffect(() => {
     if (!targetFile || isLoading || !data) return;
-    const timer = setTimeout(() => {
-      const scope = viewerRef.current;
-      if (!scope) return;
+    const scope = viewerRef.current;
+    if (!scope) return;
+
+    // The target file's line content (`[data-line-no]`) is only mounted once
+    // GroupSection's own effect flips `expandedFiles[targetFile]` and React
+    // commits that re-render — a sibling effect, not synchronized with this
+    // one. A fixed setTimeout guessed at that timing and often lost the race.
+    // Retry on every DOM mutation until the line element actually exists.
+    //
+    // The exact line can genuinely never appear: SmartDiffViewer renders
+    // unified-diff HUNKS (a few lines of context around each change), not
+    // the full file — a blast-radius caller's line can fall well outside
+    // every shown hunk. Waiting forever for that line left the accordion
+    // open with no scroll at all (worse than doing nothing visibly). Scroll
+    // to the file immediately as a fallback, then upgrade to the exact line
+    // if/when it mounts — never regress to "opens but doesn't move".
+    let scrolledToFileOnce = false;
+    const tryScroll = (): boolean => {
       const fileEl = Array.from(scope.querySelectorAll("[data-file-path]")).find(
         (el) => el.getAttribute("data-file-path") === targetFile,
       );
+      if (!fileEl) return false;
       const lineEl =
-        targetLine != null && fileEl
+        targetLine != null
           ? Array.from(fileEl.querySelectorAll("[data-line-no]")).find(
               (el) => el.getAttribute("data-line-no") === String(targetLine),
             )
           : undefined;
-      (lineEl ?? fileEl)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 200);
-    return () => clearTimeout(timer);
+      if (lineEl) {
+        lineEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        return true;
+      }
+      if (!scrolledToFileOnce) {
+        scrolledToFileOnce = true;
+        fileEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      // Keep watching (unless there was no line request at all, in which
+      // case scrolling to the file already satisfied the request).
+      return targetLine == null;
+    };
+
+    if (tryScroll()) return;
+
+    const observer = new MutationObserver(() => {
+      if (tryScroll()) observer.disconnect();
+    });
+    observer.observe(scope, { childList: true, subtree: true });
+    // Safety cap so a stale observer never lingers if the target line
+    // genuinely never appears (e.g. a line number outside the rendered diff).
+    const timeout = setTimeout(() => observer.disconnect(), 3000);
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeout);
+    };
   }, [targetFile, targetLine, targetNonce, data, isLoading]);
 
   if (isLoading) {
