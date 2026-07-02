@@ -20,7 +20,12 @@ import type { RepoRef } from '@devdigest/shared';
 import type { Container } from '../../../platform/container.js';
 import { withTimeout } from '../../../platform/resilience.js';
 import { parseSymbols, parseReferences, langForFile } from '../../../adapters/astgrep/index.js';
-import { extractEndpoints, extractCrons } from '../../../adapters/codeindex/extract.js';
+import {
+  extractEndpoints,
+  extractCrons,
+  extractExportedConstStrings,
+  resolveJobKindLabels,
+} from '../../../adapters/codeindex/extract.js';
 import {
   DEFAULT_REPO_MAP_TOKEN_BUDGET,
   INDEXER_VERSION,
@@ -142,6 +147,11 @@ export async function runIncremental(
   let filesIndexed = 0;
   let filesSkipped = 0;
   const parseDegraded: Array<{ file: string; reason: string }> = [];
+  // Best-effort only — scoped to just the changed files, not the whole repo
+  // (unlike full.ts's constMap). A job-kind constant declared in a file that
+  // ISN'T part of this incremental diff won't resolve here; it self-corrects
+  // on the next full reindex, which sees every file.
+  const constMap: Record<string, string> = {};
 
   for (const relPath of changed) {
     const lang = langForFile(relPath);
@@ -195,11 +205,16 @@ export async function runIncremental(
       if (endpoints.length > 0 || crons.length > 0) {
         factsBuf.push({ filePath: relPath, endpoints, crons });
       }
+      Object.assign(constMap, extractExportedConstStrings(source));
       filesIndexed += 1;
     } catch (err) {
       filesSkipped += 1;
       parseDegraded.push({ file: relPath, reason: asMessage(err) });
     }
+  }
+
+  for (const fact of factsBuf) {
+    fact.crons = resolveJobKindLabels(fact.crons, constMap);
   }
 
   await repository.deleteForFiles(repoId, changed);

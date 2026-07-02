@@ -4,6 +4,8 @@ import {
   extractReferences,
   extractEndpoints,
   extractCrons,
+  extractExportedConstStrings,
+  resolveJobKindLabels,
 } from '../src/adapters/codeindex/extract.js';
 
 /**
@@ -98,5 +100,61 @@ jobs.register('poll_repo', handler);
     const crons = extractCrons(src);
     expect(crons.some((c) => c.includes('*/5'))).toBe(true);
     expect(crons).toContain('job:poll_repo');
+  });
+
+  it('detects job kinds passed as a named constant, not just a string literal', () => {
+    // This repo's own real pattern (repo-intel/service.ts): the kind is a
+    // SCREAMING_SNAKE_CASE constant, not an inline string — jobKindRe alone
+    // cannot see through it (no symbol table), which is why extractCrons
+    // found 0 real registrations anywhere in this codebase before the
+    // jobKindIdentRe fallback was added.
+    const src = `
+this.container.jobs.register(INDEX_JOB_KIND, async (payload) => {
+  await runFullIndex(this.container, this.repo, payload);
+});
+`;
+    const crons = extractCrons(src);
+    expect(crons).toContain('job:INDEX_JOB_KIND');
+  });
+});
+
+describe('extractExportedConstStrings / resolveJobKindLabels', () => {
+  it('collects SCREAMING_SNAKE_CASE exported string constants', () => {
+    const src = `
+export const INDEX_JOB_KIND = 'repo-intel-index';
+export const REFRESH_JOB_KIND = "repo-intel-refresh";
+const notExported = 'skip-me';
+export const notScreamingCase = 'skip-me-too';
+`;
+    const map = extractExportedConstStrings(src);
+    expect(map).toEqual({
+      INDEX_JOB_KIND: 'repo-intel-index',
+      REFRESH_JOB_KIND: 'repo-intel-refresh',
+    });
+  });
+
+  it('resolves job:NAME entries to their literal constant value, cross-file', () => {
+    // The constant is declared in one file (constants.ts) and used at the
+    // registration call site in another (service.ts) — this is exactly why
+    // resolution has to happen after the whole repo walk, not per-file.
+    const constantsFileSrc = `export const INDEX_JOB_KIND = 'repo-intel-index';`;
+    const serviceFileSrc = `jobs.register(INDEX_JOB_KIND, handler);`;
+
+    const constMap = extractExportedConstStrings(constantsFileSrc);
+    const crons = extractCrons(serviceFileSrc);
+    expect(crons).toEqual(['job:INDEX_JOB_KIND']);
+
+    const resolved = resolveJobKindLabels(crons, constMap);
+    expect(resolved).toEqual(['repo-intel-index']);
+  });
+
+  it('leaves job:NAME unresolved when the constant is never found (honest fallback, no guessing)', () => {
+    const resolved = resolveJobKindLabels(['job:UNKNOWN_KIND'], { OTHER: 'value' });
+    expect(resolved).toEqual(['job:UNKNOWN_KIND']);
+  });
+
+  it('passes through raw cron expressions unchanged', () => {
+    const resolved = resolveJobKindLabels(['*/5 * * * *'], { INDEX_JOB_KIND: 'repo-intel-index' });
+    expect(resolved).toEqual(['*/5 * * * *']);
   });
 });

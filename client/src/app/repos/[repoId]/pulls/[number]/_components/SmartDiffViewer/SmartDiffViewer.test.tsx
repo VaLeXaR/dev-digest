@@ -191,4 +191,33 @@ describe("SmartDiffViewer", () => {
     // summary button should NOT be visible (all files have null pseudocode_summary)
     expect(screen.queryByRole("button", { name: /^summary for/i })).not.toBeInTheDocument();
   });
+
+  it("scrolls to the exact target line, not just the file, even when the file starts collapsed", async () => {
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: BASE_DATA,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    const scrolled: string[] = [];
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this.getAttribute("data-line-no") ?? `file:${this.getAttribute("data-file-path")}`);
+    });
+
+    // "src/server.ts" (wiring) has findings: [] → collapsed by default. Its
+    // one patch line resolves to lineNo 1 (see parsePatch: hunk "+1,1" then
+    // one context line). This is exactly the race the fix addresses: the
+    // line element does not exist in the DOM until GroupSection's own effect
+    // expands the file.
+    renderWithIntl(
+      <SmartDiffViewer prId="pr1" targetFile="src/server.ts" targetLine={1} targetNonce={1} />,
+    );
+
+    // Wait for the MutationObserver-driven retry to find the now-mounted line.
+    await vi.waitFor(() => {
+      expect(scrolled).toContain("1");
+    });
+
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+  });
 });

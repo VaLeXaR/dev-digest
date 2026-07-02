@@ -261,21 +261,47 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
 
   React.useEffect(() => {
     if (!targetFile || isLoading || !data) return;
-    const timer = setTimeout(() => {
-      const scope = viewerRef.current;
-      if (!scope) return;
+    const scope = viewerRef.current;
+    if (!scope) return;
+
+    // The target file's line content (`[data-line-no]`) is only mounted once
+    // GroupSection's own effect flips `expandedFiles[targetFile]` and React
+    // commits that re-render — a sibling effect, not synchronized with this
+    // one. A fixed setTimeout guessed at that timing and often lost the race
+    // (falling back to scrolling the file into view, not the exact line).
+    // Instead, retry on every DOM mutation until the line element actually
+    // exists, then scroll exactly once.
+    const tryScroll = (): boolean => {
       const fileEl = Array.from(scope.querySelectorAll("[data-file-path]")).find(
         (el) => el.getAttribute("data-file-path") === targetFile,
       );
+      if (!fileEl) return false;
       const lineEl =
-        targetLine != null && fileEl
+        targetLine != null
           ? Array.from(fileEl.querySelectorAll("[data-line-no]")).find(
               (el) => el.getAttribute("data-line-no") === String(targetLine),
             )
           : undefined;
-      (lineEl ?? fileEl)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 200);
-    return () => clearTimeout(timer);
+      // A line number was requested but hasn't mounted yet — keep waiting
+      // rather than settling for the file element too early.
+      if (targetLine != null && !lineEl) return false;
+      (lineEl ?? fileEl).scrollIntoView({ behavior: "smooth", block: "center" });
+      return true;
+    };
+
+    if (tryScroll()) return;
+
+    const observer = new MutationObserver(() => {
+      if (tryScroll()) observer.disconnect();
+    });
+    observer.observe(scope, { childList: true, subtree: true });
+    // Safety cap so a stale observer never lingers if the target line
+    // genuinely never appears (e.g. a line number outside the rendered diff).
+    const timeout = setTimeout(() => observer.disconnect(), 3000);
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeout);
+    };
   }, [targetFile, targetLine, targetNonce, data, isLoading]);
 
   if (isLoading) {

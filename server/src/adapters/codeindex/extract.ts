@@ -198,17 +198,70 @@ export function extractEndpoints(content: string): string[] {
  * Heuristic cron/scheduled-job detector. Catches cron expressions in
  * `schedule('* * * * *')`, `cron.schedule(...)`, `CronJob(...)`, and
  * `jobs.register('kind')` / `enqueue(ws, 'kind')` style background work.
+ *
+ * `jobKindRe` only matches when the kind is an inline string literal. This
+ * codebase's own job registrations (`jobs.register(INDEX_JOB_KIND, ...)`)
+ * pass the kind as a named SCREAMING_SNAKE_CASE constant instead — the
+ * idiomatic, non-magic-string style — which `jobKindRe` cannot see through
+ * (it has no symbol table, just per-line regex). `jobKindIdentRe` is a
+ * fallback for exactly that shape: capture the bare constant name as the
+ * label when no string literal is present. Verified empirically: without
+ * this fallback, `extractCrons` found 0 real job registrations anywhere in
+ * this ~300-file repo — only self-matches inside this file's own regex
+ * source and its test fixtures.
  */
 export function extractCrons(content: string): string[] {
   const out = new Set<string>();
   const lines = content.split('\n');
   const cronExprRe = /\b(?:cron|schedule|CronJob)\s*[.(]?\s*\(?\s*['"`]([^'"`]*(?:\*|\d+\s+\d+)[^'"`]*)['"`]/i;
   const jobKindRe = /\b(?:register|enqueue)\s*\(\s*(?:[A-Za-z0-9_$.]+\s*,\s*)?['"`]([a-z][a-z0-9_]*)['"`]/i;
+  const jobKindIdentRe = /\b(?:register|enqueue)\s*\(\s*([A-Z][A-Z0-9_]*)\s*[,)]/;
   for (const raw of lines) {
     const m = raw.match(cronExprRe);
     if (m) out.add(m[1]!.trim());
     const j = raw.match(jobKindRe);
-    if (j && /poll|index|clone|digest|cron|sync|schedule|job/i.test(raw)) out.add(`job:${j[1]}`);
+    if (j && /poll|index|clone|digest|cron|sync|schedule|job/i.test(raw)) {
+      out.add(`job:${j[1]}`);
+      continue;
+    }
+    const ji = raw.match(jobKindIdentRe);
+    if (ji && /poll|index|clone|digest|cron|sync|schedule|job/i.test(raw)) out.add(`job:${ji[1]}`);
   }
   return [...out];
+}
+
+/**
+ * Collects `export const NAME = 'value'` string constants (SCREAMING_SNAKE_CASE
+ * names only — matches the job-kind constant convention). Single file, single
+ * pass, no cross-file resolution — the caller accumulates these across the
+ * whole repo walk to build a repo-wide `{ name: value }` map, then resolves
+ * `job:NAME` entries from `extractCrons` back to their literal value via
+ * `resolveJobKindLabels` below. Needed because `extractCrons` only sees one
+ * file at a time and cannot follow an import to find where a constant used at
+ * a call site (e.g. `jobs.register(INDEX_JOB_KIND, ...)`) is actually declared.
+ */
+export function extractExportedConstStrings(content: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const constRe = /^\s*export\s+const\s+([A-Z][A-Z0-9_]*)\s*=\s*['"`]([^'"`]*)['"`]/;
+  for (const raw of content.split('\n')) {
+    const m = raw.match(constRe);
+    if (m) out[m[1]!] = m[2]!;
+  }
+  return out;
+}
+
+/**
+ * Resolves `job:NAME` entries produced by `extractCrons` to their literal
+ * string value using a repo-wide constant map (built from
+ * `extractExportedConstStrings` across every walked file). Entries with no
+ * match in `constMap` are left as-is (`job:NAME` fallback), and non-`job:`
+ * entries (raw cron expressions) pass through unchanged.
+ */
+export function resolveJobKindLabels(crons: string[], constMap: Record<string, string>): string[] {
+  return crons.map((c) => {
+    const m = c.match(/^job:([A-Z][A-Z0-9_]*)$/);
+    if (!m) return c;
+    const resolved = constMap[m[1]!];
+    return resolved ?? c;
+  });
 }
