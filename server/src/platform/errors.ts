@@ -16,6 +16,7 @@ export class AppError extends Error {
   }
 }
 
+/** Thrown by route handlers for a missing resource (repo, PR, run, finding, skill, agent) → maps to HTTP 404. */
 export class NotFoundError extends AppError {
   constructor(message = 'Not found', details?: unknown) {
     super('not_found', message, 404, details);
