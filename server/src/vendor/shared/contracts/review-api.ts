@@ -75,3 +75,10 @@ export type PrBlastRecord = z.infer<typeof PrBlastRecord>;
 /** Smart-diff response for a PR (the SmartDiff). */
 export const SmartDiffResponse = SmartDiff;
 export type SmartDiffResponse = z.infer<typeof SmartDiffResponse>;
+
+/** Request body of `POST /review/diff` — reviews a raw local working-copy diff. */
+export const ReviewDiffRequest = z.object({
+  diff: z.string().min(1),
+  agentId: z.string().uuid().optional(),
+});
+export type ReviewDiffRequest = z.infer<typeof ReviewDiffRequest>;

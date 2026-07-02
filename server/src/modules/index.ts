@@ -13,6 +13,7 @@ import intentRoutes from './intent/routes.js';
 import risksRoutes from './risks/routes.js';
 import smartDiffRoutes from './smart-diff/routes.js';
 import blastRoutes from './blast/routes.js';
+import reviewDiff from './review-diff/routes.js';
 
 /**
  * Module registry. Each feature module is a Fastify plugin in
@@ -42,4 +43,5 @@ export const modules: Record<string, FastifyPluginAsync> = {
   risksRoutes,
   smartDiffRoutes,
   blastRoutes,
+  reviewDiff,
 };

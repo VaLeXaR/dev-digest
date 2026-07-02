@@ -46,12 +46,35 @@ export interface Convention {
   accepted: boolean | null;
 }
 
+// Finding inside the raw Review returned by POST /review/diff — distinct from
+// the persisted PR-review `Finding` above (line/body): this shape carries
+// start_line/end_line/rationale/suggestion straight from the reviewer engine.
+export interface DiffFinding {
+  severity: string;
+  category: string;
+  title: string;
+  file: string;
+  start_line: number;
+  end_line: number;
+  rationale: string;
+  suggestion: string | null;
+}
+
+// Raw Review returned by POST /review/diff (not persisted, no id)
+export interface DiffReview {
+  verdict: string;
+  summary: string;
+  score: number;
+  findings: DiffFinding[];
+}
+
 export interface ApiClient {
   listAgents(): Promise<Agent[]>;
   startReview(pullId: string, agentId: string): Promise<{ runs: Run[] }>;
   listRuns(pullId: string): Promise<Run[]>;
   getReviews(pullId: string): Promise<Review[]>;
   getConventions(repoId: string): Promise<Convention[]>;
+  reviewDiff(diff: string, agentId?: string): Promise<DiffReview>;
 }
 
 export function createApiClient(baseUrl?: string): ApiClient {
@@ -92,6 +115,14 @@ export function createApiClient(baseUrl?: string): ApiClient {
 
     getConventions(repoId: string): Promise<Convention[]> {
       return request<Convention[]>(`/repos/${repoId}/conventions`);
+    },
+
+    reviewDiff(diff: string, agentId?: string): Promise<DiffReview> {
+      return request<DiffReview>('/review/diff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ diff, ...(agentId ? { agentId } : {}) }),
+      });
     },
   };
 }
