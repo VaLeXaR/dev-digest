@@ -226,6 +226,13 @@ export const s = {
     background: "rgba(220,0,0,0.06)",
   } satisfies CSSProperties,
 
+  // Line jumped to from a click-to-line navigation (e.g. a Blast Radius
+  // caller). Flashes once on mount/re-trigger, then settles to a plain
+  // accent border so the target stays visibly marked after the flash fades.
+  diffLineTarget: {
+    animation: "ddLineTargetFlash 2.4s ease-out",
+  } satisfies CSSProperties,
+
   lineNo: {
     minWidth: 32,
     color: "var(--text-muted)",

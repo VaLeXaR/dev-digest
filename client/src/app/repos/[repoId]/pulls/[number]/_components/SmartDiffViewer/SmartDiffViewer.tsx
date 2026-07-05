@@ -37,7 +37,19 @@ const SEVERITY_BADGE: Record<
   SUGGESTION: { label: "suggestion", color: "var(--sugg)", bg: "var(--sugg-bg)", icon: "%" },
 };
 
-function FileCardBody({ file, onFindingClick }: { file: SmartDiffFile; onFindingClick?: (findingId: string) => void }) {
+function FileCardBody({
+  file,
+  onFindingClick,
+  targetLine,
+  targetNonce,
+}: {
+  file: SmartDiffFile;
+  onFindingClick?: (findingId: string) => void;
+  /** Set only when this file IS the navigation target (see GroupSection) — a
+   * matching line number in some other file must never highlight. */
+  targetLine?: number;
+  targetNonce?: number;
+}) {
   const diffLines = parsePatch(file.patch);
   if (diffLines.length === 0) return null;
 
@@ -73,16 +85,24 @@ function FileCardBody({ file, onFindingClick }: { file: SmartDiffFile; onFinding
               })
             : null;
 
+        const isTargetLine = targetLine != null && line.lineNo === targetLine;
+
         return (
           <div
-            key={i}
+            // Re-keying just the target line on nonce forces the flash
+            // animation to replay when the same line is clicked again
+            // (e.g. a second Blast Radius jump while already on this tab).
+            key={isTargetLine ? `${i}-${targetNonce}` : i}
             data-line-no={line.lineNo ?? undefined}
             style={{
               ...s.diffLine,
               ...lineBg,
-              borderLeft: badgeMeta != null
-                ? `3px solid ${badgeMeta.color}`
-                : "3px solid transparent",
+              ...(isTargetLine ? s.diffLineTarget : undefined),
+              borderLeft: isTargetLine
+                ? "3px solid var(--accent)"
+                : badgeMeta != null
+                  ? `3px solid ${badgeMeta.color}`
+                  : "3px solid transparent",
             }}
           >
             <span style={s.lineNo}>
@@ -132,6 +152,7 @@ function GroupSection({
   tFiles,
   t,
   targetFile,
+  targetLine,
   targetNonce,
   onFindingClick,
 }: {
@@ -141,6 +162,7 @@ function GroupSection({
   tFiles: (count: number) => string;
   t: ReturnType<typeof useTranslations<"prReview">>;
   targetFile?: string;
+  targetLine?: number;
   targetNonce?: number;
   onFindingClick?: (findingId: string) => void;
 }) {
@@ -244,7 +266,14 @@ function GroupSection({
                     {file.pseudocode_summary}
                   </div>
                 )}
-                {hasPatch && isExpanded && <FileCardBody file={file} onFindingClick={onFindingClick} />}
+                {hasPatch && isExpanded && (
+                  <FileCardBody
+                    file={file}
+                    onFindingClick={onFindingClick}
+                    targetLine={file.path === targetFile ? targetLine : undefined}
+                    targetNonce={targetNonce}
+                  />
+                )}
               </div>
             );
           })}
@@ -390,6 +419,7 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
           tFiles={tFiles}
           t={t}
           targetFile={targetFile}
+          targetLine={targetLine}
           targetNonce={targetNonce}
           onFindingClick={onFindingClick}
         />
