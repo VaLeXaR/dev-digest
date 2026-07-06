@@ -1,6 +1,6 @@
 ---
 name: architecture-reviewer
-description: "Read-only architectural auditor. Use to audit a diff or file set against DevDigest's structural contracts — onion layering, DI discipline, reviewer-core isolation, shared-contract sync, process.env leakage. Reports violations with rule citations; never edits."
+description: "Use proactively to audit a diff or file set against DevDigest's structural contracts — onion layering, DI discipline, reviewer-core isolation, shared-contract sync, process.env leakage — especially on AI-generated diffs before merge. Read-only; reports violations with rule citations; never edits."
 model: opus
 tools: Read, Glob, Grep, Skill
 skills:
