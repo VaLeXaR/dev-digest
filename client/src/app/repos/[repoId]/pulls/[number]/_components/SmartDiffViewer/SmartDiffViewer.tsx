@@ -7,6 +7,7 @@ import { useSmartDiff, useLineContext } from "@/lib/hooks";
 import type { SmartDiffRole, SmartDiffFile, LineContextResponse } from "@devdigest/shared";
 import { s } from "./styles";
 import { parsePatch } from "./parsePatch";
+import { translateBaseLineToHead } from "./translateLine";
 
 interface SmartDiffViewerProps {
   prId: string;
@@ -351,6 +352,27 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
   const t = useTranslations("prReview");
   const { data, isLoading } = useSmartDiff(prId);
   const viewerRef = React.useRef<HTMLDivElement>(null);
+
+  // Blast Radius caller lines are indexed against the repo's default branch
+  // (never a PR's own head — see translateLine.ts), so when the target
+  // file is ALSO touched by this PR, an earlier hunk can shift every line
+  // below it. Translate once, using that file's own patch, before this
+  // line number is used for anything (DOM lookup, the context-fetch
+  // fallback, or rendering) — every downstream usage reads the translated
+  // value, never the raw prop.
+  const targetFilePatch = React.useMemo(() => {
+    if (!targetFile || !data) return undefined;
+    for (const group of data.groups) {
+      const file = group.files.find((f) => f.path === targetFile);
+      if (file) return file.patch;
+    }
+    return undefined;
+  }, [data, targetFile]);
+
+  const effectiveTargetLine = React.useMemo(
+    () => (targetLine != null ? translateBaseLineToHead(targetFilePatch, targetLine) : targetLine),
+    [targetFilePatch, targetLine],
+  );
   // Set once `tryScroll` confirms the target line isn't in the DOM for the
   // CURRENT target (file+line+nonce) — gates `useLineContext` below so we
   // only fetch when the line genuinely can't be found, not on every render.
@@ -389,9 +411,9 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
       );
       if (!fileEl) return false;
       const lineEl =
-        targetLine != null
+        effectiveTargetLine != null
           ? Array.from(fileEl.querySelectorAll("[data-line-no]")).find(
-              (el) => el.getAttribute("data-line-no") === String(targetLine),
+              (el) => el.getAttribute("data-line-no") === String(effectiveTargetLine),
             )
           : undefined;
       if (lineEl) {
@@ -403,13 +425,13 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
         scrolledToFileOnce = true;
         fileEl.scrollIntoView({ behavior: "smooth", block: "center" });
       }
-      if (targetLine != null && !reportedMissing) {
+      if (effectiveTargetLine != null && !reportedMissing) {
         reportedMissing = true;
-        setLineMissing({ file: targetFile, line: targetLine, nonce: targetNonce ?? 0 });
+        setLineMissing({ file: targetFile, line: effectiveTargetLine, nonce: targetNonce ?? 0 });
       }
       // Keep watching (unless there was no line request at all, in which
       // case scrolling to the file already satisfied the request).
-      return targetLine == null;
+      return effectiveTargetLine == null;
     };
 
     if (tryScroll()) return;
@@ -427,14 +449,14 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
       observer.disconnect();
       clearTimeout(timeout);
     };
-  }, [targetFile, targetLine, targetNonce, data, isLoading]);
+  }, [targetFile, effectiveTargetLine, targetNonce, data, isLoading]);
 
   const missingActive =
     targetFile != null &&
-    targetLine != null &&
+    effectiveTargetLine != null &&
     lineMissing != null &&
     lineMissing.file === targetFile &&
-    lineMissing.line === targetLine &&
+    lineMissing.line === effectiveTargetLine &&
     lineMissing.nonce === (targetNonce ?? 0);
 
   // Keep the query key stable on the current target regardless of
@@ -443,7 +465,7 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
   // soon as the fetched block mounts and the scroll effect above marks it
   // found) would swap the cache key and drop the just-fetched data,
   // unmounting the block that had just appeared.
-  const { data: lineContext } = useLineContext(prId, targetFile, targetLine, missingActive);
+  const { data: lineContext } = useLineContext(prId, targetFile, effectiveTargetLine, missingActive);
 
   if (isLoading) {
     return (
@@ -518,7 +540,7 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
           tFiles={tFiles}
           t={t}
           targetFile={targetFile}
-          targetLine={targetLine}
+          targetLine={effectiveTargetLine}
           targetNonce={targetNonce}
           lineContext={lineContext}
           onFindingClick={onFindingClick}
