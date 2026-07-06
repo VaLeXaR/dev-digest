@@ -5,13 +5,14 @@ import messages from "../../../../../../../../messages/en/prReview.json";
 
 vi.mock("@/lib/hooks", () => ({
   useSmartDiff: vi.fn(),
+  useLineContext: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ repoId: "r1", number: "42" }),
 }));
 
-import { useSmartDiff } from "@/lib/hooks";
+import { useSmartDiff, useLineContext } from "@/lib/hooks";
 import { SmartDiffViewer } from "./SmartDiffViewer";
 
 afterEach(cleanup);
@@ -253,6 +254,50 @@ describe("SmartDiffViewer", () => {
       expect(scrolled).toContain("file:src/middleware/rateLimit.ts");
     });
     expect(scrolled).not.toContain("9999");
+
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+  });
+
+  it("renders the fetched out-of-diff context window and highlights the target line", () => {
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: BASE_DATA,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    // Simulate useLineContext having already resolved for line 9999 in
+    // src/middleware/rateLimit.ts (the line the "falls back" test above
+    // proved is outside every rendered hunk).
+    vi.mocked(useLineContext).mockReturnValue({
+      data: {
+        file: "src/middleware/rateLimit.ts",
+        target_line: 9999,
+        lines: [
+          { line: 9998, content: "const before = 1;" },
+          { line: 9999, content: "const target = redis.incr(key);" },
+          { line: 10000, content: "const after = 2;" },
+        ],
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useLineContext>);
+
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn();
+
+    renderWithIntl(
+      <SmartDiffViewer
+        prId="pr1"
+        targetFile="src/middleware/rateLimit.ts"
+        targetLine={9999}
+        targetNonce={1}
+      />,
+    );
+
+    expect(screen.getByText(/outside this diff, shown for context/)).toBeInTheDocument();
+    const targetLineEl = document.querySelector('[data-line-no="9999"]');
+    expect(targetLineEl).not.toBeNull();
+    expect(targetLineEl?.textContent).toContain("const target = redis.incr(key);");
+    // Neighbor lines from the fetched window render too, without their own highlight.
+    expect(screen.getByText("const before = 1;")).toBeInTheDocument();
 
     Element.prototype.scrollIntoView = originalScrollIntoView;
   });

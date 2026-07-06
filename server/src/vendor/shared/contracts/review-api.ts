@@ -82,3 +82,16 @@ export const ReviewDiffRequest = z.object({
   agentId: z.string().uuid().optional(),
 });
 export type ReviewDiffRequest = z.infer<typeof ReviewDiffRequest>;
+
+/**
+ * Response of `GET /pulls/:id/line-context` — a window of raw file lines
+ * around a target line, for when the line isn't part of any rendered
+ * unified-diff hunk in the Smart Diff view (`SmartDiff.groups[].files[].patch`
+ * only carries the hunks GitHub returned, not the full file).
+ */
+export const LineContextResponse = z.object({
+  file: z.string(),
+  target_line: z.number().int(),
+  lines: z.array(z.object({ line: z.number().int(), content: z.string() })),
+});
+export type LineContextResponse = z.infer<typeof LineContextResponse>;

@@ -3,8 +3,8 @@
 import React, { useState } from "react";
 import { Skeleton, SectionLabel } from "@devdigest/ui";
 import { useTranslations } from "next-intl";
-import { useSmartDiff } from "@/lib/hooks";
-import type { SmartDiffRole, SmartDiffFile } from "@devdigest/shared";
+import { useSmartDiff, useLineContext } from "@/lib/hooks";
+import type { SmartDiffRole, SmartDiffFile, LineContextResponse } from "@devdigest/shared";
 import { s } from "./styles";
 import { parsePatch } from "./parsePatch";
 
@@ -145,6 +145,51 @@ function FileCardBody({
   );
 }
 
+/**
+ * Fallback for a click-to-line target that isn't part of any rendered diff
+ * hunk — a fetched window of raw file lines around it (see
+ * `useLineContext`). Renders its own `[data-line-no]` markers so the
+ * existing scroll-and-highlight effect in `SmartDiffViewer` picks it up the
+ * same way it would a hunk line, once this block mounts.
+ */
+function LineContextBlock({
+  ctx,
+  targetLine,
+  targetNonce,
+}: {
+  ctx: LineContextResponse;
+  targetLine?: number;
+  targetNonce?: number;
+}) {
+  return (
+    <div style={s.contextBlock}>
+      <div style={s.contextLabel}>
+        {`Line ${ctx.target_line} — outside this diff, shown for context`}
+      </div>
+      <div style={s.diffBlock}>
+        {ctx.lines.map((l) => {
+          const isTargetLine = targetLine != null && l.line === targetLine;
+          return (
+            <div
+              key={isTargetLine ? `ctx-${l.line}-${targetNonce}` : `ctx-${l.line}`}
+              data-line-no={l.line}
+              style={{
+                ...s.diffLine,
+                ...(isTargetLine ? s.diffLineTarget : undefined),
+                borderLeft: isTargetLine ? "3px solid var(--accent)" : "3px solid transparent",
+              }}
+            >
+              <span style={s.lineNo}>{l.line}</span>
+              <span style={s.lineSign} />
+              <span style={s.lineContent}>{l.content}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function GroupSection({
   role,
   files,
@@ -154,6 +199,7 @@ function GroupSection({
   targetFile,
   targetLine,
   targetNonce,
+  lineContext,
   onFindingClick,
 }: {
   role: SmartDiffRole;
@@ -164,6 +210,8 @@ function GroupSection({
   targetFile?: string;
   targetLine?: number;
   targetNonce?: number;
+  /** Only set once it resolves for the CURRENT target (see SmartDiffViewer). */
+  lineContext?: LineContextResponse | null;
   onFindingClick?: (findingId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -215,9 +263,22 @@ function GroupSection({
             const isExpanded = expandedFiles[file.path] ?? defaultFileExpanded;
             const isSum = summaryVisible[file.path] ?? true;
             const hasPatch = file.patch != null && file.patch.length > 0;
+            const isTargetFile = targetFile != null && file.path === targetFile;
 
             return (
-              <div key={`${fileIdx}:${file.path}`} data-file-path={file.path} style={s.fileCard}>
+              <div
+                // Re-keyed on nonce (target file only) so a repeat click on the
+                // same file/line replays the flash instead of no-op'ing on an
+                // already-mounted node. This is the file-level fallback marker —
+                // the exact line may not be highlightable at all (SmartDiffViewer
+                // only renders unified-diff HUNKS, so a blast-radius caller's
+                // line frequently falls outside every hunk); without this, a
+                // click that can't resolve to a line produced ZERO visible
+                // feedback beyond a scroll, which read as "highlight is broken".
+                key={isTargetFile ? `${fileIdx}:${file.path}:${targetNonce}` : `${fileIdx}:${file.path}`}
+                data-file-path={file.path}
+                style={{ ...s.fileCard, ...(isTargetFile ? s.fileCardTarget : undefined) }}
+              >
                 <div
                   style={s.fileCardHeader}
                   onClick={() =>
@@ -274,6 +335,9 @@ function GroupSection({
                     targetNonce={targetNonce}
                   />
                 )}
+                {isExpanded && isTargetFile && lineContext != null && lineContext.file === targetFile && (
+                  <LineContextBlock ctx={lineContext} targetLine={targetLine} targetNonce={targetNonce} />
+                )}
               </div>
             );
           })}
@@ -287,6 +351,14 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
   const t = useTranslations("prReview");
   const { data, isLoading } = useSmartDiff(prId);
   const viewerRef = React.useRef<HTMLDivElement>(null);
+  // Set once `tryScroll` confirms the target line isn't in the DOM for the
+  // CURRENT target (file+line+nonce) — gates `useLineContext` below so we
+  // only fetch when the line genuinely can't be found, not on every render.
+  const [lineMissing, setLineMissing] = useState<{
+    file: string;
+    line: number;
+    nonce: number;
+  } | null>(null);
 
   React.useEffect(() => {
     if (!targetFile || isLoading || !data) return;
@@ -299,14 +371,18 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
     // one. A fixed setTimeout guessed at that timing and often lost the race.
     // Retry on every DOM mutation until the line element actually exists.
     //
-    // The exact line can genuinely never appear: SmartDiffViewer renders
-    // unified-diff HUNKS (a few lines of context around each change), not
-    // the full file — a blast-radius caller's line can fall well outside
-    // every shown hunk. Waiting forever for that line left the accordion
-    // open with no scroll at all (worse than doing nothing visibly). Scroll
-    // to the file immediately as a fallback, then upgrade to the exact line
-    // if/when it mounts — never regress to "opens but doesn't move".
+    // The exact line can genuinely never appear in a rendered HUNK:
+    // SmartDiffViewer's `file.patch` only carries the hunks GitHub returned
+    // (a few lines of context around each change), not the full file — a
+    // blast-radius caller's line can fall well outside every shown hunk.
+    // Scroll to the file immediately as a fallback, report the line missing
+    // (which triggers `useLineContext` to fetch a window of real file
+    // content around it), then keep watching: once that fetched context
+    // block mounts its own `[data-line-no]` markers, this same retry loop
+    // finds and scrolls to it like any other line — never regress to
+    // "opens but doesn't move".
     let scrolledToFileOnce = false;
+    let reportedMissing = false;
     const tryScroll = (): boolean => {
       const fileEl = Array.from(scope.querySelectorAll("[data-file-path]")).find(
         (el) => el.getAttribute("data-file-path") === targetFile,
@@ -320,11 +396,16 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
           : undefined;
       if (lineEl) {
         lineEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        setLineMissing(null);
         return true;
       }
       if (!scrolledToFileOnce) {
         scrolledToFileOnce = true;
         fileEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      if (targetLine != null && !reportedMissing) {
+        reportedMissing = true;
+        setLineMissing({ file: targetFile, line: targetLine, nonce: targetNonce ?? 0 });
       }
       // Keep watching (unless there was no line request at all, in which
       // case scrolling to the file already satisfied the request).
@@ -338,13 +419,31 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
     });
     observer.observe(scope, { childList: true, subtree: true });
     // Safety cap so a stale observer never lingers if the target line
-    // genuinely never appears (e.g. a line number outside the rendered diff).
-    const timeout = setTimeout(() => observer.disconnect(), 3000);
+    // genuinely never appears anywhere (including the fetched context
+    // block — e.g. the line-context request itself 404s). Generous enough
+    // to cover the useLineContext round trip, not just hunk rendering.
+    const timeout = setTimeout(() => observer.disconnect(), 8000);
     return () => {
       observer.disconnect();
       clearTimeout(timeout);
     };
   }, [targetFile, targetLine, targetNonce, data, isLoading]);
+
+  const missingActive =
+    targetFile != null &&
+    targetLine != null &&
+    lineMissing != null &&
+    lineMissing.file === targetFile &&
+    lineMissing.line === targetLine &&
+    lineMissing.nonce === (targetNonce ?? 0);
+
+  // Keep the query key stable on the current target regardless of
+  // `missingActive` — only `enabled` should gate fetching. Nulling
+  // file/line when `missingActive` flips back to false (which happens as
+  // soon as the fetched block mounts and the scroll effect above marks it
+  // found) would swap the cache key and drop the just-fetched data,
+  // unmounting the block that had just appeared.
+  const { data: lineContext } = useLineContext(prId, targetFile, targetLine, missingActive);
 
   if (isLoading) {
     return (
@@ -421,6 +520,7 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
           targetFile={targetFile}
           targetLine={targetLine}
           targetNonce={targetNonce}
+          lineContext={lineContext}
           onFindingClick={onFindingClick}
         />
       ))}
