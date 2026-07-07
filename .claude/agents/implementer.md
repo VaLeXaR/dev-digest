@@ -61,7 +61,7 @@ For every module in your `Owned paths`, read its INSIGHTS file at the **module r
 - `reviewer-core/INSIGHTS.md` for reviewer-core tasks
 - `e2e/INSIGHTS.md` for e2e tasks
 
-Also honour the `Known gotchas` the planner wrote into your task.
+Also honour the `Known gotchas` the implementation-planner wrote into your task.
 Treat every entry as high-confidence guidance.
 
 ### Step 2 — Read the affected files

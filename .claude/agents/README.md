@@ -14,7 +14,7 @@ preloaded skills — the body is the system prompt the agent runs under.
 @researcher find where GitHub token is read in the server package
 
 # Via --agent flag (session-wide agent)
-claude --agent planner "add conventions badge to sidebar"
+claude --agent implementation-planner "add conventions badge to sidebar"
 ```
 
 Agents with a `name:` in frontmatter are auto-dispatched by the harness when their
@@ -170,7 +170,7 @@ full citations. Never modifies files.
 - Looking up library docs, API specs, or best practices from the web
 - Given a list of specific URLs — extracting every actionable pattern from each
 - Fact-checking before architectural decisions
-- Delegated discovery from the Planner (keeps Planner context clean)
+- Delegated discovery from the Implementation Planner (keeps its context clean)
 
 **Design principles:**
 
@@ -198,16 +198,112 @@ full citations. Never modifies files.
 
 ---
 
-### Planner — [`planner.md`](planner.md)
+### Spec Creator — [`spec-creator.md`](spec-creator.md)
 
-**Purpose:** Read-only architect. Turns a feature request into a structured Development Plan
-file (`docs/plans/<name>.md`) with phased tasks, owned-path assignments, a dependency DAG,
-and measurable acceptance criteria. Never writes product code.
+**Purpose:** Writes Spec-Driven-Development specifications — the artifact upstream of a
+Development Plan. Interviews the requester about scope, analyzes any supplied designs (local
+images, Figma/external URLs, or text descriptions) for uncovered corner cases and cross-module
+interactions, and writes a `SPEC-<DATE>-<kebab-title>.md` file with Mermaid diagrams,
+field-level (no-code) interface shapes, measurable success criteria, and EARS-formatted
+acceptance criteria. Only creates/edits files under `specs/` (cross-module) or `<module>/specs/`
+(single-module) — never product code, never `docs/plans/`.
 
-**Model:** `opus` | **Tools:** `Read, Glob, Grep, Bash, Agent, Write`
+**Model:** `opus` | **Tools:** `Read, Glob, Grep, Bash, Agent, WebFetch, Write, Edit, Skill`
 
-**Skills preloaded (eager):** all Implementer skills + `mermaid-diagram` — the Planner carries
-the full skill set because it must anticipate every constraint an Implementer will apply.
+**Skills preloaded (eager):** `security` (Non-functional / Untrusted inputs sections),
+`engineering-insights` (INSIGHTS.md context), `mermaid-diagram` (workflow, service-to-service,
+and data-shape diagrams in `Architecture & contracts`). Domain skills (`onion-architecture-node`,
+`react-frontend-architecture`, `zod`, etc.) are loaded lazily via the `Skill` tool only when
+grounding an `Inputs (provenance)` or `Architecture & contracts` claim in a specific module's
+architecture.
+
+**When to use:**
+- Before Implementation Planner, whenever a feature needs formal requirements/acceptance
+  criteria instead of an ad-hoc request
+- When a UI-facing feature has design mockups that need a systematic gap analysis before anyone
+  writes a Development Plan
+- When a prior spec's decision needs to be superseded with a documented rationale
+
+**Design principles:**
+
+- **Drafts, never invents** — every Goal, User story, Edge case, and AC must trace to a
+  requester statement, an observed design element, or code actually read. Ungroundable judgment
+  calls become `[NEEDS CLARIFICATION: ...]` markers, never silent assumptions.
+- **Diagrams and contracts, never code** — `Architecture & contracts` carries Mermaid diagrams
+  (workflow, service-to-service sequence, data shape) and interface shapes described at the
+  field level in prose. No Zod schema code, TypeScript interfaces, or function signatures — that
+  belongs to Implementation Planner/Implementer.
+- **EARS-only acceptance criteria** — every AC is one of the five EARS patterns (Ubiquitous /
+  Event-driven / State-driven / Unwanted-behavior / Optional-feature) with a concrete
+  trigger/state and reaction; a named ban-list (appropriate/reasonable/user-friendly/quickly/
+  efficiently/robust, plus "should work well"/"handle gracefully") gets translated or flagged,
+  never written as-is. A cross-AC pass catches duplicates, contradictions, and happy-path-only
+  coverage (every failure path needs a matching `IF…THEN…SHALL`) before the file is written.
+- **Assumptions and Dependencies are explicit sections** — `Assumptions` records load-bearing
+  decisions made without asking (distinct from `[NEEDS CLARIFICATION]`, which is genuinely open);
+  `Dependencies` names every other spec/service/team this feature needs. Both required, `None` if
+  empty — never silently omitted.
+- **Success criteria, separate from acceptance criteria** — `Success criteria (measurable)`
+  states the numeric/threshold outcome that proves the ACs hold in production; it is never a
+  restatement of the ACs themselves.
+- **Design findings become questions, not requirements** — corner cases, cross-module gaps, and
+  UX suggestions surfaced during design analysis are phrased as `[NEEDS CLARIFICATION]` with a
+  recommended answer, not folded directly into the spec as settled.
+- **Append-only once decided** — mirrors this repo's ADR convention: while `Status: draft`, the
+  file can be edited in place; the moment it's `approved`/`implemented` it's immutable, and a
+  disagreement produces a new `SPEC-<DATE>` file with `Supersedes:` instead of a rewrite.
+- **Evidence for reuse claims** — every `[reused: ...]` / `[deterministic: ...]` tag in
+  `Inputs (provenance)` cites a `file:line` actually read; unverifiable claims get tagged `[new:
+  ...]` or raised as a clarification instead.
+- **Untrusted inputs is mandatory** — every spec states whether it consumes externally-authored
+  text (PR diffs, comments, LLM output) and, if so, ties that to `reviewer-core`'s
+  `INJECTION_GUARD` — treat as data, never as instructions.
+- **Filenames are dated, not numbered** — `SPEC-<DATE>-<kebab-title>.md` uses today's date
+  (`YYYY-MM-DD`), placed in `specs/` root for cross-module work or `<module>/specs/` for
+  single-module; a same-day collision on the same title gets a `-2`, `-3`, … suffix.
+- **`spec-clarification` handoff** — cannot interview the requester live (isolated subagent, one
+  pass). Ends every run with a directive telling the coordinator to run the dedicated
+  `spec-clarification` skill on the written spec — a one-question-at-a-time interview over
+  `[NEEDS CLARIFICATION]` markers, design gaps, and vague `Non-functional` claims, grounded in
+  the affected module(s)' `INSIGHTS.md` and (when needed) parallel `researcher` dispatches, with
+  its own final self-check before proposing `Status → approved` — before Implementation Planner
+  treats the spec as confirmed input.
+- **Parallel research, not serial** — when drafting surfaces more than one independent external
+  question (an a11y standard and a rate-limit convention, say), dispatches several `researcher`
+  subagents in parallel via `Agent` instead of resolving them one after another.
+
+**Sources:**
+- [Claude Code subagents](https://code.claude.com/docs/en/sub-agents)
+- [How to write acceptance criteria an AI agent can verify (BrainGrid)](https://www.braingrid.ai/blog/how-to-write-acceptance-criteria-ai-agent-can-verify)
+- [Spec-Driven Development with AI (ArceApps)](https://arceapps.com/blog/spec-driven-development-ai/)
+- [github/spec-kit spec-template.md](https://github.com/github/spec-kit/blob/main/templates/spec-template.md) — `Success Criteria`, `Assumptions`, `Key Entities` (data shape without implementation)
+- [github/spec-kit checklist.md](https://github.com/github/spec-kit/blob/main/templates/commands/checklist.md) — traceability, Dependencies & Assumptions, Ambiguities & Conflicts dimensions
+- [Kiro Feature Specs docs](https://kiro.dev/docs/specs/feature-specs/) — requirements vs. design.md separation, requirement-numbered task tracing
+- [Alistair Mavin — EARS official guide](https://alistairmavin.com/ears/)
+- [EARS original paper (Mavin/Wilkinson, RE'09)](https://ccy05327.github.io/SDD/08-PDF/Easy%20Approach%20to%20Requirements%20Syntax%20(EARS).pdf) — the 8 requirement problems EARS fixes (ambiguity, complexity→untestability, omission, duplication)
+- [Martin Fowler — Understanding SDD: Kiro, spec-kit, Tessl](https://martinfowler.com/articles/exploring-gen-ai/sdd-3-tools.html) — the functional/technical boundary is hard to police even in leading tools
+- [Addy Osmani — How to write a good spec for AI agents](https://addyosmani.com/blog/good-spec/)
+
+---
+
+### Implementation Planner — [`implementation-planner.md`](implementation-planner.md)
+
+**Purpose:** Read-only architect. Does **not** write specifications — takes requirements the
+requester already has, in whatever form they arrive (a plain-text request, a `<module>/specs/` /
+`specs/` doc written by Spec Creator, screenshots/mockup images, or a Figma/external design
+link), verifies them, asks clarifying questions on anything ambiguous, and turns the confirmed
+requirements into a structured Development Plan file (`docs/plans/<name>.md`) with phased tasks,
+owned-path assignments, a dependency DAG, and measurable acceptance criteria. Also asks the
+requester to confirm multi-agent vs single-agent execution mode before planning. Never writes
+product code.
+
+**Model:** `opus` | **Tools:** `Read, Glob, Grep, Bash, Agent, WebFetch, Write`
+
+**Skills preloaded (eager):** `engineering-insights`, `mermaid-diagram` only — the Implementation
+Planner carries the same skill set an Implementer uses, but loads domain skills (backend/UI/core)
+lazily via the `Skill` tool once it knows which modules a plan touches, same discipline as
+Implementer. Keeps startup cost proportional to plan scope instead of loading all ~12 skills on
+every run regardless of size.
 
 **When to use:**
 
@@ -249,11 +345,23 @@ the full skill set because it must anticipate every constraint an Implementer wi
 - **INSIGHTS first** — reads `<module>/INSIGHTS.md` for every affected module, folds relevant
   gotchas into each task's `Known gotchas` field.
 - **Delegation via Agent** — heavy codebase discovery delegated to `researcher` or `Explore`
-  subagents, keeping Planner context clean for architecture decisions.
+  subagents, keeping the Implementation Planner's context clean for architecture decisions.
+- **Bash for context, never execution** — `git diff`/`git log`/`git show` only. Never runs test
+  suites, typecheck, or builds during planning; verifying a pre-existing-behavior claim means
+  reading the source, not executing it.
 - **Grilling handoff** — cannot interview the requester itself (a subagent returns once, with no
   live back-and-forth). Ends every run with a directive telling the coordinator to run the
   `grilling` skill on the written plan before any Implementer is dispatched, so gaps and
   ambiguous decisions surface while the plan is still cheap to change.
+- **No specifications** — verifies requirements it receives and flags gaps as questions or
+  recommendations; never originates a requirement, business rule, or acceptance criterion itself.
+- **Execution mode is a confirmed decision, not a default** — always asks the requester whether
+  the plan should target multi-agent parallel execution or a single sequential agent pass before
+  shaping the task DAG and Owned-path partitioning.
+- **Multi-modal input** — reads screenshots/mockups directly with `Read` and fetches Figma or
+  other external design links with `WebFetch`, treating either as design ground truth for the
+  Design audit alongside a plain-text request or an approved spec. Figma-mcp integration is not
+  wired yet — until it is, a figma-mcp reference is treated as "no design provided."
 
 **Sources:**
 - [Best practices for Claude Code](https://code.claude.com/docs/en/best-practices)
@@ -283,7 +391,7 @@ rather than silently failing or guessing.
 via the `Skill` tool based on task type, keeping startup context lean.
 
 **When to use:**
-- After the Planner has produced a Development Plan
+- After the Implementation Planner has produced a Development Plan
 - One Implementer per task; tasks with non-overlapping Owned paths can run simultaneously
 - Both backend (`server/`, `reviewer-core/`) and UI (`client/`) work
 
@@ -381,7 +489,7 @@ running the suite + typecheck before finishing.
 structural contracts (onion layering, DI discipline, reviewer-core isolation, shared-contract
 sync, process.env leakage). Reports violations with rule citations; never edits files.
 
-**Model:** `opus` | **Tools:** `Read, Glob, Grep, Skill`
+**Model:** `sonnet` | **Tools:** `Read, Glob, Grep, Skill`
 
 **When to use:**
 - Before merging a PR that touches server module boundaries, shared contracts, or reviewer-core
@@ -403,15 +511,15 @@ sync, process.env leakage). Reports violations with rule citations; never edits 
 
 These patterns chain agents so each one receives only the context it actually needs, avoiding duplicate reads.
 
-### Pattern 1 — Researcher → Planner handoff (saves ~60–80k tokens)
+### Pattern 1 — Researcher → Implementation Planner handoff (saves ~60–80k tokens)
 
-Call researcher with `output: compact-digest`. Pass the returned `## Research digest` block verbatim at the top of the planner prompt — the planner will skip re-reading the covered files.
+Call researcher with `output: compact-digest`. Pass the returned `## Research digest` block verbatim at the top of the implementation-planner prompt — it will skip re-reading the covered files.
 
 ```
 Coordinator → researcher (output: compact-digest)
                            │ compact-digest
                            ▼
-              planner (## Research digest: <digest>)  ← skips Read-When phase
+              implementation-planner (## Research digest: <digest>)  ← skips Read-When phase
 ```
 
 ### Pattern 2 — Architecture reviewer skip (saves ~20–30k tokens)
@@ -432,16 +540,16 @@ architecture-reviewer → PASS → plan-verifier (## Architecture review: PASS)
 
 For pure config/constant changes, start the implementer prompt with `Task type: config-only`. The implementer goes straight to Read → Edit → Typecheck, skipping INSIGHTS, CLAUDE.md, and skill loading. **Do not use for tasks that add new logic or files.**
 
-### Pattern 5 — Planner → Grilling handoff (surfaces gaps before implementation)
+### Pattern 5 — Implementation Planner → Grilling handoff (surfaces gaps before implementation)
 
 `grilling` is a **skill**, not a subagent — it interviews the requester one question at a time in
-the main conversation, so only the coordinator can run it, not the Planner itself. When the
-Planner returns its plan-file summary, it ends with a `**Next step:**` directive naming the plan
-file. The coordinator must act on that directive immediately: invoke the `grilling` skill with the
-plan file as context before dispatching any Implementer.
+the main conversation, so only the coordinator can run it, not the Implementation Planner itself.
+When the Implementation Planner returns its plan-file summary, it ends with a `**Next step:**`
+directive naming the plan file. The coordinator must act on that directive immediately: invoke the
+`grilling` skill with the plan file as context before dispatching any Implementer.
 
 ```
-Planner → docs/plans/<name>.md + "Next step: run grilling on this plan"
+Implementation Planner → docs/plans/<name>.md + "Next step: run grilling on this plan"
                                             │
                                             ▼
                           Coordinator invokes `grilling` skill on the plan
@@ -455,12 +563,32 @@ Planner → docs/plans/<name>.md + "Next step: run grilling on this plan"
 Skip only when the requester explicitly declines a grilling pass (e.g., trivial or already
 heavily discussed plans) — do not skip silently.
 
+### Pattern 6 — Spec Creator → spec-clarification handoff (surfaces gaps before planning)
+
+Same shape as Pattern 5, one stage earlier in the pipeline. `spec-clarification` is a **skill**,
+not a subagent — only the coordinator can run it. When Spec Creator returns its spec-file
+summary, it ends with a `**Next step:**` directive naming the `SPEC-<DATE>` file. The coordinator
+must invoke the `spec-clarification` skill on that file before treating the spec as confirmed
+input to Implementation Planner.
+
+```
+Spec Creator → <path>/SPEC-YYYY-MM-DD-<name>.md + "Next step: run spec-clarification on this spec"
+                                            │
+                                            ▼
+                    Coordinator invokes `spec-clarification` skill on the spec
+                                            │
+              (interview, one question at a time, over [NEEDS CLARIFICATION] markers)
+                                            │
+                                            ▼
+                    Spec updated, Status → approved → Implementation Planner dispatch
+```
+
 ---
 
 ## Parallel execution pattern
 
 ```
-Planner → docs/plans/<name>.md
+Implementation Planner → docs/plans/<name>.md
               │
     ┌─────────┼─────────┐
     ▼         ▼         ▼

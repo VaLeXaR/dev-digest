@@ -6,7 +6,13 @@
       "type": "node-terminal",
       "request": "launch",
       "command": "\"C:\\\\Program Files\\\\Git\\\\bin\\\\bash.exe\" ./scripts/dev.sh",
-      "cwd": "${workspaceFolder}"
+      "cwd": "${workspaceFolder}",
+      "serverReadyAction": {
+        "pattern": "- Local:\\s+(https?://\\S+)",
+        "uriFormat": "%s",
+        "action": "debugWithChrome",
+        "webRoot": "${workspaceFolder}/client"
+      }
     }
   ]
 }

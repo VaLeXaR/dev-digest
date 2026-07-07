@@ -43,11 +43,45 @@ docker compose down # stop Postgres — NEVER add -v (destroys all data permanen
 ## Agents
 
 Use only project agents from `.claude/agents/` by default:
-`planner`, `implementer`, `researcher`, `architecture-reviewer`, `plan-verifier`, `doc-writer`, `test-writer`.
+`spec-creator`, `implementation-planner`, `implementer`, `researcher`, `architecture-reviewer`, `plan-verifier`, `doc-writer`, `test-writer`.
 
 Spawn a generic agent only if explicitly asked.
 
 **ALWAYS** delegate to `researcher` first for any request about external best practices, documentation, library APIs, or technology standards — before reading any project files or calling WebSearch directly.
+
+### Spec-Driven Development pipeline
+
+`spec-creator` → `implementation-planner` → `implementer` (×N, multi-agent) → `plan-verifier` → `architecture-reviewer` (Sonnet) → [`test-writer`, disabled by default] → `plan-verifier` (final gate) → `pr-self-review` (hook-enforced before `git push`).
+
+Two orchestrator skills cover this — pick based on whether a plan already exists:
+
+- **`/sdd`** (`.claude/skills/sdd/SKILL.md`) — full pipeline from a spec file, a freeform
+  requirements prompt, and/or design references, through the build+verify stages below.
+- **`/run-plan docs/plans/<name>.md`** (`.claude/skills/run-plan/SKILL.md`) — build+verify only,
+  for a plan that's already been through `implementation-planner` and `grilling` by hand. Does not
+  create or clarify specs/plans.
+
+`spec-creator` and `implementation-planner` are also routinely dispatched by hand, one at a time,
+outside either orchestrator — both skills exist alongside manual per-agent dispatch, not instead of
+it.
+
+**Cost tuning (current defaults, revisit if quality regresses):**
+
+- `architecture-reviewer` runs on Sonnet, not Opus — it loops (fix-iterate), and its checks are
+  mechanical grep-and-cite rules, not deep interpretive judgment.
+- `plan-verifier` stays on Opus — it's the merge gate with evidence-based per-requirement
+  reasoning (e.g. per-entity vs. global cap misapplication), and loops less often.
+- `test-writer` is disabled by default in both orchestrator skills — invoke it manually, or ask
+  the orchestrator to enable it for a specific run, when test coverage is actually needed.
+
+**Mandatory handoffs — do not skip, even mid-conversation:**
+
+- After `spec-creator` returns, run the `spec-clarification` skill on the written spec before `implementation-planner` treats it as confirmed input.
+- After `implementation-planner` returns, run the `grilling` skill on the plan file before dispatching any `implementer`.
+- After the multi-agent `implementer` run completes, run `plan-verifier` once (functional-only pass) **before** `architecture-reviewer` — catches cross-task integration gaps a single implementer can't see, before tokens are spent reviewing code that may still need to change.
+- Run `architecture-reviewer` → fix critical/high → (optionally `test-writer`) → a final `plan-verifier` pass (pass `## Architecture review: PASS` to skip re-checking layering/DI/contract-sync) as the last gate before PR.
+
+See `.claude/agents/README.md` for the full per-agent rationale and token-chaining patterns.
 
 ## Skills
 

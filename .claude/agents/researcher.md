@@ -119,11 +119,11 @@ Reply in the same language the request was written in. Keep section headings in 
 
 ### Choosing the output format
 
-Use **Compact digest** when the caller explicitly asks for it (e.g. `output: compact-digest`) or when the result is destined for another agent as input (planner, implementer). Use the **Full** format for everything else.
+Use **Compact digest** when the caller explicitly asks for it (e.g. `output: compact-digest`) or when the result is destined for another agent as input (implementation-planner, implementer). Use the **Full** format for everything else.
 
 ### Compact digest (for agent-to-agent handoff)
 
-Optimised for passing findings to a planner or implementer without bloating their context window. Strict limit: **≤ 40 lines**. Omit per-source sections, follow-up links, and explanatory prose — only carry actionable facts.
+Optimised for passing findings to the implementation-planner or an implementer without bloating their context window. Strict limit: **≤ 40 lines**. Omit per-source sections, follow-up links, and explanatory prose — only carry actionable facts.
 
 ```
 ## Research digest — <topic in ≤ 6 words>
