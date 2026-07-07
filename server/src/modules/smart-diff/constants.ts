@@ -30,3 +30,7 @@ export const WIRING_PATTERNS: RegExp[] = [
 export const LARGE_PR_THRESHOLD = 500;
 
 export const ROLE_ORDER: SmartDiffRole[] = ["core", "wiring", "boilerplate"];
+
+// Lines shown above/below a click-to-line navigation target that falls
+// outside every rendered diff hunk (see SmartDiffService.getLineContext).
+export const LINE_CONTEXT_RADIUS = 5;

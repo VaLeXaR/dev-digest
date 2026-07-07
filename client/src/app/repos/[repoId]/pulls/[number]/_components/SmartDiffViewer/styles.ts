@@ -67,6 +67,15 @@ export const s = {
     overflow: "hidden",
   } satisfies CSSProperties,
 
+  // File-level fallback marker for click-to-line navigation: an inset ring
+  // (not `border`/`borderColor`, to avoid fighting the shorthand `border`
+  // above) plus the same one-shot flash as the line highlight. Shown even
+  // when the exact target line can't be located in the rendered diff hunks.
+  fileCardTarget: {
+    boxShadow: "inset 0 0 0 1px var(--accent)",
+    animation: "ddLineTargetFlash 2.4s ease-out",
+  } satisfies CSSProperties,
+
   fileCardHeader: {
     display: "flex",
     alignItems: "center",
@@ -226,6 +235,13 @@ export const s = {
     background: "rgba(220,0,0,0.06)",
   } satisfies CSSProperties,
 
+  // Line jumped to from a click-to-line navigation (e.g. a Blast Radius
+  // caller). Flashes once on mount/re-trigger, then settles to a plain
+  // accent border so the target stays visibly marked after the flash fades.
+  diffLineTarget: {
+    animation: "ddLineTargetFlash 2.4s ease-out",
+  } satisfies CSSProperties,
+
   lineNo: {
     minWidth: 32,
     color: "var(--text-muted)",
@@ -270,5 +286,18 @@ export const s = {
     display: "flex",
     flexDirection: "column",
     gap: 16,
+  } satisfies CSSProperties,
+
+  // Fallback block showing a fetched window of raw file lines around a
+  // click-to-line target that fell outside every rendered diff hunk.
+  contextBlock: {
+    borderTop: "1px solid var(--border)",
+  } satisfies CSSProperties,
+
+  contextLabel: {
+    fontSize: 11,
+    fontStyle: "italic",
+    color: "var(--text-muted)",
+    padding: "6px 10px 0",
   } satisfies CSSProperties,
 } as const;

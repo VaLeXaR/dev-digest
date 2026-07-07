@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "devdigest": {
+      "command": "node",
+      "args": [
+        "D:/Projects/dev-digest/mcp-server/dist/index.js"
+      ],
+      "env": {
+        "DEVDIGEST_API_URL": "http://localhost:4001"
+      }
+    }
+  }
+}

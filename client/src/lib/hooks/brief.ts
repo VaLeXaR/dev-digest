@@ -5,7 +5,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { notify } from "../toast";
-import type { PrIntentRecord, PrRisksRecord, SecretsStatus, Settings } from "@devdigest/shared";
+import type {
+  PrBlastRecord,
+  PrIntentRecord,
+  PrRisksRecord,
+  SecretsStatus,
+  Settings,
+} from "@devdigest/shared";
 import { FEATURE_MODELS, PROVIDER_LABELS } from "../feature-models";
 
 export function useIntent(prId: string | null | undefined) {
@@ -37,6 +43,29 @@ export function useRisks(prId: string | null | undefined) {
     queryFn: () => api.get<PrRisksRecord>(`/pulls/${prId!}/risks`),
     enabled: !!prId,
     retry: false,
+  });
+}
+
+export function useBlast(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["blast", prId ?? ""],
+    queryFn: () => api.get<PrBlastRecord>(`/pulls/${prId!}/blast`),
+    enabled: !!prId,
+    // 404/empty = no blast radius computed yet — show empty state immediately, no spin.
+    retry: false,
+  });
+}
+
+export function useGenerateBlastSummary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prId: string) =>
+      api.post<PrBlastRecord>(`/pulls/${prId}/blast/summary`),
+    onSuccess: (data, prId) => {
+      qc.setQueryData(["blast", prId], data);
+      qc.invalidateQueries({ queryKey: ["blast", prId] });
+    },
+    onError: () => notify.error("Failed to generate blast radius summary"),
   });
 }
 

@@ -27,7 +27,12 @@ import type { RepoRef } from '@devdigest/shared';
 import type { Container } from '../../../platform/container.js';
 import { withTimeout } from '../../../platform/resilience.js';
 import { parseSymbols, parseReferences, langForFile } from '../../../adapters/astgrep/index.js';
-import { extractEndpoints, extractCrons } from '../../../adapters/codeindex/extract.js';
+import {
+  extractEndpoints,
+  extractCrons,
+  extractExportedConstStrings,
+  resolveJobKindLabels,
+} from '../../../adapters/codeindex/extract.js';
 import {
   DEFAULT_REPO_MAP_TOKEN_BUDGET,
   INDEX_SOFT_BUDGET_MS,
@@ -118,6 +123,13 @@ export async function runFullIndex(
   const refsBuf: IndexerReferenceRow[] = [];
   const factsBuf: IndexerFileFactsRow[] = [];
   const parseDegraded: ParseDegradedEntry[] = [];
+  // Repo-wide `CONST_NAME -> literal value` map, accumulated across every
+  // walked file, used to resolve `job:CONST_NAME` facts entries (from
+  // extractCrons) to their real value after the walk completes — see
+  // resolveJobKindLabels below. Plain object mutation across the parse
+  // queue's concurrent callbacks is safe: JS property assignment is
+  // synchronous, no interleaving within a single `constMap[k] = v` op.
+  const constMap: Record<string, string> = {};
   let filesIndexed = 0;
   let filesSkipped = walk.stats.skippedTooLarge;
   let softBudgetReached = false;
@@ -188,6 +200,7 @@ export async function runFullIndex(
         if (endpoints.length > 0 || crons.length > 0) {
           factsBuf.push({ filePath: relPath, endpoints, crons });
         }
+        Object.assign(constMap, extractExportedConstStrings(source));
         filesIndexed += 1;
       } catch (err) {
         filesSkipped += 1;
@@ -197,6 +210,15 @@ export async function runFullIndex(
   }
 
   await parseQ.onIdle();
+
+  // Resolve `job:CONST_NAME` facts entries now that constMap has seen every
+  // walked file (a job kind constant can be declared in a different file
+  // than the one that registers it — cross-file, only resolvable after the
+  // full walk completes). Falls back to the raw `job:CONST_NAME` label when
+  // no matching `export const` was found anywhere in the walk.
+  for (const fact of factsBuf) {
+    fact.crons = resolveJobKindLabels(fact.crons, constMap);
+  }
 
   // Persist phase -------------------------------------------------------
   // Delete-then-insert is the idempotent shape blast already uses. Keeps

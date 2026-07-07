@@ -11,8 +11,8 @@ aliases, not published modules):
 
 | Folder           | Package                     | What it is                                            | Port |
 |------------------|-----------------------------|-------------------------------------------------------|------|
-| `server/`        | `@devdigest/api`            | Fastify API + Drizzle/Postgres (pgvector)             | 3001 |
-| `client/`        | `@devdigest/web`            | Next.js 15 web app (the studio)                       | 3000 |
+| `server/`        | `@devdigest/api`            | Fastify API + Drizzle/Postgres (pgvector)             | 4001 |
+| `client/`        | `@devdigest/web`            | Next.js 15 web app (the studio)                       | 4000 |
 | `reviewer-core/` | `@devdigest/reviewer-core`  | Pure review engine: diff → prompt → LLM → findings    | —    |
 | `e2e/`           | `@devdigest/e2e`            | Deterministic browser e2e (agent-browser)             | —    |
 | `server/src/vendor/shared` | `@devdigest/shared` | Zod contracts shared across every package             | —    |
@@ -27,8 +27,8 @@ project context into reviews) lives inside the server at
 ```mermaid
 flowchart LR
   subgraph Studio["Local studio (your machine)"]
-    WEB["client/<br/>Next.js · :3000"]
-    API["server/<br/>Fastify · :3001"]
+    WEB["client/<br/>Next.js · :4000"]
+    API["server/<br/>Fastify · :4001"]
     PG[("Postgres<br/>pgvector")]
     WEB -->|"REST /repos /pulls /agents /runs …"| API
     API --> PG
@@ -103,9 +103,9 @@ This script:
 2. creates `server/.env` and `client/.env` from `.env.example` if missing,
 3. installs deps in `server/` and `client/` (only when `node_modules` is absent),
 4. applies DB migrations and seeds demo data,
-5. launches the API (`:3001`) and the web app (`:3000`).
+5. launches the API (`:4001`) and the web app (`:4000`).
 
-Open **http://localhost:3000**. Press **Ctrl-C** to stop the dev servers —
+Open **http://localhost:4000**. Press **Ctrl-C** to stop the dev servers —
 Postgres keeps running (`docker compose down` to stop it).
 
 Flags: `--no-seed` · `--no-client` · `--db-only` · `--help`.
@@ -121,9 +121,9 @@ docker compose up -d                                   # Postgres + pgvector
 cd server && pnpm install
 pnpm db:migrate          # apply migrations (NOT run automatically on boot)
 pnpm db:seed             # idempotent demo data (optional)
-pnpm dev                 # API on :3001
+pnpm dev                 # API on :4001
 
-cd ../client && pnpm install && pnpm dev               # web on :3000
+cd ../client && pnpm install && pnpm dev               # web on :4000
 ```
 
 ## Useful scripts

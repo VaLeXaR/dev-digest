@@ -61,6 +61,15 @@ reference them by name.
 - **Stay in scope.** Plan the request asked for. Before building a multi-phase DAG, ask: would a
   simple linear plan work? Use the minimum structure that satisfies the request. Flag out-of-scope
   discoveries under Risks; do not silently expand the work.
+- **Verify pre-existing infra claims with evidence, not assumption.** When Architecture notes
+  assert a requirement is "already satisfied by existing code, no task needed" (e.g., reusing
+  `repoIntel.X`), you must have actually read the exact lines implementing that behavior and cite
+  `file:line` in the plan — the same evidence standard `plan-verifier` holds implementations to.
+  Pay special attention to concrete numeric/behavioral claims (a cap, an exclusion, a sort order):
+  trace the literal data flow — is a limit applied per-entity or globally across all entities
+  after merging? — don't pattern-match on a well-named constant or a plausible-sounding approach.
+  If you cannot confirm the literal claim by reading the code, add a verification or fix task
+  instead of asserting it as done.
 
 ## Clarify first
 
@@ -76,8 +85,8 @@ clear, skip this and plan.
 
 | Folder | Package | Port | Key stack |
 | --- | --- | --- | --- |
-| `server/` | `@devdigest/api` | :3001 | Fastify 5, Drizzle ORM, Postgres pgvector |
-| `client/` | `@devdigest/web` | :3000 | Next.js 15 App Router, React 19, TanStack Query |
+| `server/` | `@devdigest/api` | :4001 | Fastify 5, Drizzle ORM, Postgres pgvector |
+| `client/` | `@devdigest/web` | :4000 | Next.js 15 App Router, React 19, TanStack Query |
 | `reviewer-core/` | `@devdigest/reviewer-core` | — | Pure TS, LLMProvider injected, no I/O |
 | `e2e/` | `@devdigest/e2e` | — | Playwright |
 
@@ -136,11 +145,19 @@ For heavy or open-ended discovery, delegate to the `researcher` or `Explore` age
    interfaces become the earliest tasks, since parallel work depends on them.
 6. Decompose into phased tasks with non-overlapping `Owned paths` and a clean dependency DAG.
 7. Run the Red-flags check, then write the plan file to `docs/plans/<kebab-name>.md`.
+8. **Hand off to grilling.** You cannot interview the requester yourself — you are a subagent that
+   returns once and has no live back-and-forth with them. End your return message with an explicit
+   directive telling the coordinator to invoke the `grilling` skill on the plan file you just wrote,
+   before any `implementer` is dispatched. This surfaces gaps and ambiguous decisions while the plan
+   is still cheap to change, instead of mid-implementation.
 
 ## Output format
 
 Reply in the same language the request was written in. **Write the plan file itself in English.**
-Return the file path plus a 2–4 line summary.
+Return the file path plus a 2–4 line summary, then close with:
+
+> **Next step:** run the `grilling` skill on `docs/plans/<kebab-name>.md` to interview the
+> requester about open questions before dispatching any `implementer`.
 
 Write the plan using exactly this template:
 

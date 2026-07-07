@@ -3,9 +3,9 @@ import { startPg, dockerAvailable, type PgFixture } from '../../../test/helpers/
 import { buildApp } from '../../app.js';
 import { loadConfig } from '../../platform/config.js';
 import { seed } from '../../db/seed.js';
-import { MockGitHubClient } from '../../adapters/mocks.js';
+import { MockGitHubClient, MockGitClient } from '../../adapters/mocks.js';
 import * as t from '../../db/schema.js';
-import { SmartDiff } from '@devdigest/shared';
+import { SmartDiff, LineContextResponse, type RepoRef } from '@devdigest/shared';
 
 const hasDocker = await dockerAvailable();
 const d = hasDocker ? describe : describe.skip;
@@ -63,6 +63,17 @@ d('SmartDiff endpoint (Testcontainers pg)', () => {
         // SmartDiffService makes no LLM calls, but Container requires the key;
         // provide MockGitHubClient to prevent any real GitHub token lookup.
         github: new MockGitHubClient(),
+      },
+    });
+  }
+
+  function buildAppWithFiles(files: Record<string, string>) {
+    return buildApp({
+      config: config(),
+      db: pg.handle.db,
+      overrides: {
+        github: new MockGitHubClient(),
+        git: new MockGitClient({ files }),
       },
     });
   }
@@ -215,6 +226,120 @@ d('SmartDiff endpoint (Testcontainers pg)', () => {
     const res = await app.inject({
       method: 'GET',
       url: ['/pulls', unknownId, 'smart-diff'].join('/'),
+    });
+
+    expect(res.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  it('GET /pulls/:id/line-context returns a window of lines around the target line', async () => {
+    const FILE = 'src/example.ts';
+    const content = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n');
+    const app = await buildAppWithFiles({ [FILE]: content });
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/pulls/${pr.id}/line-context?file=${encodeURIComponent(FILE)}&line=10`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = LineContextResponse.parse(res.json());
+    expect(body.file).toBe(FILE);
+    expect(body.target_line).toBe(10);
+    // Radius 5 -> lines 5..15
+    expect(body.lines[0]).toEqual({ line: 5, content: 'line 5' });
+    expect(body.lines.at(-1)).toEqual({ line: 15, content: 'line 15' });
+    expect(body.lines.find((l) => l.line === 10)).toEqual({ line: 10, content: 'line 10' });
+
+    await app.close();
+  });
+
+  it('GET /pulls/:id/line-context clamps the window at the start of the file', async () => {
+    const FILE = 'src/short.ts';
+    const content = Array.from({ length: 8 }, (_, i) => `line ${i + 1}`).join('\n');
+    const app = await buildAppWithFiles({ [FILE]: content });
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/pulls/${pr.id}/line-context?file=${encodeURIComponent(FILE)}&line=2`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = LineContextResponse.parse(res.json());
+    expect(body.lines[0]).toEqual({ line: 1, content: 'line 1' });
+    expect(body.lines.at(-1)).toEqual({ line: 7, content: 'line 7' });
+
+    await app.close();
+  });
+
+  it('GET /pulls/:id/line-context returns 404 when the requested line is out of range', async () => {
+    const FILE = 'src/example.ts';
+    const content = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n');
+    const app = await buildAppWithFiles({ [FILE]: content });
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/pulls/${pr.id}/line-context?file=${encodeURIComponent(FILE)}&line=500`,
+    });
+
+    expect(res.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  it('GET /pulls/:id/line-context retries via fetchPullHead when the head commit is not yet in the local mirror', async () => {
+    const FILE = 'src/example.ts';
+    const content = Array.from({ length: 5 }, (_, i) => `line ${i + 1}`).join('\n');
+
+    // Simulates the common case for a just-opened/demo PR: the local clone
+    // only tracks the default branch, so `showFile` at the PR's head sha
+    // fails until `fetchPullHead` pulls that commit object in.
+    class FlakyGitClient extends MockGitClient {
+      public fetchCalls = 0;
+      private attempts = 0;
+      async fetchPullHead(): Promise<void> {
+        this.fetchCalls++;
+        return super.fetchPullHead();
+      }
+      async showFile(repo: RepoRef, ref: string, path: string): Promise<string> {
+        this.attempts++;
+        if (this.attempts === 1) throw new Error('object not found locally');
+        return super.showFile(repo, ref, path);
+      }
+    }
+    const git = new FlakyGitClient({ files: { [FILE]: content } });
+
+    const app = await buildApp({
+      config: config(),
+      db: pg.handle.db,
+      overrides: { github: new MockGitHubClient(), git },
+    });
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/pulls/${pr.id}/line-context?file=${encodeURIComponent(FILE)}&line=3`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = LineContextResponse.parse(res.json());
+    expect(body.lines.find((l) => l.line === 3)).toEqual({ line: 3, content: 'line 3' });
+    expect(git.fetchCalls).toBe(1);
+
+    await app.close();
+  });
+
+  it('GET /pulls/:id/line-context returns 404 for an unknown PR id', async () => {
+    const app = await buildAppWithFiles({});
+    const unknownId = '00000000-0000-0000-0000-000000000002';
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/pulls/${unknownId}/line-context?file=src/example.ts&line=1`,
     });
 
     expect(res.statusCode).toBe(404);

@@ -13,10 +13,11 @@
  * raw-SQL probes below MUST swallow `undefined_table` (Postgres 42P01) so the
  * facade keeps returning degraded — never throws.
  */
-import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import { clampIndexedName } from '../../db/schema/context.js';
+import { BFS_DEPTH } from './constants.js';
 import type { DegradedReason, FileRankRow, IndexState, IndexStatus } from './types.js';
 
 /** Chunk size for batched inserts — same value blast already uses. */
@@ -386,16 +387,39 @@ export class RepoIntelRepository {
   /**
    * Resolve `references.decl_file` through the import graph (step 5).
    * A reference `(from_path → to_symbol)` resolves to file `F` iff `from_path`
-   * imports `F` AND `F` exports a symbol named `to_symbol` — and ONLY when that
-   * candidate is unique. 0 or >1 candidates leave `decl_file = NULL` (which is
-   * the honest "unresolved" signal, never a nearest-name guess).
+   * reaches `F` within `BFS_DEPTH` hops of `file_edges` AND `F` exports a
+   * symbol named `to_symbol` — and ONLY when that candidate is unique. 0 or
+   * >1 candidates leave `decl_file = NULL` (the honest "unresolved" signal,
+   * never a nearest-name guess).
+   *
+   * Depth must be >1: this codebase's dominant import pattern is a barrel
+   * `_components/<Name>/index.ts` that does `export { X } from './X'` — the
+   * declaring file re-exports nothing itself (`symbols` has zero rows for
+   * `index.ts`), so a direct (1-hop) `from_path → to_file` edge only ever
+   * reaches the barrel, never the file that actually declares `X`. Walking
+   * `file_edges` up to `BFS_DEPTH` hops (same constant used by
+   * `getCriticalPaths`'s BFS) reaches through the barrel to the real
+   * declaration.
+   *
+   * NEAREST DEPTH WINS, not "unique across all depths combined". Only the
+   * shallowest depth at which ANY candidate exists is considered for a given
+   * reference; uniqueness is checked within that depth only. This matters
+   * because this codebase also has same-named symbols at different depths —
+   * e.g. a bare function `deleteReview` in `review.repo.ts` AND a
+   * `ReviewRepository.deleteReview` method (dual-emitted under its bare
+   * name) reachable from the same caller. Pooling candidates across all
+   * depths made every such reference newly ambiguous (2 candidates → NULL)
+   * even though the depth-1 match alone was already unique and correct.
+   * Nearest-wins preserves every pre-existing depth-1 resolution exactly and
+   * only reaches to depth 2+ when depth 1 found nothing.
    *
    * `reset: true` (incremental) first clears every decl_file so a changed
    * decl-file can't leave a stale resolution behind; full index inserts rows
    * with NULL decl_file already, so reset is unnecessary there.
    *
    * Quoted `"references"` — it's a SQL reserved word. The query is fully
-   * parameterised on repoId (no injection surface).
+   * parameterised on repoId (no injection surface); `BFS_DEPTH` is a
+   * compile-time constant, not user input.
    */
   async resolveReferences(repoId: string, opts: { reset: boolean }): Promise<void> {
     if (opts.reset) {
@@ -404,23 +428,41 @@ export class RepoIntelRepository {
       );
     }
     await this.db.execute(sql`
-      WITH cand AS (
-        SELECT r.id AS ref_id, e.to_file AS decl
+      WITH RECURSIVE reach(from_file, to_file, depth) AS (
+        SELECT from_file, to_file, 1
+        FROM file_edges
+        WHERE repo_id = ${repoId}
+        UNION
+        SELECT reach.from_file, e.to_file, reach.depth + 1
+        FROM reach
+        JOIN file_edges e ON e.repo_id = ${repoId} AND e.from_file = reach.to_file
+        WHERE reach.depth < ${BFS_DEPTH}
+      ),
+      cand AS (
+        SELECT r.id AS ref_id, reach.to_file AS decl, reach.depth
         FROM "references" r
-        JOIN file_edges e ON e.repo_id = r.repo_id AND e.from_file = r.from_path
-        JOIN symbols s ON s.repo_id = r.repo_id AND s.path = e.to_file
+        JOIN reach ON reach.from_file = r.from_path
+        JOIN symbols s ON s.repo_id = r.repo_id AND s.path = reach.to_file
                       AND s.name = r.to_symbol AND s.exported = true
         WHERE r.repo_id = ${repoId}
-        GROUP BY r.id, e.to_file
+        GROUP BY r.id, reach.to_file, reach.depth
+      ),
+      min_depth AS (
+        SELECT ref_id, MIN(depth) AS min_depth FROM cand GROUP BY ref_id
+      ),
+      nearest AS (
+        SELECT c.ref_id, c.decl
+        FROM cand c
+        JOIN min_depth m ON m.ref_id = c.ref_id AND m.min_depth = c.depth
       ),
       uniq AS (
-        SELECT ref_id FROM cand GROUP BY ref_id HAVING count(*) = 1
+        SELECT ref_id FROM nearest GROUP BY ref_id HAVING count(*) = 1
       )
       UPDATE "references" r
-      SET decl_file = c.decl
-      FROM cand c
-      JOIN uniq u ON u.ref_id = c.ref_id
-      WHERE r.id = c.ref_id
+      SET decl_file = n.decl
+      FROM nearest n
+      JOIN uniq u ON u.ref_id = n.ref_id
+      WHERE r.id = n.ref_id
     `);
   }
 
@@ -526,6 +568,10 @@ export class RepoIntelRepository {
           eq(t.references.repoId, repoId),
           inArray(t.references.declFile, declFiles),
           inArray(t.references.toSymbol, names),
+          // Exclude same-file references — a symbol's own declaration file is
+          // never counted as a "caller" (mirrors the ripgrep fallback path in
+          // RepoIntelService.getBlastRadius, which skips `r.fromPath === sym.file`).
+          ne(t.references.fromPath, t.references.declFile),
         ),
       );
   }

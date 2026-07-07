@@ -3,10 +3,11 @@
 import React, { useState } from "react";
 import { Skeleton, SectionLabel } from "@devdigest/ui";
 import { useTranslations } from "next-intl";
-import { useSmartDiff } from "@/lib/hooks";
-import type { SmartDiffRole, SmartDiffFile } from "@devdigest/shared";
+import { useSmartDiff, useLineContext } from "@/lib/hooks";
+import type { SmartDiffRole, SmartDiffFile, LineContextResponse } from "@devdigest/shared";
 import { s } from "./styles";
 import { parsePatch } from "./parsePatch";
+import { translateBaseLineToHead } from "./translateLine";
 
 interface SmartDiffViewerProps {
   prId: string;
@@ -37,7 +38,19 @@ const SEVERITY_BADGE: Record<
   SUGGESTION: { label: "suggestion", color: "var(--sugg)", bg: "var(--sugg-bg)", icon: "%" },
 };
 
-function FileCardBody({ file, onFindingClick }: { file: SmartDiffFile; onFindingClick?: (findingId: string) => void }) {
+function FileCardBody({
+  file,
+  onFindingClick,
+  targetLine,
+  targetNonce,
+}: {
+  file: SmartDiffFile;
+  onFindingClick?: (findingId: string) => void;
+  /** Set only when this file IS the navigation target (see GroupSection) — a
+   * matching line number in some other file must never highlight. */
+  targetLine?: number;
+  targetNonce?: number;
+}) {
   const diffLines = parsePatch(file.patch);
   if (diffLines.length === 0) return null;
 
@@ -73,16 +86,24 @@ function FileCardBody({ file, onFindingClick }: { file: SmartDiffFile; onFinding
               })
             : null;
 
+        const isTargetLine = targetLine != null && line.lineNo === targetLine;
+
         return (
           <div
-            key={i}
+            // Re-keying just the target line on nonce forces the flash
+            // animation to replay when the same line is clicked again
+            // (e.g. a second Blast Radius jump while already on this tab).
+            key={isTargetLine ? `${i}-${targetNonce}` : i}
             data-line-no={line.lineNo ?? undefined}
             style={{
               ...s.diffLine,
               ...lineBg,
-              borderLeft: badgeMeta != null
-                ? `3px solid ${badgeMeta.color}`
-                : "3px solid transparent",
+              ...(isTargetLine ? s.diffLineTarget : undefined),
+              borderLeft: isTargetLine
+                ? "3px solid var(--accent)"
+                : badgeMeta != null
+                  ? `3px solid ${badgeMeta.color}`
+                  : "3px solid transparent",
             }}
           >
             <span style={s.lineNo}>
@@ -125,6 +146,51 @@ function FileCardBody({ file, onFindingClick }: { file: SmartDiffFile; onFinding
   );
 }
 
+/**
+ * Fallback for a click-to-line target that isn't part of any rendered diff
+ * hunk — a fetched window of raw file lines around it (see
+ * `useLineContext`). Renders its own `[data-line-no]` markers so the
+ * existing scroll-and-highlight effect in `SmartDiffViewer` picks it up the
+ * same way it would a hunk line, once this block mounts.
+ */
+function LineContextBlock({
+  ctx,
+  targetLine,
+  targetNonce,
+}: {
+  ctx: LineContextResponse;
+  targetLine?: number;
+  targetNonce?: number;
+}) {
+  return (
+    <div style={s.contextBlock}>
+      <div style={s.contextLabel}>
+        {`Line ${ctx.target_line} — outside this diff, shown for context`}
+      </div>
+      <div style={s.diffBlock}>
+        {ctx.lines.map((l) => {
+          const isTargetLine = targetLine != null && l.line === targetLine;
+          return (
+            <div
+              key={isTargetLine ? `ctx-${l.line}-${targetNonce}` : `ctx-${l.line}`}
+              data-line-no={l.line}
+              style={{
+                ...s.diffLine,
+                ...(isTargetLine ? s.diffLineTarget : undefined),
+                borderLeft: isTargetLine ? "3px solid var(--accent)" : "3px solid transparent",
+              }}
+            >
+              <span style={s.lineNo}>{l.line}</span>
+              <span style={s.lineSign} />
+              <span style={s.lineContent}>{l.content}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function GroupSection({
   role,
   files,
@@ -132,7 +198,9 @@ function GroupSection({
   tFiles,
   t,
   targetFile,
+  targetLine,
   targetNonce,
+  lineContext,
   onFindingClick,
 }: {
   role: SmartDiffRole;
@@ -141,7 +209,10 @@ function GroupSection({
   tFiles: (count: number) => string;
   t: ReturnType<typeof useTranslations<"prReview">>;
   targetFile?: string;
+  targetLine?: number;
   targetNonce?: number;
+  /** Only set once it resolves for the CURRENT target (see SmartDiffViewer). */
+  lineContext?: LineContextResponse | null;
   onFindingClick?: (findingId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -193,9 +264,22 @@ function GroupSection({
             const isExpanded = expandedFiles[file.path] ?? defaultFileExpanded;
             const isSum = summaryVisible[file.path] ?? true;
             const hasPatch = file.patch != null && file.patch.length > 0;
+            const isTargetFile = targetFile != null && file.path === targetFile;
 
             return (
-              <div key={`${fileIdx}:${file.path}`} data-file-path={file.path} style={s.fileCard}>
+              <div
+                // Re-keyed on nonce (target file only) so a repeat click on the
+                // same file/line replays the flash instead of no-op'ing on an
+                // already-mounted node. This is the file-level fallback marker —
+                // the exact line may not be highlightable at all (SmartDiffViewer
+                // only renders unified-diff HUNKS, so a blast-radius caller's
+                // line frequently falls outside every hunk); without this, a
+                // click that can't resolve to a line produced ZERO visible
+                // feedback beyond a scroll, which read as "highlight is broken".
+                key={isTargetFile ? `${fileIdx}:${file.path}:${targetNonce}` : `${fileIdx}:${file.path}`}
+                data-file-path={file.path}
+                style={{ ...s.fileCard, ...(isTargetFile ? s.fileCardTarget : undefined) }}
+              >
                 <div
                   style={s.fileCardHeader}
                   onClick={() =>
@@ -244,7 +328,17 @@ function GroupSection({
                     {file.pseudocode_summary}
                   </div>
                 )}
-                {hasPatch && isExpanded && <FileCardBody file={file} onFindingClick={onFindingClick} />}
+                {hasPatch && isExpanded && (
+                  <FileCardBody
+                    file={file}
+                    onFindingClick={onFindingClick}
+                    targetLine={file.path === targetFile ? targetLine : undefined}
+                    targetNonce={targetNonce}
+                  />
+                )}
+                {isExpanded && isTargetFile && lineContext != null && lineContext.file === targetFile && (
+                  <LineContextBlock ctx={lineContext} targetLine={targetLine} targetNonce={targetNonce} />
+                )}
               </div>
             );
           })}
@@ -259,24 +353,119 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
   const { data, isLoading } = useSmartDiff(prId);
   const viewerRef = React.useRef<HTMLDivElement>(null);
 
+  // Blast Radius caller lines are indexed against the repo's default branch
+  // (never a PR's own head — see translateLine.ts), so when the target
+  // file is ALSO touched by this PR, an earlier hunk can shift every line
+  // below it. Translate once, using that file's own patch, before this
+  // line number is used for anything (DOM lookup, the context-fetch
+  // fallback, or rendering) — every downstream usage reads the translated
+  // value, never the raw prop.
+  const targetFilePatch = React.useMemo(() => {
+    if (!targetFile || !data) return undefined;
+    for (const group of data.groups) {
+      const file = group.files.find((f) => f.path === targetFile);
+      if (file) return file.patch;
+    }
+    return undefined;
+  }, [data, targetFile]);
+
+  const effectiveTargetLine = React.useMemo(
+    () => (targetLine != null ? translateBaseLineToHead(targetFilePatch, targetLine) : targetLine),
+    [targetFilePatch, targetLine],
+  );
+  // Set once `tryScroll` confirms the target line isn't in the DOM for the
+  // CURRENT target (file+line+nonce) — gates `useLineContext` below so we
+  // only fetch when the line genuinely can't be found, not on every render.
+  const [lineMissing, setLineMissing] = useState<{
+    file: string;
+    line: number;
+    nonce: number;
+  } | null>(null);
+
   React.useEffect(() => {
     if (!targetFile || isLoading || !data) return;
-    const timer = setTimeout(() => {
-      const scope = viewerRef.current;
-      if (!scope) return;
+    const scope = viewerRef.current;
+    if (!scope) return;
+
+    // The target file's line content (`[data-line-no]`) is only mounted once
+    // GroupSection's own effect flips `expandedFiles[targetFile]` and React
+    // commits that re-render — a sibling effect, not synchronized with this
+    // one. A fixed setTimeout guessed at that timing and often lost the race.
+    // Retry on every DOM mutation until the line element actually exists.
+    //
+    // The exact line can genuinely never appear in a rendered HUNK:
+    // SmartDiffViewer's `file.patch` only carries the hunks GitHub returned
+    // (a few lines of context around each change), not the full file — a
+    // blast-radius caller's line can fall well outside every shown hunk.
+    // Scroll to the file immediately as a fallback, report the line missing
+    // (which triggers `useLineContext` to fetch a window of real file
+    // content around it), then keep watching: once that fetched context
+    // block mounts its own `[data-line-no]` markers, this same retry loop
+    // finds and scrolls to it like any other line — never regress to
+    // "opens but doesn't move".
+    let scrolledToFileOnce = false;
+    let reportedMissing = false;
+    const tryScroll = (): boolean => {
       const fileEl = Array.from(scope.querySelectorAll("[data-file-path]")).find(
         (el) => el.getAttribute("data-file-path") === targetFile,
       );
+      if (!fileEl) return false;
       const lineEl =
-        targetLine != null && fileEl
+        effectiveTargetLine != null
           ? Array.from(fileEl.querySelectorAll("[data-line-no]")).find(
-              (el) => el.getAttribute("data-line-no") === String(targetLine),
+              (el) => el.getAttribute("data-line-no") === String(effectiveTargetLine),
             )
           : undefined;
-      (lineEl ?? fileEl)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [targetFile, targetLine, targetNonce, data, isLoading]);
+      if (lineEl) {
+        lineEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        setLineMissing(null);
+        return true;
+      }
+      if (!scrolledToFileOnce) {
+        scrolledToFileOnce = true;
+        fileEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      if (effectiveTargetLine != null && !reportedMissing) {
+        reportedMissing = true;
+        setLineMissing({ file: targetFile, line: effectiveTargetLine, nonce: targetNonce ?? 0 });
+      }
+      // Keep watching (unless there was no line request at all, in which
+      // case scrolling to the file already satisfied the request).
+      return effectiveTargetLine == null;
+    };
+
+    if (tryScroll()) return;
+
+    const observer = new MutationObserver(() => {
+      if (tryScroll()) observer.disconnect();
+    });
+    observer.observe(scope, { childList: true, subtree: true });
+    // Safety cap so a stale observer never lingers if the target line
+    // genuinely never appears anywhere (including the fetched context
+    // block — e.g. the line-context request itself 404s). Generous enough
+    // to cover the useLineContext round trip, not just hunk rendering.
+    const timeout = setTimeout(() => observer.disconnect(), 8000);
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeout);
+    };
+  }, [targetFile, effectiveTargetLine, targetNonce, data, isLoading]);
+
+  const missingActive =
+    targetFile != null &&
+    effectiveTargetLine != null &&
+    lineMissing != null &&
+    lineMissing.file === targetFile &&
+    lineMissing.line === effectiveTargetLine &&
+    lineMissing.nonce === (targetNonce ?? 0);
+
+  // Keep the query key stable on the current target regardless of
+  // `missingActive` — only `enabled` should gate fetching. Nulling
+  // file/line when `missingActive` flips back to false (which happens as
+  // soon as the fetched block mounts and the scroll effect above marks it
+  // found) would swap the cache key and drop the just-fetched data,
+  // unmounting the block that had just appeared.
+  const { data: lineContext } = useLineContext(prId, targetFile, effectiveTargetLine, missingActive);
 
   if (isLoading) {
     return (
@@ -351,7 +540,9 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
           tFiles={tFiles}
           t={t}
           targetFile={targetFile}
+          targetLine={effectiveTargetLine}
           targetNonce={targetNonce}
+          lineContext={lineContext}
           onFindingClick={onFindingClick}
         />
       ))}

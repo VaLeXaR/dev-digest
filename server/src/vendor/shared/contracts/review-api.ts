@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Finding, Verdict } from './findings.js';
-import { Intent, Risks, SmartDiff } from './brief.js';
+import { BlastRadius, Intent, Risks, SmartDiff } from './brief.js';
 
 /**
  * A2 — Review-Core API surface contracts. These extend the core
@@ -64,6 +64,34 @@ export type PrIntentRecord = z.infer<typeof PrIntentRecord>;
 export const PrRisksRecord = Risks.extend({ pr_id: z.string() });
 export type PrRisksRecord = z.infer<typeof PrRisksRecord>;
 
+/** Blast Radius persisted for a PR (the BlastRadius plus the pr_id it scopes and an honest degraded/reason signal). */
+export const PrBlastRecord = BlastRadius.extend({
+  pr_id: z.string(),
+  degraded: z.boolean().optional(),
+  reason: z.string().optional(),
+});
+export type PrBlastRecord = z.infer<typeof PrBlastRecord>;
+
 /** Smart-diff response for a PR (the SmartDiff). */
 export const SmartDiffResponse = SmartDiff;
 export type SmartDiffResponse = z.infer<typeof SmartDiffResponse>;
+
+/** Request body of `POST /review/diff` — reviews a raw local working-copy diff. */
+export const ReviewDiffRequest = z.object({
+  diff: z.string().min(1),
+  agentId: z.string().uuid().optional(),
+});
+export type ReviewDiffRequest = z.infer<typeof ReviewDiffRequest>;
+
+/**
+ * Response of `GET /pulls/:id/line-context` — a window of raw file lines
+ * around a target line, for when the line isn't part of any rendered
+ * unified-diff hunk in the Smart Diff view (`SmartDiff.groups[].files[].patch`
+ * only carries the hunks GitHub returned, not the full file).
+ */
+export const LineContextResponse = z.object({
+  file: z.string(),
+  target_line: z.number().int(),
+  lines: z.array(z.object({ line: z.number().int(), content: z.string() })),
+});
+export type LineContextResponse = z.infer<typeof LineContextResponse>;

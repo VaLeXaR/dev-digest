@@ -60,3 +60,11 @@ export const prBrief = pgTable('pr_brief', {
     .references(() => pullRequests.id, { onDelete: 'cascade' }),
   json: jsonb('json').notNull(),
 });
+
+export const prBlastSummary = pgTable('pr_blast_summary', {
+  prId: uuid('pr_id')
+    .primaryKey()
+    .references(() => pullRequests.id, { onDelete: 'cascade' }),
+  summary: text('summary').notNull(),
+  generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
+});

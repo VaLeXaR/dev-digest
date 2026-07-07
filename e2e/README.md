@@ -74,7 +74,7 @@ Only safe if your dev DB contains *only* the seeded repo (see precondition
 above). Otherwise prefer the hermetic runner.
 
 ```sh
-./scripts/dev.sh          # Postgres + API :3001 + web :3000 (seeded)
+./scripts/dev.sh          # Postgres + API :4001 + web :4000 (seeded)
 cd e2e && npm install && npm test
 ```
 

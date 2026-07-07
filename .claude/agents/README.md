@@ -250,6 +250,10 @@ the full skill set because it must anticipate every constraint an Implementer wi
   gotchas into each task's `Known gotchas` field.
 - **Delegation via Agent** — heavy codebase discovery delegated to `researcher` or `Explore`
   subagents, keeping Planner context clean for architecture decisions.
+- **Grilling handoff** — cannot interview the requester itself (a subagent returns once, with no
+  live back-and-forth). Ends every run with a directive telling the coordinator to run the
+  `grilling` skill on the written plan before any Implementer is dispatched, so gaps and
+  ambiguous decisions surface while the plan is still cheap to change.
 
 **Sources:**
 - [Best practices for Claude Code](https://code.claude.com/docs/en/best-practices)
@@ -427,6 +431,29 @@ architecture-reviewer → PASS → plan-verifier (## Architecture review: PASS)
 ### Pattern 4 — Implementer minimal path (saves ~20–30k tokens per config task)
 
 For pure config/constant changes, start the implementer prompt with `Task type: config-only`. The implementer goes straight to Read → Edit → Typecheck, skipping INSIGHTS, CLAUDE.md, and skill loading. **Do not use for tasks that add new logic or files.**
+
+### Pattern 5 — Planner → Grilling handoff (surfaces gaps before implementation)
+
+`grilling` is a **skill**, not a subagent — it interviews the requester one question at a time in
+the main conversation, so only the coordinator can run it, not the Planner itself. When the
+Planner returns its plan-file summary, it ends with a `**Next step:**` directive naming the plan
+file. The coordinator must act on that directive immediately: invoke the `grilling` skill with the
+plan file as context before dispatching any Implementer.
+
+```
+Planner → docs/plans/<name>.md + "Next step: run grilling on this plan"
+                                            │
+                                            ▼
+                          Coordinator invokes `grilling` skill on the plan
+                                            │
+                          (interview, one question at a time, with the requester)
+                                            │
+                                            ▼
+                              Plan updated if needed → Implementer dispatch
+```
+
+Skip only when the requester explicitly declines a grilling pass (e.g., trivial or already
+heavily discussed plans) — do not skip silently.
 
 ---
 
