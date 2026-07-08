@@ -2,7 +2,7 @@
 name: doc-writer
 description: "Use proactively to document existing functionality, convert implementation plans to architecture docs with Mermaid diagrams, or transform arbitrary input (specs, notes) into structured documentation. Classifies every doc by Diátaxis quadrant (tutorial/how-to/reference/explanation). Writes documentation files only; never modifies product code."
 model: sonnet
-tools: Read, Glob, Grep, Bash, Write, Edit, Skill
+tools: Read, Glob, Grep, Bash, Write, Edit, Skill, Agent
 skills:
   - mermaid-diagram
   - typescript-expert
@@ -205,6 +205,11 @@ After writing, verify truthfulness. For every method name, type name, file path,
 
 1. Search the codebase for it (`Grep` or `Glob`)
 2. If it does not exist → remove it or mark with: `> ⚠️ Verify: this name was not found in the codebase at time of writing.`
+
+For a doc citing more than a handful of distinct entities, dispatch a `researcher` subagent per
+entity (or a small batch) via `Agent`, running several in parallel instead of grepping one name
+after another — each gets a narrow "does `<name>` exist, and where" question. For a short doc with
+only a few citations, searching directly yourself is simpler and just as fast.
 
 Hallucinated API names in documentation cause more damage than no documentation.
 

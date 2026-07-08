@@ -24,6 +24,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [grilling](grilling/SKILL.md) | Shared | Interview the requester one-at-a-time about open questions in a Development Plan before any `implementer` is dispatched |
 | [sdd](sdd/SKILL.md) | Shared | `/sdd` — orchestrates the full Spec-Driven Development pipeline end to end (spec → plan → build → verify), with an architecture-review fix-iterate loop |
 | [run-plan](run-plan/SKILL.md) | Shared | `/run-plan docs/plans/<name>.md` — build+verify only: implementer → plan-verifier → architecture-reviewer (fix-iterate loop) → final plan-verifier gate, for a plan already approved and grilled by hand |
+| [workflow-retro](workflow-retro/SKILL.md) | Shared | `/workflow-retro` — manual, on-demand run after `/sdd`/`/run-plan`/a hand-dispatched agent sequence; logs dispatch cost (incl. nested sub-agents, cache efficiency via optional `deep` mode) to `docs/retros/ledger.md` and friction/near-misses to `.claude/agents/WORKFLOW-INSIGHTS.md` |
 
 ## What Are Skills?
 

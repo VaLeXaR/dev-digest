@@ -175,6 +175,11 @@ Report:
 - Plan-verifier: final gate verdict.
 - **Next step:** `git push` / `gh pr create` will trigger `pr-self-review`'s hook automatically —
   no separate action needed unless the user wants to run `/pr-self-review` manually first.
+- **Mention, don't invoke:** `/workflow-retro` is available to log this run's dispatch cost, cache
+  efficiency, and any friction to `docs/retros/ledger.md` + `.claude/agents/WORKFLOW-INSIGHTS.md` —
+  worth mentioning for a non-trivial run (multiple fix-loop rounds, a `BLOCKED`/`NEEDS_CONTEXT`
+  detour, anything that felt slower than expected). It is manual, on-demand only — say it's
+  available, do not run it yourself; only run it if the user explicitly asks.
 
 ## What this skill is NOT
 

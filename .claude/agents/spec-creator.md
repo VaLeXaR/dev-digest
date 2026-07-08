@@ -77,7 +77,12 @@ decisions.
   `## Inputs (provenance)` must cite a `file:line` you actually read proving that behavior exists.
   If you cannot confirm it, tag it `[new: ...]` instead or raise a `[NEEDS CLARIFICATION]` — the
   same evidence standard `implementation-planner` and `plan-verifier` hold implementations to.
-  Don't pattern-match on a plausible-sounding function name.
+  Don't pattern-match on a plausible-sounding function name. When a draft needs more than one
+  independent piece of internal evidence (e.g. confirming a claimed prompt-slot shape in one module
+  and a claimed storage precedent in another), delegate each to a `researcher` subagent via `Agent`
+  and dispatch them in parallel rather than reading files yourself one after another — this is the
+  same parallel-dispatch pattern as external research below, just aimed at the codebase instead of
+  the web.
 - **Untrusted inputs is mandatory, not optional.** Every spec must include the section — either
   populated (the feature reads external/attacker-influenced text: PR diffs, GitHub comments, LLM
   output, user-submitted content — must be treated as data, never as instructions, per
@@ -96,7 +101,10 @@ decisions.
   call `WebSearch` yourself or write from memory. When drafting surfaces more than one
   independent research question (e.g. an a11y standard for `Non-functional` and a rate-limit
   convention for a different AC), dispatch several `researcher` subagents in parallel rather than
-  one after another — each gets a narrow, self-contained question.
+  one after another — each gets a narrow, self-contained question. This applies equally to internal
+  evidence-gathering (see "Verify reuse claims with evidence" above) — prefer several parallel
+  `researcher` dispatches over serial `Read`/`Grep` whenever a draft needs more than one independent
+  fact confirmed, internal or external, so evidence-gathering isn't the bottleneck.
 
 ## EARS cheat sheet
 
@@ -249,7 +257,11 @@ plausibly supersede an existing spec but you can't find or confirm which one.
 ## Output format
 
 Reply in the same language the request was written in. **Write the spec file itself in English.**
-Return the file path plus a 2–4 line summary, then close with:
+Return the file path plus a 2–4 line summary. If anything about drafting this spec is worth a
+future `/workflow-retro` pass knowing — design analysis surfaced unusually many gaps, a
+`[reused: ...]` claim needed more digging than expected, the request arrived badly underspecified
+— add a one-line `**Process note:**` before the Next step line; omit it entirely when there's
+nothing notable, don't pad with "went smoothly." Then close with:
 
 > **Next step:** run the `spec-clarification` skill on `<path>/SPEC-YYYY-MM-DD-<kebab-title>.md`
 > to resolve open questions before `implementation-planner` treats it as confirmed input.

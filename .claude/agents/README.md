@@ -50,7 +50,7 @@ flow/data-model diagrams, (3) arbitrary input → structured docs matched to the
 Classifies every page by Diátaxis quadrant (tutorial/how-to/reference/explanation). Writes
 documentation files only; never modifies product code.
 
-**Model:** `sonnet` | **Tools:** `Read, Glob, Grep, Bash, Write, Edit, Skill`
+**Model:** `sonnet` | **Tools:** `Read, Glob, Grep, Bash, Write, Edit, Skill, Agent`
 
 **Skills preloaded (eager):** `mermaid-diagram` (diagrams), `typescript-expert` (reading source types),
 `onion-architecture-node` (backend structure), `react-frontend-architecture` (client structure),
@@ -74,7 +74,9 @@ run may need any of them.
   of every new file so the chain from source to doc is always traceable.
 - **Existence verification** — after drafting, greps every named entity (function, type, file)
   to confirm it exists in the current codebase. Entities not found are removed or marked with a
-  warning callout; hallucinated API names in docs cause more damage than no documentation.
+  warning callout; hallucinated API names in docs cause more damage than no documentation. For a
+  doc citing more than a handful of distinct entities, dispatches a `researcher` subagent per
+  entity (or small batch) via `Agent` in parallel rather than grepping one name after another.
 - **ADRs are append-only** — never edits an accepted ADR; creates a new one that supersedes it.
 - **INSIGHTS first** — reads `<module>/INSIGHTS.md` before writing to avoid contradicting
   existing decisions or missing documented gotchas.
@@ -110,7 +112,7 @@ for each item, and outputs VERIFIED / PARTIAL / UNVERIFIED / CANNOT-VERIFY per r
 with a PASS / FAIL / REVIEW gate verdict and concrete action items for gaps. Read-only; never
 modifies files.
 
-**Model:** `opus` | **Tools:** `Read, Glob, Grep, Bash, Skill`
+**Model:** `opus` | **Tools:** `Read, Glob, Grep, Bash, Skill, Agent`
 
 **Skills preloaded (eager):** `typescript-expert`, `onion-architecture-node`,
 `react-frontend-architecture` (locate backend and frontend artifacts), `zod` (interpret
@@ -141,6 +143,11 @@ shared contract changes), `security` (inform the implicit auth/access-control sw
   blocking gaps, not just a tally.
 - **Cross-package contract sync** — for Zod/shared-contract requirements, verifies both
   `server/src/vendor/shared/` and `client/src/vendor/shared/` copies must match.
+- **Parallel evidence-gathering** — requirements are already verified independently (Pass 1 says
+  so explicitly); for a checklist beyond a handful of items, dispatches one `researcher` subagent
+  per requirement (or small batch) via `Agent`, running several in parallel rather than searching
+  R1, then R2, then R3 in sequence. Classification (VERIFIED/PARTIAL/UNVERIFIED/CANNOT-VERIFY)
+  stays with the verifier itself — only the file-hunting is delegated.
 
 **Sources:**
 - [Spec-Driven Development with AI (ArceApps)](https://arceapps.com/blog/spec-driven-development-ai/)
@@ -271,6 +278,9 @@ architecture.
 - **Parallel research, not serial** — when drafting surfaces more than one independent external
   question (an a11y standard and a rate-limit convention, say), dispatches several `researcher`
   subagents in parallel via `Agent` instead of resolving them one after another.
+- **Optional process note** — the reply may include a one-line `**Process note:**` when drafting
+  surfaced unusual friction (unusually many gaps, a claim that needed real digging) — first-hand
+  signal for a later `/workflow-retro` pass, omitted when there's nothing notable.
 
 **Sources:**
 - [Claude Code subagents](https://code.claude.com/docs/en/sub-agents)
@@ -344,8 +354,10 @@ every run regardless of size.
   Use a multi-phase DAG only when a linear plan genuinely cannot satisfy the requirements.
 - **INSIGHTS first** — reads `<module>/INSIGHTS.md` for every affected module, folds relevant
   gotchas into each task's `Known gotchas` field.
-- **Delegation via Agent** — heavy codebase discovery delegated to `researcher` or `Explore`
-  subagents, keeping the Implementation Planner's context clean for architecture decisions.
+- **Delegation via Agent, in parallel when independent** — heavy codebase discovery delegated to
+  `researcher` or `Explore` subagents, keeping the Implementation Planner's context clean for
+  architecture decisions. When more than one pre-existing-infra claim or discovery question is
+  independent of the others, several subagents are dispatched in parallel rather than serially.
 - **Bash for context, never execution** — `git diff`/`git log`/`git show` only. Never runs test
   suites, typecheck, or builds during planning; verifying a pre-existing-behavior claim means
   reading the source, not executing it.
@@ -438,6 +450,10 @@ via the `Skill` tool based on task type, keeping startup context lean.
 - **Local verify mirrors CI** — if local verification passes, CI should pass too.
 - **Forbidden files** — never touches lockfiles, `server/src/db/migrations/`, root config, `.env*`,
   deployment scripts, or existing shared contracts without explicit task assignment.
+- **Delegates cross-file pattern lookups** — if understanding the task requires tracing a
+  convention that lives outside its own `Owned paths` (e.g. how a sibling module wires its DI
+  container entry), delegates to a `researcher` subagent via `Agent` rather than grepping broadly
+  itself, keeping its context focused on the files it's actually editing.
 - **Closes the loop** — appends non-obvious findings to `<module>/INSIGHTS.md` via
   `engineering-insights` so the next Implementer reads them at Step 1.
 

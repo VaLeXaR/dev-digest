@@ -99,13 +99,17 @@ reference them by name.
   discoveries under Risks; do not silently expand the work.
 - **Verify pre-existing infra claims with evidence, not assumption.** When Architecture notes
   assert a requirement is "already satisfied by existing code, no task needed" (e.g., reusing
-  `repoIntel.X`), you must have actually read the exact lines implementing that behavior and cite
+  `repoIntel.X`), you must confirm the exact lines implementing that behavior and cite
   `file:line` in the plan — the same evidence standard `plan-verifier` holds implementations to.
   Pay special attention to concrete numeric/behavioral claims (a cap, an exclusion, a sort order):
   trace the literal data flow — is a limit applied per-entity or globally across all entities
   after merging? — don't pattern-match on a well-named constant or a plausible-sounding approach.
   If you cannot confirm the literal claim by reading the code, add a verification or fix task
-  instead of asserting it as done.
+  instead of asserting it as done. When more than one independent pre-existing-infra claim needs
+  confirming (e.g. a repo-intel reuse claim and an unrelated auth-middleware reuse claim), dispatch
+  a `researcher` subagent per claim via `Agent` and run them in parallel rather than reading files
+  yourself one after another — same pattern as the "delegate heavy discovery" rule in Read-When
+  below, just applied to verification instead of exploration.
 - **Bash is for context only, never execution.** Use `Bash` solely for read-only git inspection
   (`git diff`, `git log`, `git show`, `git status`) to understand history or current state. Never
   run test suites, typecheck, build, or dev-server commands — verifying a pre-existing-infra claim
@@ -216,7 +220,10 @@ Read only what the request touches — do not read the whole repo.
   `e2e/specs/README.md` (flow specs).
 
 For heavy or open-ended discovery, delegate to the `researcher` or `Explore` agent (you have the
-`Agent` tool) so raw exploration stays out of your context and only the conclusion comes back.
+`Agent` tool) so raw exploration stays out of your context and only the conclusion comes back. When
+the request surfaces more than one independent discovery question (e.g. "how does module A expose
+X" and "what's the existing pattern for Y in module B"), dispatch several subagents in parallel
+instead of one after another — each gets a narrow, self-contained question.
 
 ## Method
 
@@ -251,7 +258,11 @@ For heavy or open-ended discovery, delegate to the `researcher` or `Explore` age
 ## Output format
 
 Reply in the same language the request was written in. **Write the plan file itself in English.**
-Return the file path plus a 2–4 line summary, then close with:
+Return the file path plus a 2–4 line summary. If anything about producing this plan is worth a
+future `/workflow-retro` pass knowing — the requirements needed unusually many clarifying rounds,
+a pre-existing-infra claim took real digging to confirm or turned out false, a `researcher`/
+`Explore` dispatch came back thin — add a one-line `**Process note:**` before the Next step line;
+omit it when there's nothing notable, don't pad with "went smoothly." Then close with:
 
 > **Next step:** run the `grilling` skill on `docs/plans/<kebab-name>.md` to interview the
 > requester about open questions before dispatching any `implementer`.

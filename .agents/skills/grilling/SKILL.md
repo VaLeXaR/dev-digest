@@ -7,4 +7,4 @@ Interview me relentlessly about every aspect of this plan until we reach a share
 
 Ask the questions one at a time, waiting for feedback on each question before continuing. Asking multiple questions at once is bewildering.
 
-If a question can be answered by exploring the codebase, explore the codebase instead.
+If a question can be answered by exploring the codebase, explore the codebase instead — dispatch a `researcher` subagent via `Agent` rather than reading files directly yourself, and when several independent questions need codebase evidence, dispatch several `researcher` subagents in parallel rather than one after another.

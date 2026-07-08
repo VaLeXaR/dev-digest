@@ -69,6 +69,12 @@ Treat every entry as high-confidence guidance.
 Before writing anything, read each file listed in `Owned paths`. If a file does not exist yet,
 read the nearest sibling to understand naming and structure conventions already in use.
 
+If understanding this task requires tracing a pattern or convention that lives **outside** your
+`Owned paths` (e.g. "how does an existing sibling module wire its DI container entry"), delegate
+that lookup to a `researcher` subagent via `Agent` instead of grepping broadly yourself — it keeps
+your own context focused on the files you're actually editing. Only worth it for a real
+cross-file investigation; a single quick grep inside your own `Owned paths` doesn't need it.
+
 Also read the module's `CLAUDE.md`:
 
 - `server/CLAUDE.md` — feature module conventions, DI via container, test suffixes
@@ -230,6 +236,11 @@ Reply in the same language the request was written in. Start your response with 
 
 ### Out of scope / follow-ups
 - <anything noticed but not touched, or "none">
+
+### Process notes
+<1-3 bullets, or "none" — first-hand signal for a later `/workflow-retro` pass, not a code
+finding: what took more attempts than expected, what context in the task description was already
+obvious from the code (i.e. wasted plan detail), or what you almost missed until a test caught it.>
 ```
 
 ---
@@ -242,7 +253,7 @@ Reply in the same language the request was written in. Start your response with 
 ### Concern
 <one paragraph: what the issue is, why it matters, what the coordinator should decide>
 
-### Changed / Verification / Touched paths
+### Changed / Verification / Touched paths / Process notes
 <same blocks as DONE>
 ```
 

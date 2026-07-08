@@ -33,11 +33,16 @@ batch several into one message — asking multiple questions at once is bewilder
 
 1. State the open item in one sentence — quote the marker or describe the gap.
 2. Give your own recommended answer, with the reasoning in one line.
-   - If the answer can be determined by reading the codebase or an existing spec, do that first.
-   - If it needs external knowledge (a standard, a library API, a convention) rather than
-     answering from memory, delegate to the `researcher` agent via `Agent`. When more than one
-     open item needs independent external research, dispatch several `researcher` subagents in
-     parallel instead of one after another.
+   - Evidence-gathering — internal (confirming a claim against the codebase or an existing spec) or
+     external (a standard, a library API, a convention) — goes through the `researcher` agent via
+     `Agent`, not serial `Read`/`Grep`/`WebSearch` calls of your own. When more than one open item
+     needs independent evidence, dispatch several `researcher` subagents in parallel rather than
+     one after another, whether the questions are internal, external, or a mix — this is what makes
+     resolving a large batch of open items fast instead of a bottleneck.
+   - A quick single-file confirmation you can do faster yourself than by round-tripping through a
+     subagent (e.g. re-reading a file you already have open) doesn't need `researcher` — use
+     judgment; the rule is against serial fact-finding across *multiple* independent items, not
+     against ever touching `Read`/`Grep` directly.
    - Only ask the requester if it's still ambiguous after looking/researching.
 3. Wait for the requester's response before moving to the next item.
 4. As soon as an item is resolved, edit the spec file immediately (`Edit`, never `Write` — the
@@ -72,9 +77,10 @@ Before asking the requester to approve, verify:
 - [ ] `## Success criteria (measurable)` still states a number/rate/threshold (or explicit `N/A`)
       consistent with the (possibly changed) ACs
 - [ ] `## Non-functional` has no leftover vague terms from the ban-list
-- [ ] Every `[reused: ...]` / `[deterministic: ...]` tag you touched still cites a `file:line` you
-      actually opened this session — a tag that looked right before your edits doesn't count as
-      reverified
+- [ ] Every `[reused: ...]` / `[deterministic: ...]` tag you touched still cites a `file:line`
+      confirmed this session — either you opened it yourself, or a `researcher` subagent you
+      dispatched this session opened it and reported the exact citation back; a tag that looked
+      right before your edits doesn't count as reverified
 - [ ] `## Untrusted inputs` still accurately reflects the feature's (possibly updated) scope
 
 ## Closing the loop
