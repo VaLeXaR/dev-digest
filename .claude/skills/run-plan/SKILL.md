@@ -2,7 +2,7 @@
 name: run-plan
 description: "Executes an already-approved, already-grilled Development Plan end to end: multi-agent implementer → plan-verifier (functional pass) → architecture-reviewer (fix-iterate loop) → final plan-verifier gate. Does NOT create specs or plans — spec-creator, spec-clarification, implementation-planner, and grilling are run manually before this skill. Test-writer is disabled by default (cost). Use via /run-plan docs/plans/<name>.md when a plan is ready to build."
 user-invocable: true
-version: "1.0.0"
+version: "1.2.0"
 ---
 
 # run-plan — execute a Development Plan
@@ -30,6 +30,15 @@ invoke `/run-plan`. If the user hands you a raw feature request instead of a pla
 and tell them to run `implementation-planner` (and `grilling`) first — do not draft a plan
 yourself and do not silently fall back to ad-hoc implementation.
 
+## Inputs (args)
+
+| Token | Meaning | Default |
+| --- | --- | --- |
+| `docs/plans/<name>.md` | Path to the approved, already-grilled Development Plan. **Required.** | — |
+| `max-fix:<n>` | Override the fix-loop cap (Stages 2/3/5) for this run. | `3` |
+
+Example: `/run-plan docs/plans/add-conventions-badge.md max-fix:2`.
+
 ## Hard rules
 
 - **Requires an existing plan file.** Your only valid input is a path to a
@@ -38,8 +47,12 @@ yourself and do not silently fall back to ad-hoc implementation.
 - **Assumes the plan has already been through `grilling`.** You have no way to verify this
   mechanically. If the plan looks obviously unreviewed (freshly written, no evidence of edits
   after creation) and the user hasn't confirmed it was grilled, ask before proceeding.
-- **Loop caps.** Any repeat-until-clean loop (plan-verifier fix cycle, architecture-reviewer
-  fix-iterate loop) is capped at **3 rounds**. On the 3rd failure, stop, summarize the remaining
+- **Loop caps, plus no-progress detection.** Any repeat-until-clean loop (plan-verifier fix cycle,
+  architecture-reviewer fix-iterate loop) is capped at **3 rounds** by default, or the
+  `max-fix:<n>` value if given — but don't wait for the cap to catch a stuck loop. After each
+  round, compare the unresolved finding set (same `rule` + `file:line`) to the previous round's:
+  if it's unchanged, break immediately and flag it as stuck rather than spending remaining rounds
+  re-attempting an identical fix. On cap-out or a stuck break, stop, summarize the remaining
   findings, and hand control back to the user instead of looping indefinitely.
 - **Respect Owned paths and execution mode.** The plan's `## Execution mode` decides whether
   `implementer` tasks within a phase are dispatched in parallel (multiple `Agent` calls in one
@@ -55,9 +68,14 @@ yourself and do not silently fall back to ad-hoc implementation.
   findings are advisory input (their own docs say so) — you decide how to turn a finding into an
   `implementer` fix task; don't just forward raw findings unstructured.
 
-## Stage 1 — Multi-agent implementation
+## Stage 0 — Read the plan and summarize the run
 
-Read the plan's `## Execution mode` and `## Phased tasks`.
+Read the plan's `## Execution mode` and `## Phased tasks`. Before dispatching anything, post a
+one-line summary of what will run — e.g. "4 tasks, multi-agent, 2 phases; fix-loop cap 3" (or the
+`max-fix:<n>` override if given) — so the user can follow or interrupt without reading full
+subagent transcripts.
+
+## Stage 1 — Multi-agent implementation
 
 For each phase, in order:
 
@@ -89,9 +107,11 @@ orphan contracts, a requirement silently dropped when parallel tasks merged).
 - **Gate FAIL or REVIEW** → for each PARTIAL/UNVERIFIED requirement, use `plan-verifier`'s Action
   Items to build a targeted fix task (same shape as a plan task: Action, Owned paths, Acceptance)
   and dispatch `implementer` for it. Re-run `plan-verifier` scoped to just the previously-failing
-  requirements (not a full re-run) to confirm the fix. Repeat up to the 3-round cap; on cap-out,
-  report the remaining gaps to the user and ask whether to proceed to architecture review anyway or
-  keep fixing.
+  requirements (not a full re-run) to confirm the fix. Repeat up to the fix-loop cap (default 3,
+  or `max-fix:<n>` if given), breaking early if a round leaves the exact same requirement(s)
+  PARTIAL/UNVERIFIED as the round before (no-progress — don't retry the same fix again); on
+  cap-out or a stuck break, report the remaining gaps to the user and ask whether to proceed to
+  architecture review anyway or keep fixing.
 
 ## Stage 3 — Architecture review, with fix-iterate loop
 
@@ -111,9 +131,11 @@ that's a signal to move it back.)
   3. Re-dispatch `architecture-reviewer`, passing `## Architecture context:` with the same CLAUDE.md
      summary from the first run (saves 20–30k tokens per re-run) and scope the re-audit to the
      files just touched plus anything that imports them.
-  4. Repeat until Gate PASS or the 3-round cap is hit. On cap-out, report the outstanding
-     critical/high findings verbatim to the user and stop — do not silently downgrade severities to
-     force a PASS.
+  4. Repeat until Gate PASS or the fix-loop cap is hit (default 3, or `max-fix:<n>` if given). If a
+     round's critical/high findings (same `rule` + `file:line`) exactly match the round before —
+     no-progress — break immediately instead of spending the remaining rounds re-attempting an
+     identical fix. On cap-out or a stuck break, report the outstanding critical/high findings
+     verbatim to the user and stop — do not silently downgrade severities to force a PASS.
 
 ## Stage 4 — Test coverage (disabled by default)
 
@@ -136,9 +158,11 @@ so it skips re-checking layering/DI/process.env/contract-sync (saves tokens on t
 two plan-verifier passes).
 
 - **Gate PASS** → done. Report the final summary (Stage 6).
-- **Gate FAIL** → same fix loop as Stage 2, capped at 3 rounds. If a fix here touches architecture
-  (not just a missing test or wiring gap), loop back to Stage 3 for that file instead of just
-  re-verifying.
+- **Gate FAIL** → same fix loop as Stage 2 (same cap, same no-progress break). If a fix here
+  touches architecture (not just a missing test or wiring gap), loop back to Stage 3 for that file
+  instead of just re-verifying — this is also why the `## Architecture review: PASS` skip-signal
+  above is only valid until a fix round like this one touches a file it covered; don't forward the
+  skip-signal on a re-run triggered by an architecture-touching fix.
 
 ## Stage 6 — Summary and next step
 

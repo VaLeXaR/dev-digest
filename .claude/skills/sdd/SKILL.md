@@ -2,7 +2,7 @@
 name: sdd
 description: "Orchestrates the full Spec-Driven Development pipeline end to end: spec-creator → spec-clarification → implementation-planner → grilling → multi-agent implementer → plan-verifier → architecture-reviewer (with fix-iterate loop) → final plan-verifier gate. Accepts a spec file, a freeform requirements prompt, and/or design references (images/Figma) as input. Use via /sdd when the user wants a feature built through the full SDD workflow instead of dispatching each agent by hand. For an already-approved, already-grilled plan, use /run-plan instead — it skips the spec/planning stages."
 user-invocable: true
-version: "1.1.0"
+version: "1.2.0"
 ---
 
 # SDD — Spec-Driven Development orchestrator
@@ -29,13 +29,22 @@ starts at Stage 4 below and skips spec/planning entirely.
 
 ## Hard rules
 
-- **Never skip a human touchpoint.** `spec-clarification` and `grilling` are interactive skills
-  that run in *this* conversation, not subagents — they must actually interview the user, not be
-  silently marked done. Do not proceed past them without the user's explicit approval
-  (`Status: draft → approved` for the spec; plan gaps resolved for `grilling`).
-- **Loop caps.** Any repeat-until-clean loop (plan-verifier fix cycle, architecture-reviewer
-  fix-iterate loop) is capped at **3 rounds**. On the 3rd failure, stop, summarize the remaining
-  findings, and hand control back to the user instead of looping indefinitely.
+- **Never skip a human touchpoint, and prove it happened.** `spec-clarification` and `grilling`
+  are interactive skills that run in *this* conversation, not subagents — they must actually
+  interview the user, not be silently marked done. A skill instruction to "not skip" is not a
+  structural gate — nothing stops an eager run from narrating "clarifications resolved" without a
+  real user turn. So the Stage 9 summary (and any status line before advancing past Stage 1b or
+  Stage 3) must quote the user's own words for the approval, not just assert it happened: the
+  literal `Status: draft → approved` confirmation for the spec, and the user's literal sign-off
+  that grilling's gaps are resolved for the plan. If you cannot quote it, you have not cleared the
+  checkpoint — go back and ask.
+- **Loop caps, plus no-progress detection.** Any repeat-until-clean loop (plan-verifier fix cycle,
+  architecture-reviewer fix-iterate loop) is capped at **3 rounds** — but don't wait for the cap to
+  catch a stuck loop. After each round, compare the unresolved finding set (same `rule` +
+  `file:line`) to the previous round's: if it's unchanged, break immediately and flag it as stuck
+  rather than spending remaining rounds re-attempting an identical fix. On cap-out or a stuck
+  break, stop, summarize the remaining findings, and hand control back to the user instead of
+  looping indefinitely.
 - **Respect Owned paths and execution mode.** The plan's `## Execution mode` decides whether
   `implementer` tasks within a phase are dispatched in parallel (multiple `Agent` calls in one
   message) or sequentially. Never parallelize tasks whose `Owned paths` overlap, regardless of
@@ -83,7 +92,8 @@ references. Wait for it to return a spec file path.
 Invoke the `spec-clarification` skill on the spec file (freshly written or user-supplied draft).
 This is interactive — it interviews the user one question at a time in this conversation. Do not
 proceed until its Final self-check is clean and the user has explicitly confirmed
-`Status: draft → approved`.
+`Status: draft → approved`. Quote the user's actual approval message when you report moving to
+Stage 2 — an inferred or summarized "the user approved it" does not clear this checkpoint.
 
 ## Stage 2 — Planning
 
@@ -103,7 +113,9 @@ instead of a plan:
 
 Invoke the `grilling` skill on the plan file, per the planner's own `Next step:` directive. This is
 interactive, same as spec-clarification. Do not dispatch any `implementer` until grilling is done
-and any plan edits it produced are final.
+and any plan edits it produced are final. Quote the user's actual sign-off when you report moving
+to Stage 4 — the same rule as Stage 1b: narrating that grilling happened is not the checkpoint,
+the user's own words confirming the gaps are resolved is.
 
 ## Stage 4 — Multi-agent implementation
 
@@ -139,9 +151,10 @@ orphan contracts, a requirement silently dropped when parallel tasks merged).
 - **Gate FAIL or REVIEW** → for each PARTIAL/UNVERIFIED requirement, use `plan-verifier`'s Action
   Items to build a targeted fix task (same shape as a plan task: Action, Owned paths, Acceptance)
   and dispatch `implementer` for it. Re-run `plan-verifier` scoped to just the previously-failing
-  requirements (not a full re-run) to confirm the fix. Repeat up to the 3-round cap; on cap-out,
-  report the remaining gaps to the user and ask whether to proceed to architecture review anyway or
-  keep fixing.
+  requirements (not a full re-run) to confirm the fix. Repeat up to the 3-round cap, breaking early
+  if a round leaves the exact same requirement(s) PARTIAL/UNVERIFIED as the round before (no
+  progress — don't retry the same fix again); on cap-out or a stuck break, report the remaining
+  gaps to the user and ask whether to proceed to architecture review anyway or keep fixing.
 
 ## Stage 6 — Architecture review, with fix-iterate loop
 
@@ -159,9 +172,11 @@ not the kind of deep interpretive judgment that needs Opus.)
   3. Re-dispatch `architecture-reviewer`, passing `## Architecture context:` with the same CLAUDE.md
      summary from the first run (saves 20–30k tokens per re-run) and scope the re-audit to the
      files just touched plus anything that imports them.
-  4. Repeat until Gate PASS or the 3-round cap is hit. On cap-out, report the outstanding
-     critical/high findings verbatim to the user and stop — do not silently downgrade severities to
-     force a PASS.
+  4. Repeat until Gate PASS or the 3-round cap is hit. If a round's critical/high findings (same
+     `rule` + `file:line`) exactly match the round before — no progress — break immediately instead
+     of spending the remaining rounds re-attempting an identical fix. On cap-out or a stuck break,
+     report the outstanding critical/high findings verbatim to the user and stop — do not silently
+     downgrade severities to force a PASS.
 
 ## Stage 7 — Test coverage (disabled by default)
 
@@ -183,9 +198,11 @@ Dispatch `plan-verifier` again — this is the actual merge gate. If Stage 6's l
 so it skips re-checking layering/DI/process.env/contract-sync (Pattern 3).
 
 - **Gate PASS** → done. Report the final summary (Stage 9).
-- **Gate FAIL** → same fix loop as Stage 5, capped at 3 rounds. If a fix here touches architecture
-  (not just a missing test or wiring gap), loop back to Stage 6 for that file instead of just
-  re-verifying.
+- **Gate FAIL** → same fix loop as Stage 5 (same cap, same no-progress break). If a fix here
+  touches architecture (not just a missing test or wiring gap), loop back to Stage 6 for that file
+  instead of just re-verifying — this is also why the `## Architecture review: PASS` skip-signal
+  above is only valid until a fix round like this one touches a file it covered; don't forward the
+  skip-signal on a re-run triggered by an architecture-touching fix.
 
 ## Stage 9 — Summary and next step
 
