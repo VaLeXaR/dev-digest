@@ -74,7 +74,10 @@ it.
 - `test-writer` is disabled by default in both orchestrator skills — invoke it manually, or ask
   the orchestrator to enable it for a specific run, when test coverage is actually needed.
 
-**Mandatory handoffs — do not skip, even mid-conversation:**
+**Mandatory handoffs — do not skip, even mid-conversation.** These are pre-authorized: invoke the
+named skill/agent immediately when its trigger condition is met, without pausing to ask the user
+for permission first — asking only adds an avoidable round-trip for something that isn't
+discretionary. Only skip when the user explicitly declines a specific handoff in advance.
 
 - After `spec-creator` returns, run the `spec-clarification` skill on the written spec before `implementation-planner` treats it as confirmed input.
 - After `implementation-planner` returns, run the `grilling` skill on the plan file before dispatching any `implementer`.
