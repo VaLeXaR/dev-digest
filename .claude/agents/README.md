@@ -38,6 +38,17 @@ branches — the worktree starts from `main`, not from your current branch. For 
 parallel work, use the Owned paths pattern instead (or the `superpowers:using-git-worktrees`
 skill for manual worktree setup from the current branch).
 
+### Recovering a stalled or failed background dispatch
+
+A background agent's task-notification can report `status: failed` for reasons that have
+nothing to do with the agent's own reasoning — most commonly a mid-stream API stall. Before
+re-dispatching from scratch (which re-pays every token already spent on that run), send the
+agent a `SendMessage` resume: it continues from its own transcript with full context and often
+completes cleanly. Only fall back to a fresh dispatch if the resume itself fails, or the agent's
+own report names a genuine task-level blocker (`BLOCKED`/`NEEDS_CONTEXT`) rather than an
+infra-level stall. (workflow-retro finding, 2026-07-09 — a resumed `implementation-planner` run
+completed successfully after an API-level "response stalled mid-stream" failure.)
+
 ---
 
 ## Agents

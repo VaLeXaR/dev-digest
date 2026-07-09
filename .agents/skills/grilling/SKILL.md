@@ -7,4 +7,4 @@ Interview me relentlessly about every aspect of this plan until we reach a share
 
 Ask the questions one at a time, waiting for feedback on each question before continuing. Asking multiple questions at once is bewildering.
 
-If a question can be answered by exploring the codebase, explore the codebase instead — dispatch a `researcher` subagent via `Agent` rather than reading files directly yourself, and when several independent questions need codebase evidence, dispatch several `researcher` subagents in parallel rather than one after another.
+If a question can be answered by exploring the codebase, explore the codebase instead — dispatch a `researcher` subagent via `Agent` rather than reading files directly yourself, and when several independent questions need codebase evidence, dispatch several `researcher` subagents in parallel rather than one after another. Ask each researcher for `output: compact-digest` (per `.claude/agents/README.md` Pattern 1) rather than an ad hoc word limit, so the digest stays a consistent, auditable contract across dispatches.
