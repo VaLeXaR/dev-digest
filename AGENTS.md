@@ -37,6 +37,7 @@ docker compose down # stop Postgres — NEVER add -v (destroys all data permanen
 - **NEVER** `docker compose down -v` — deletes the pgdata volume with all imported repos and reviews
 - Secrets (API keys, GITHUB_TOKEN) → `~/.devdigest/secrets.json` (mode 0600), not `.env` and not DB
 - API/web run on :4001/:4000 (`server/.env`, `client/.env`), not :3001/:3000 → if the devdigest MCP server can't reach the API, check `.mcp.json`'s `DEVDIGEST_API_URL` matches
+- **NEVER** `pnpm test -- <filter>` in `client/` — pnpm forwards a literal `"--"` arg into `vitest run`, which does not filter and instead hangs/misbehaves → use `pnpm exec vitest run <path-or-glob>` to scope a run. Parallel `implementer` dispatches that used the `--` form left dozens of orphaned `vitest`/`tinypool` worker processes running for 90+ minutes, starving CPU for every other agent on the same machine (observed 2026-07-09, `/run-plan` on `project-context`: ~166 zombie `node.exe` processes accumulated across one multi-phase run). If a `pnpm test`/`vitest run` hangs with zero output on a shared machine mid-multi-agent-run, check for and kill orphaned `tinypool`/`vitest.mjs run "--"` processes before assuming it's a real regression.
 
 > **Self-improving:** When a new project-wide operational constraint is confirmed — a destructive command, a silent failure mode, a credentials invariant — append it above. Format: `**NEVER/ALWAYS** [why] → [rule]`. Monthly: remove rules no longer relevant. Not a crutch — if a gotcha recurs because the tooling is awkward, fix the root cause instead.
 

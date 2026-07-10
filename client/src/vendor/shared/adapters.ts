@@ -224,6 +224,18 @@ export interface GitClient {
   blame(repo: RepoRef, path: string): Promise<BlameLine[]>;
   log(repo: RepoRef, path?: string): Promise<GitCommit[]>;
   readFile(repo: RepoRef, path: string): Promise<string>;
+  /**
+   * File content at an arbitrary ref (`git show <ref>:<path>`) — independent
+   * of whatever's currently checked out in the working tree. Used to display
+   * a line that isn't part of any rendered diff hunk (e.g. a Blast Radius
+   * caller's line, jumped to from the Files-changed tab).
+   */
+  showFile(repo: RepoRef, ref: string, path: string): Promise<string>;
+  /**
+   * Repo-relative POSIX paths currently tracked by git; scoped to `pathspecs`
+   * when given — e.g. `git ls-files -- specs docs insights`.
+   */
+  listTrackedFiles(repo: RepoRef, pathspecs?: string[]): Promise<string[]>;
   clonePathFor(repo: RepoRef): string;
 }
 

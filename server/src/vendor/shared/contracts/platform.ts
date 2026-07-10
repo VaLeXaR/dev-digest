@@ -100,6 +100,10 @@ export const SettingsKnown = z.object({
   automatic_reviews: z.boolean().default(false),
   /** Per-feature model overrides (provider+model), keyed by FeatureModelId. */
   feature_models: z.record(FeatureModelId, FeatureModelChoice).default({}),
+  /** Root folders scanned for Project Context markdown docs (repo-relative). */
+  context_root_folders: z.array(z.string()).default(['specs', 'docs', 'insights']),
+  /** Token budget for the Project Context attach warning. */
+  context_token_budget: z.number().int().min(0).default(4000),
 });
 export type SettingsKnown = z.infer<typeof SettingsKnown>;
 

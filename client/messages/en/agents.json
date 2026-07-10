@@ -46,6 +46,7 @@
     "tabs": {
       "config": "Config",
       "skills": "Skills",
+      "context": "Context",
       "evals": "Evals",
       "stats": "Stats",
       "ci": "CI"
@@ -95,5 +96,21 @@
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."
+  },
+  "context": {
+    "title": "Project Context",
+    "hint": "Attach markdown docs from Project Context to this agent's prompt. Order matters — earlier docs appear earlier in the assembled prompt.",
+    "filterPlaceholder": "Filter documents…",
+    "attached": "Attached",
+    "available": "Available",
+    "attach": "Attach",
+    "detach": "Detach",
+    "loadError": "Could not load Project Context documents.",
+    "saveError": "Failed to save attached docs",
+    "empty": "No documents discovered yet — visit Project Context to add some.",
+    "tokenFooter": "{count} attached · ~{tokens} tokens",
+    "budgetWarning": "Attached docs exceed the {budget}-token budget — consider detaching some.",
+    "staleBadge": "stale/missing",
+    "staleTitle": "This document is no longer discovered under the repo's root folders."
   }
 }

@@ -48,6 +48,8 @@ export const PromptAssembly = z.object({
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
+  /** Per-path Project Context snapshot injected into this run (pre-wrap content); null when absent or on traces written before this field was added. */
+  specs_snapshot: z.array(z.object({ path: z.string(), content: z.string() })).nullish(),
   user: z.string(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;

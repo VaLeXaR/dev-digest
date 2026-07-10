@@ -231,6 +231,11 @@ export interface GitClient {
    * caller's line, jumped to from the Files-changed tab).
    */
   showFile(repo: RepoRef, ref: string, path: string): Promise<string>;
+  /**
+   * Repo-relative POSIX paths currently tracked by git; scoped to `pathspecs`
+   * when given — e.g. `git ls-files -- specs docs insights`.
+   */
+  listTrackedFiles(repo: RepoRef, pathspecs?: string[]): Promise<string[]>;
   clonePathFor(repo: RepoRef): string;
 }
 

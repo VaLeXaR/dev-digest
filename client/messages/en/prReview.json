@@ -122,5 +122,14 @@
     "goToReview": "Jump to this run’s findings below",
     "openTrace": "Open run trace & logs",
     "deleteRun": "Delete run"
+  },
+  "context": {
+    "row": "Attached Specs",
+    "rowSummary": "{count} document(s) · ~{tokens} tokens",
+    "modalTitle": "Attached Specs",
+    "searchPlaceholder": "Search in this block…",
+    "copy": "Copy",
+    "copied": "Copied",
+    "empty": "No documents were injected for this run."
   }
 }
