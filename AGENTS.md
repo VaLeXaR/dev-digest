@@ -113,7 +113,13 @@ time. Fix, binding on the whole pipeline:
 - **`implementer`** treats its task's `Design ref:` field as authoritative over prose, and — for UI
   tasks — self-verifies with a screenshot compared against the cited file (via a dispatched
   subagent) before claiming `DONE`, downgrading to `DONE_WITH_CONCERNS` if it can't check rather
-  than asserting an unverified visual match.
+  than asserting an unverified visual match. **Exception:** if the live check requires a route/page
+  owned by a *different*, still-in-flight task in the same multi-agent run (e.g. verifying a new
+  sidebar item's active state requires the route it links to, which a sibling task is still
+  building), skip the live render and note `DONE_WITH_CONCERNS` pointing at the task that will
+  complete it, rather than spending a nested verification dispatch against an unrelated substitute
+  page — the later task's own design-fidelity check already covers the same element once the real
+  route exists.
 - **`plan-verifier`** flags missing design-fidelity evidence as `CANNOT-VERIFY`, not a silent pass.
 
 ## Skills

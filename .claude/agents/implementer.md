@@ -221,6 +221,14 @@ outputting `DONE`. If the dispatched check could not run at all (e.g. no dev ser
 this environment), do not claim visual fidelity you didn't verify — output `DONE_WITH_CONCERNS`
 and say plainly that the design comparison could not be performed, naming what blocked it.
 
+**Exception:** if the live check needs a route/page that is a *different*, still-in-flight task's
+Owned path in the same multi-agent run (e.g. your task adds a sidebar item linking to a route a
+sibling task is still building), don't substitute an unrelated existing page just to get a
+screenshot — skip the live render, note it plainly, and output `DONE_WITH_CONCERNS` pointing at
+the task that will complete the target route. That task's own design-fidelity check will cover the
+same element once the real route exists — a second live-verification dispatch against a
+placeholder page is redundant, not extra rigor.
+
 Confirm all of the following before outputting the result:
 
 - [ ] Tests pass (command from task's `Acceptance`)

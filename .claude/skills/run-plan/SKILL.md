@@ -67,6 +67,16 @@ Example: `/run-plan docs/plans/add-conventions-badge.md max-fix:2`.
 - **Bring your own judgment for fix dispatches.** `architecture-reviewer` and `plan-verifier`
   findings are advisory input (their own docs say so) — you decide how to turn a finding into an
   `implementer` fix task; don't just forward raw findings unstructured.
+- **Apply a task's self-reported plan corrections forward, don't default to sibling consistency.**
+  When a completed task's own `Process notes` flag a stale or incorrect claim in the plan text
+  (e.g. "the interface the plan says lacks method X actually declares it") and name the
+  verified-correct alternative, fold that correction directly into the next dependent task's
+  dispatch brief — do not instruct the next task to "stay consistent with" a prior sibling's
+  now-known-stale choice just to avoid inconsistency. Confirmed costly in practice: on the
+  `onboarding-generator` build, the coordinator had this exact correction in hand from one task's
+  Process notes before dispatching the next, briefed the next task to match the stale sibling
+  anyway, and the resulting code tripped `architecture-reviewer`'s interface-segregation rule on
+  the very next stage — a fully avoidable fix-iterate round.
 
 ## Stage 0 — Read the plan and summarize the run
 
@@ -130,6 +140,12 @@ deliberate cost tradeoff since this stage can loop; its rule checks are mechanic
 grep-and-cite, not the kind of deep interpretive judgment that needs Opus. Watch for a quality
 regression here — if it starts missing violations `plan-verifier`'s final pass would have caught,
 that's a signal to move it back.)
+
+`architecture-reviewer` only carries `Read`/`Glob`/`Grep`/`Skill` — it cannot run `git diff` or
+`git status` itself. Run `git status --short` (and `git diff --stat` if useful) yourself and paste
+the actual output into the dispatch prompt as the diff boundary, instead of a hand-typed file
+list — closes a self-reported scope gap (a hand-typed list can miss or misdescribe a file) at the
+cost of one extra paste.
 
 - **Gate PASS** (0 critical, 0 high) → continue to Stage 4.
 - **Gate FAIL** → this is the fix-iterate loop:

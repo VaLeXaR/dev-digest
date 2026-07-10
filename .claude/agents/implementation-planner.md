@@ -73,6 +73,14 @@ reference them by name.
   beats the gain. A well-sized task touches one owned-path domain, modifies ≤5 files, and has
   exactly one acceptance command. If a task spans two independent domains → split. If two tasks
   always run together and cannot be parallelised → merge.
+- **Split "build" from "design-verify" when a UI task bundles both at scale.** A task that builds
+  an entire route/page plus every one of its section components plus i18n plus tests plus its own
+  live-render design-fidelity check is a common overrun pattern — it can dwarf every sibling task
+  in the same plan and end up as the run's entire critical path by itself. If a single task's
+  scope already spans ≥4 non-trivial sub-components under one route, either split the visual
+  self-verification into its own downstream task (Depends-on the build task) or explicitly flag
+  the task as expected-long in its `Known gotchas` field, so `run-plan`'s coordinator (and the
+  user watching a long-running dispatch) don't mistake legitimate size for a hang.
 - **Shorter tasks fail less.** Doubling task duration roughly quadruples failure rate. Keep tasks
   atomic; put integration edge-cases (auth, rate limits, error formats) in their own explicit tasks
   rather than hidden inside implementation tasks.
