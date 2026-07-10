@@ -2,14 +2,40 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { Button, Markdown, Modal } from "@devdigest/ui";
 import type { Agent, DiscoveredDoc } from "@devdigest/shared";
 import { useActiveRepo } from "../../../../../../../lib/repo-context";
 import {
   useDiscovery,
   useAgentContextDocs,
   useSetAgentContextDocs,
+  useDocContent,
 } from "../../../../../../../lib/hooks/project-context";
 import { s } from "./styles";
+
+function PreviewModal({
+  repoId,
+  path,
+  onClose,
+}: {
+  repoId: string | null | undefined;
+  path: string;
+  onClose: () => void;
+}) {
+  const t = useTranslations("agents.context");
+  const { data, isLoading, isError } = useDocContent(repoId, path, true);
+  const filename = path.split("/").pop() ?? path;
+
+  return (
+    <Modal title={filename} subtitle={path} onClose={onClose}>
+      <div style={s.previewBody}>
+        {isLoading && <span style={s.previewState}>{t("previewLoading")}</span>}
+        {!isLoading && isError && <span style={s.previewState}>{t("previewError")}</span>}
+        {!isLoading && !isError && <Markdown>{data?.content}</Markdown>}
+      </div>
+    </Modal>
+  );
+}
 
 function ContextRow({
   path,
@@ -21,10 +47,12 @@ function ContextRow({
   onDragOver,
   onDrop,
   onDragLeave,
+  onPreview,
   attachLabel,
   detachLabel,
   staleLabel,
   staleTitle,
+  previewLabel,
 }: {
   path: string;
   doc: DiscoveredDoc | undefined;
@@ -35,10 +63,12 @@ function ContextRow({
   onDragOver?: (e: React.DragEvent) => void;
   onDrop?: () => void;
   onDragLeave?: () => void;
+  onPreview: () => void;
   attachLabel: string;
   detachLabel: string;
   staleLabel: string;
   staleTitle: string;
+  previewLabel: string;
 }) {
   const isStale = attached && !doc;
   const filename = doc?.filename ?? path.split("/").pop() ?? path;
@@ -62,12 +92,17 @@ function ContextRow({
       />
       <span style={s.docName}>{filename}</span>
       <span style={s.docPath}>{path}</span>
-      {doc && <span style={s.rootBadge}>{doc.root_folder}</span>}
+      {doc && <span style={s.rootBadge(doc.root_folder)}>{doc.root_folder}</span>}
       {isStale && (
         <span style={s.staleBadge} title={staleTitle}>
           {staleLabel}
         </span>
       )}
+      <span style={s.previewBtn}>
+        <Button kind="ghost" size="sm" icon="Eye" onClick={onPreview}>
+          {previewLabel}
+        </Button>
+      </span>
     </div>
   );
 }
@@ -82,6 +117,7 @@ export function ContextTab({ agent }: { agent: Agent }) {
   const [search, setSearch] = useState("");
   const [paths, setPaths] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState<string | null>(null);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
   const dragId = useRef<string | null>(null);
 
   // `attachedData` arrives after initial render (async query) — sync local
@@ -140,11 +176,15 @@ export function ContextTab({ agent }: { agent: Agent }) {
   const detachLabel = t("detach");
   const staleLabel = t("staleBadge");
   const staleTitle = t("staleTitle");
+  const previewLabel = t("preview");
 
   return (
     <div style={s.wrap}>
       <div style={s.header}>
         <span style={s.title}>{t("title")}</span>
+        <span style={s.countBadge}>
+          {t("countBadge", { attached: paths.length, total: documents.length })}
+        </span>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -173,10 +213,12 @@ export function ContextTab({ agent }: { agent: Agent }) {
               }}
               onDrop={() => handleDrop(path)}
               onDragLeave={() => setDragOver(null)}
+              onPreview={() => setPreviewPath(path)}
               attachLabel={attachLabel}
               detachLabel={detachLabel}
               staleLabel={staleLabel}
               staleTitle={staleTitle}
+              previewLabel={previewLabel}
             />
           ))}
 
@@ -191,10 +233,12 @@ export function ContextTab({ agent }: { agent: Agent }) {
                   attached={false}
                   dragOver={false}
                   onToggle={() => handleToggle(d.path)}
+                  onPreview={() => setPreviewPath(d.path)}
                   attachLabel={attachLabel}
                   detachLabel={detachLabel}
                   staleLabel={staleLabel}
                   staleTitle={staleTitle}
+                  previewLabel={previewLabel}
                 />
               ))}
             </>
@@ -203,11 +247,16 @@ export function ContextTab({ agent }: { agent: Agent }) {
       )}
 
       <div style={s.footer}>
-        <span>{t("tokenFooter", { count: paths.length, tokens: tokenTotal })}</span>
+        <span>{t("tokenFooter", { tokens: tokenTotal })}</span>
+        <span style={s.footerNotice}>{t("injectedNotice")}</span>
         {overBudget && (
           <span style={s.warning}>{t("budgetWarning", { budget: tokenBudget })}</span>
         )}
       </div>
+
+      {previewPath && (
+        <PreviewModal repoId={repoId} path={previewPath} onClose={() => setPreviewPath(null)} />
+      )}
     </div>
   );
 }

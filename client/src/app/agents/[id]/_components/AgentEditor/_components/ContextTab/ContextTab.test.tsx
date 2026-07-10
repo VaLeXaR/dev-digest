@@ -17,6 +17,7 @@ vi.mock("../../../../../../../lib/hooks/project-context", () => ({
   useDiscovery: (...args: unknown[]) => useDiscoveryMock(...args),
   useAgentContextDocs: (...args: unknown[]) => useAgentContextDocsMock(...args),
   useSetAgentContextDocs: () => ({ mutate: mutateMock, isPending: false }),
+  useDocContent: () => ({ data: undefined, isLoading: false, isError: false }),
 }));
 
 import { ContextTab } from "./ContextTab";
@@ -101,7 +102,8 @@ describe("T-12 Agent editor Context tab", () => {
 
     renderTab();
 
-    expect(screen.getByText("2 attached · ~350 tokens")).toBeInTheDocument();
+    expect(screen.getByText("2 of 2 attached")).toBeInTheDocument();
+    expect(screen.getByText("≈ 350 tokens")).toBeInTheDocument();
   });
 
   it("shows a non-blocking budget warning without disabling attach when the sum exceeds the budget", () => {

@@ -4,6 +4,16 @@ export const s = {
   wrap: { padding: 24 } satisfies CSSProperties,
   header: { display: "flex", alignItems: "center", gap: 12, marginBottom: 8 } satisfies CSSProperties,
   title: { fontWeight: 700, fontSize: 15 } satisfies CSSProperties,
+  countBadge: {
+    fontSize: 11,
+    fontWeight: 600,
+    padding: "3px 10px",
+    borderRadius: 999,
+    border: "1px solid var(--accent)",
+    color: "var(--accent-text)",
+    background: "var(--accent-bg)",
+    flexShrink: 0,
+  } satisfies CSSProperties,
   search: {
     width: "100%",
     maxWidth: 220,
@@ -59,15 +69,24 @@ export const s = {
     textOverflow: "ellipsis",
     fontFamily: "var(--font-mono, monospace)",
   } satisfies CSSProperties,
-  rootBadge: {
-    fontSize: 11,
-    padding: "2px 6px",
-    borderRadius: 4,
-    background: "var(--bg-hover)",
-    color: "var(--text-secondary)",
-    fontWeight: 600,
-    flexShrink: 0,
-  } satisfies CSSProperties,
+  rootBadge: (folder: string): CSSProperties => {
+    const palette: Record<string, { color: string; background: string }> = {
+      specs: { color: "var(--accent-text)", background: "var(--accent-bg)" },
+      docs: { color: "var(--ok)", background: "var(--ok-bg)" },
+      insights: { color: "var(--warn)", background: "var(--warn-bg)" },
+    };
+    const c = palette[folder];
+    return {
+      fontSize: 11,
+      padding: "2px 6px",
+      borderRadius: 4,
+      background: c?.background ?? "var(--bg-hover)",
+      color: c?.color ?? "var(--text-secondary)",
+      fontWeight: 600,
+      flexShrink: 0,
+    };
+  },
+  previewBtn: { flexShrink: 0 } satisfies CSSProperties,
   staleBadge: {
     fontSize: 11,
     padding: "2px 6px",
@@ -84,6 +103,7 @@ export const s = {
   footer: {
     display: "flex",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 12,
     marginTop: 16,
     paddingTop: 12,
@@ -91,8 +111,11 @@ export const s = {
     fontSize: 12,
     color: "var(--text-secondary)",
   } satisfies CSSProperties,
+  footerNotice: { color: "var(--text-muted)" } satisfies CSSProperties,
   warning: {
     color: "var(--warn)",
     fontWeight: 600,
   } satisfies CSSProperties,
+  previewBody: { padding: 20 } satisfies CSSProperties,
+  previewState: { fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
 } as const;

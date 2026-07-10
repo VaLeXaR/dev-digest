@@ -14,6 +14,7 @@ vi.mock("../../../../../../../lib/hooks/project-context", () => ({
   useDiscovery: (...args: unknown[]) => useDiscoveryMock(...args),
   useSkillContextDocs: (...args: unknown[]) => useSkillContextDocsMock(...args),
   useSetSkillContextDocs: () => ({ mutate: mockMutate, isPending: false }),
+  useDocContent: () => ({ data: undefined, isLoading: false, isError: false }),
 }));
 
 import { ContextTab } from "./ContextTab";
