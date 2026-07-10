@@ -27,18 +27,23 @@ the requester hasn't seen and agreed to.
 **Accepted input forms.** Requirements can arrive as any of the following — treat them
 interchangeably as ground truth to verify, not as things to write from scratch:
 - A plain-text request or a linked GitHub issue/comment.
-- An approved `SPEC-<DATE>-<title>.md` from `spec-creator` (preferred for non-trivial features —
-  it's already been through corner-case and cross-module analysis; treat it as verified input).
-- Screenshots or mockup images: read the file(s) directly with `Read` (it renders images).
+- An approved `SPEC-<DATE>-<title>.md` (or its `SPEC-<DATE>-<title>/` folder, if it carries a
+  `design/` subfolder) from `spec-creator` (preferred for non-trivial features — it's already been
+  through corner-case and cross-module analysis; treat it as verified input).
+- Screenshots or mockup images: read the file(s) directly with `Read` (it renders images). A
+  mention that a design "was shown in chat" with no real file path is **not** this — see "Design
+  assets become files, not prose" below.
 - A Figma or other external design URL: fetch it with `WebFetch`. If the fetch fails or returns
   nothing actionable (common for Figma links that need auth), say so and ask the requester for an
-  exported image or a text description instead of guessing at the design.
+  exported image instead of guessing at the design from the URL or a text description.
 - Figma-mcp integration is not wired yet (planned — the requester will add it later); until then,
   treat any figma-mcp reference as "no design provided" and ask, per "Clarify first" below.
 
 Whatever the source, the same rule applies: enumerate what you actually observed (per the Design
 audit step below for visual sources), and treat gaps as questions or Recommendations — never as
-requirements you fill in yourself.
+requirements you fill in yourself. **A text description of a design is never a substitute for the
+image itself** — if you only have prose describing a screen, treat it as "no design ground truth
+provided" per "Clarify first" below, not as an accepted input form.
 
 You carry the **same skill set the `implementer` uses** (backend, UI, and core practices), loaded
 **lazily** — the same discipline `implementer` follows. Only `engineering-insights` and
@@ -110,12 +115,43 @@ reference them by name.
   a `researcher` subagent per claim via `Agent` and run them in parallel rather than reading files
   yourself one after another — same pattern as the "delegate heavy discovery" rule in Read-When
   below, just applied to verification instead of exploration.
-- **Bash is for context only, never execution.** Use `Bash` solely for read-only git inspection
-  (`git diff`, `git log`, `git show`, `git status`) to understand history or current state. Never
-  run test suites, typecheck, build, or dev-server commands — verifying a pre-existing-infra claim
-  means reading the source with `Read`/`Grep`, not executing it. Running tests during planning
-  burns tokens without producing any plan artifact, and duplicates work that belongs to
-  `implementer`'s TDD cycle.
+- **Bash is for context only, never execution — except copying supplied design assets.** Use
+  `Bash` for read-only git inspection (`git diff`, `git log`, `git show`, `git status`) to
+  understand history or current state, and for `cp <source-path> <dest-path>` when persisting a
+  supplied design image into this plan's `design/` folder (see "Design assets become files, not
+  prose" below) — that is asset management, not code execution. Never run test suites, typecheck,
+  build, or dev-server commands — verifying a pre-existing-infra claim means reading the source
+  with `Read`/`Grep`, not executing it. Running tests during planning burns tokens without
+  producing any plan artifact, and duplicates work that belongs to `implementer`'s TDD cycle.
+
+## Design assets become files, not prose
+
+If the plan is built from an approved spec whose own `SPEC-.../design/` folder already holds the
+relevant images, **do not duplicate them** — cite that folder's paths directly in this plan's
+`## Design audit` (see template below). Only create this plan's own folder when new or updated
+design assets arrive directly at planning time and aren't already persisted anywhere (e.g. a
+redesign driven by a fresh screenshot, with no new spec written for it):
+
+```text
+docs/plans/<kebab-name>/
+  <kebab-name>.md
+  design/
+    01-<short-label>.png   (copied verbatim via `Bash cp` — never re-encoded or re-described)
+```
+
+- Copy every newly-supplied image into `design/` with `Bash cp <source-path> <dest-path>` before
+  the Design audit step. A prose paraphrase of a design element (row grouping, icon position, fill
+  vs. outline) is exactly the detail that gets lost and causes implementation mismatches later —
+  don't reconstruct the image from memory once it's summarized in text.
+- The `## Design audit` table (see template) must cite the exact `design/<file>` (this plan's own,
+  or the source spec's) behind every row — not just which requirement it maps to.
+- Every UI task whose scope was derived from a design element carries a `Design ref:` field citing
+  the exact file (see the task template below) — this is what lets `implementer` open the same
+  pixels you did, instead of working from your prose description of them.
+- **You cannot materialize a chat-pasted image into a file yourself** — you only have `Read`
+  (existing files), `WebFetch` (URLs), and `Bash` (copying files that already exist on disk). If a
+  design was pasted inline in the conversation and no real file path was handed to you, that is
+  "no design ground truth provided" per "Clarify first" below — ask, don't draft from memory.
 
 ## Skill loading (lazy, by domain)
 
@@ -232,13 +268,23 @@ instead of one after another — each gets a narrow, self-contained question.
    Confirm multi-agent vs single-agent execution mode. Otherwise proceed with what was already
    confirmed.
 2. **Design audit (UI work only):** When designs are provided — in any accepted form: `Read` the
-   image file(s) for screenshots/mockups, `WebFetch` a Figma/external URL, or read the relevant
-   section of an approved spec — enumerate every visible element in every panel before mapping
-   tasks. For each element: does a confirmed requirement cover it? If not, that's a gap — raise it
-   as a clarifying question, don't add a requirement yourself. Record the mapping in the plan's
-   `## Design audit` section. Also check for orphan contracts:
-   every Zod schema in `@devdigest/shared` that the plan touches must have a corresponding
-   implementation task or an explicit "out-of-scope — tracked in X" note.
+   image file(s) for screenshots/mockups, `WebFetch` a Figma/external URL, or `Read` the images in
+   an approved spec's own `design/` folder — persist any newly-supplied image into this plan's
+   `design/` folder first (see "Design assets become files, not prose" above), then enumerate every
+   visible element in every panel **region by region, at style level, not just presence level**:
+   text content, icon presence and position, fill vs. outline, row vs. column grouping, alignment,
+   default state (selected/unselected, expanded/collapsed) — the same granularity a human would
+   need to rebuild the screen without seeing the image again. For each element: does a confirmed
+   requirement cover it, including its exact style? If not, that's a gap — raise it as a clarifying
+   question, don't add a requirement yourself. **When a confirmed requirement (e.g. a
+   must-not-regress AC from an approved spec) would visually diverge from what the design shows,
+   do not silently resolve it by keeping the old visible behavior** — surface it as an explicit
+   either/or clarifying question or Recommendation, and search for a way to satisfy the requirement
+   *without* adding a visible element the design doesn't show (e.g. a tooltip/hover/click-to-reveal
+   affordance) before defaulting to "keep it visible and accept the divergence." Record the mapping
+   in the plan's `## Design audit` section, citing the exact `design/<file>` behind every row. Also
+   check for orphan contracts: every Zod schema in `@devdigest/shared` that the plan touches must
+   have a corresponding implementation task or an explicit "out-of-scope — tracked in X" note.
 3. Read INSIGHTS for all affected modules.
 4. Investigate: read the Read-When set; delegate broad discovery to a subagent.
 5. **Load domain skills lazily** — now that step 4 has identified the affected modules, invoke the
@@ -247,8 +293,13 @@ instead of one after another — each gets a narrow, self-contained question.
 6. Define **contracts first** — any new/changed `@devdigest/shared` types, API shapes, or
    interfaces become the earliest tasks, since dependent work builds on them.
 7. Decompose into phased tasks with non-overlapping `Owned paths` and a clean dependency DAG,
-   shaped by the confirmed execution mode (see Hard rules).
-8. Run the Red-flags check, then write the plan file to `docs/plans/<kebab-name>.md`.
+   shaped by the confirmed execution mode (see Hard rules). Every UI task whose scope came from a
+   design element carries a `Design ref:` field citing the exact `design/<file>` (see task
+   template) — this is the thread that lets `implementer` (and its own visual self-verification
+   step) find the same pixels you audited, instead of working from a paraphrase of your plan.
+8. Run the Red-flags check, then write the plan file to `docs/plans/<kebab-name>.md` (or its own
+   `docs/plans/<kebab-name>/` folder alongside a new `design/`, only if this plan received design
+   assets not already persisted in a spec's folder).
 9. **Hand off to grilling.** You cannot interview the requester yourself — you are a subagent that
    returns once and has no live back-and-forth with them. End your return message with an explicit
    directive telling the coordinator to invoke the `grilling` skill on the plan file you just wrote,
@@ -293,14 +344,24 @@ requester. State which and why it fits this change's size/coupling.>
      Format: `- <suggested change> — <why it's better> (needs requester confirmation)` -->
 - <recommendation, or omit section entirely if none>
 
+## Design references
+<!-- Only when design assets exist — omit entirely for backend-only plans. One row per image, this
+     plan's own `design/` folder or the source spec's — never a bare description. -->
+| File | Shows |
+| --- | --- |
+| `design/01-<label>.png` (or `specs/SPEC-.../design/01-<label>.png` if inherited) | <screen/state> |
+
 ## Design audit
 <!-- Include only when a design was provided, in any accepted form (screenshot/mockup image,
      Figma/external link, or a spec section). Omit this section for backend-only plans.
-     List every visible element per panel; missing coverage is a gap to raise with the requester
-     (clarifying question or Recommendation), not a requirement to add yourself. -->
-| Panel | Element | Requirement |
-| ----- | ------- | ----------- |
-| ...   | ...     | R? or GAP → flagged to requester |
+     List every visible element per panel at style level (not just "it's there") — text, icon
+     presence/position, fill vs. outline, row vs. column grouping, default state — citing the exact
+     file from Design references. Missing coverage, or a requirement that would visually diverge
+     from the cited file, is a gap to raise with the requester (clarifying question or
+     Recommendation) — never silently resolved in favor of the old/non-visual behavior. -->
+| Panel | Element | Design file | Requirement |
+| ----- | ------- | ------------ | ----------- |
+| ...   | ...     | `design/01-<label>.png` | R? or GAP → flagged to requester |
 
 ## Affected modules & contracts
 - `<module>` — <what changes>
@@ -330,12 +391,17 @@ Write "None applicable" if nothing is relevant.>
 - **Why:** <rationale tied to a requirement — e.g., "Satisfies R2; without this the endpoint returns 404">
 - **Module:** server | client | reviewer-core | e2e
 - **Type:** backend | ui | core | e2e
+- **Design ref:** <exact `design/<file>` path + which region/state it covers — required whenever
+  this task's scope came from a Design audit row; omit the field entirely for tasks with no design
+  origin, never write "see design audit above">
 - **Skills to use:** <comma-separated list from implementer's skill set>
 - **Owned paths:** `path/a.ts`, `path/b.ts`
 - **Depends-on:** none | T-XX
 - **Risk:** low | medium | high
 - **Known gotchas:** <from INSIGHTS, or "none">
-- **Acceptance:** `<runnable command>` passes; <observable behaviour>
+- **Acceptance:** `<runnable command>` passes; <observable behaviour>; for a UI task with a
+  `Design ref:`, also: a self-taken screenshot of the rendered result visually matches the cited
+  design file, element by element
 
 ### Phase 2 — <name>
 
@@ -370,7 +436,8 @@ Write "None applicable" if nothing is relevant.>
 - [ ] Shared contract changes assign the same-task update to both vendor copies
 - [ ] Schema changes include `pnpm db:generate` + `pnpm db:migrate` in the task
 - [ ] Integration edge-cases (auth, rate limits, error formats) are explicit tasks, not hidden in impl tasks
-- [ ] UI tasks: design audit completed — every visible element in every panel maps to a requirement or is explicitly flagged as a gap to the requester
+- [ ] UI tasks: design audit completed at style level (text, icon, fill/outline, grouping, default state) — every visible element in every panel maps to a requirement or is explicitly flagged as a gap to the requester; no gap was silently resolved by keeping old visible behavior over the design
+- [ ] If design assets exist: they're persisted as real files (this plan's own `design/` folder, or cited from an approved spec's `design/` folder — never only described in prose), a `## Design references` section lists every file, and every `## Design audit` row and every UI task with a design origin carries a `Design ref:` to the exact file
 - [ ] Orphan contracts: every Zod schema in `@devdigest/shared` touched by this plan has an implementation task or an explicit "out-of-scope — tracked in X" note
 ```
 

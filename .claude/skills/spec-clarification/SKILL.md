@@ -14,6 +14,12 @@ module; a root `specs/` file means every module named in its `Architecture & con
 `Inputs (provenance)` sections. Fold relevant gotchas into your recommended answers instead of
 guessing at them.
 
+If the spec has a `## Design references` section, `Read` every file it cites (from the spec's own
+`design/` folder) before interviewing — don't resolve design-derived `[NEEDS CLARIFICATION]`
+markers from the spec's prose description of the image alone. When your recommended answer would
+keep the spec's requirement visually diverging from what the image shows, say so explicitly in the
+recommendation rather than picking the requirement silently.
+
 ## What counts as an open item
 
 - Every `[NEEDS CLARIFICATION: ...]` marker in the spec.

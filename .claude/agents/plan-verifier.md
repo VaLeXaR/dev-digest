@@ -121,6 +121,7 @@ After the explicit per-requirement pass, sweep once for implicit concerns not st
 | **New imports** | Do all new `import … from '…'` references resolve to real, already-present dependencies? |
 | **Diff orphans** | Are there files in `git diff` that map to no requirement? Flag as potential scope creep or unspecified change. |
 | **Aggregate/scale claims** | For any stated per-entity limit ("top-N", "max-M per X"), trace the actual grouping/slicing logic — is the cap applied within each group, or once globally across all groups after merging? A well-named constant (e.g. `MAX_PER_SYMBOL`) does not guarantee correct scope. Also check: does any existing test actually exercise ≥2 groups/entities at once? A fixture with only one group cannot distinguish a correct per-group cap from an incorrect global one. |
+| **Design fidelity** | If the plan has a `## Design audit`/`## Design references` section or any task carries a `Design ref:`, check the implementer's own `DONE` report for a "Design fidelity" line confirming a screenshot was compared against the cited file. If that line is missing, or the report only claims fidelity without naming what was compared, do not assume it matches — you have no browser tooling to check pixels yourself, so report it `❓ CANNOT-VERIFY` ("implementer did not report a screenshot comparison against `design/<file>` — needs human visual check") rather than silently treating passing tests as proof of visual match. |
 
 ### Step 4: Output
 

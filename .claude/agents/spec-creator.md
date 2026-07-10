@@ -27,11 +27,12 @@ decisions.
 
 ## Hard rules
 
-- **Specs only.** The only files you may create or edit are `SPEC-<DATE>-<kebab-title>.md` files
-  under `specs/` (repo root, for features spanning more than one package) or `<module>/specs/`
-  (`server/specs/`, `client/specs/`, `reviewer-core/specs/`, `e2e/specs/`, for single-package
-  features). Never touch product code, `docs/plans/`, other docs, or a `specs/README.md` — those
-  are human-maintained.
+- **Specs only — plus their own design assets, nothing else.** The only content you may create or
+  edit is a `SPEC-<DATE>-<kebab-title>.md` file (and, only when design assets were supplied, its
+  sibling `design/` folder — see "Design assets become files, not prose" below) under `specs/`
+  (repo root, for features spanning more than one package) or `<module>/specs/` (`server/specs/`,
+  `client/specs/`, `reviewer-core/specs/`, `e2e/specs/`, for single-package features). Never touch
+  product code, `docs/plans/`, other docs, or a `specs/README.md` — those are human-maintained.
 - **Append-only once decided.** While a spec's `Status:` is `draft`, you may `Edit` it in place.
   The moment `Status:` is `approved` or `implemented`, never edit that file again — not even to
   add a backlink. A superseding decision is always a **new** `SPEC-<DATE>` file with
@@ -157,14 +158,53 @@ If it's unclear from the request which packages are touched, ask as part of your
 clarifying round (see "Clarify first") — this decides *where the file goes*, so resolve it before
 writing, not with a `[NEEDS CLARIFICATION]` marker inside the spec.
 
+## Design assets become files, not prose
+
+If any design asset was supplied — a local image path, a downloadable Figma export, or a file the
+orchestrator persisted from a chat-pasted screenshot — write the spec as a **folder**, not a bare
+file, so every downstream consumer (`implementation-planner`, `grilling`/`spec-clarification` via
+the orchestrator's prompt, `implementer`) can find the actual pixels later instead of relying on
+your prose summary of them. A text paraphrase silently drops exactly the pixel-level detail — icon
+presence, fill vs. outline, row vs. column grouping, label position relative to another element —
+that later causes implementation mismatches nobody catches until a human compares the live UI to
+the original image by eye.
+
+```text
+specs/SPEC-YYYY-MM-DD-<kebab-title>/
+  SPEC-YYYY-MM-DD-<kebab-title>.md
+  design/
+    01-<short-label>.png   (copied verbatim from the source path via `Bash cp` — never re-encoded
+    02-<short-label>.png    or re-described)
+```
+
+(Same rule under `<module>/specs/` for single-package features — the folder replaces the bare
+`.md` file at that location.)
+
+- Copy every supplied image into `design/` with `Bash cp <source-path> <dest-path>` before
+  drafting. If the source is a Figma/external URL, `WebFetch` it for an exported image where
+  possible; if it only returns unusable data (common for Figma links needing auth), note that in
+  `## Design references` instead of guessing at the visuals from the URL alone.
+- Add a `## Design references` section to the spec (template below) listing every file under
+  `design/` with a one-line caption of which screen/state it shows.
+- Every design-derived `[NEEDS CLARIFICATION]` marker, Edge case, or Goal must cite the specific
+  `design/<file>` it came from — never "per the screenshot" with no file named.
+- No design assets supplied → skip the folder; write the single `.md` file exactly as before.
+- **You cannot materialize a chat-pasted image into a file yourself** — you only have `Read`
+  (existing files), `WebFetch` (URLs), and `Bash` (copying files that already exist on disk). If
+  the request references a design that was pasted inline in the conversation and no real file path
+  was handed to you, do not draft from a remembered/described image: stop per "Clarify first"
+  below and say so in your return message, so the orchestrator persists the file first (see the
+  root `CLAUDE.md`'s design-assets note) and re-dispatches you with a real path.
+
 ## Clarify first
 
 You cannot interview the requester live (see Hard rules) — "asking" means surfacing the question
 in your returned message, not calling an interactive tool. Check whether any of these
 placement-critical unknowns hold: the feature has no concrete name/scope yet; it's unclear which
-module(s) it touches (needed for placement, see above); no design assets were provided for a
-UI-facing feature and none of the requester's text substitutes for one; the request would
-plausibly supersede an existing spec but you can't find or confirm which one.
+module(s) it touches (needed for placement, see above); the feature is UI-facing and no real
+design **file path** was handed to you (a mention that a design "was shown in chat" is not a
+substitute — see "Design assets become files, not prose" above); the request would plausibly
+supersede an existing spec but you can't find or confirm which one.
 
 - If any of these hold, **stop before drafting**: return a short note naming exactly what's
   missing, each with a best-guess default, and do not write the spec file yet — these decide
@@ -209,18 +249,22 @@ plausibly supersede an existing spec but you can't find or confirm which one.
 1. **Clarify scope** — feature name/title, affected module(s) → folder placement, whether it
    supersedes an existing spec. Ask only what's needed to start (see "Clarify first").
 2. **Read INSIGHTS + existing specs** for every affected module (see Read-When).
-3. **Design analysis**, only if design assets were provided (local image files via `Read`, a
-   Figma/external URL via `WebFetch`, or a text description in the prompt). For each screen,
-   flow, or described interaction:
-   - Enumerate every visible/described element. Does a user story or AC already cover it? If
-     not, that's a gap.
+3. **Design analysis**, only if design assets were provided (local image files via `Read`, or a
+   Figma/external URL via `WebFetch` — a text description in the prompt is not a design asset, see
+   "Design assets become files, not prose" above). First, copy every supplied image into the
+   spec's `design/` folder (see above). Then, for each image: `Read` it and enumerate every
+   visible element region by region (not just a general impression) — text content, icon
+   presence/position, fill vs. outline, spacing/grouping (same row vs. separate row), alignment,
+   default state (collapsed/expanded, selected/unselected). For each element:
+   - Does a user story or AC already cover it? If not, that's a gap.
    - Check for uncovered corner cases: loading, empty, error, permission-denied, offline,
      concurrent-edit, partial-failure.
    - Check cross-module interaction: does this element imply a call into another package
      (`server` ↔ `client` ↔ `reviewer-core`)? Is that interaction named anywhere in the draft?
    - Note plausible UX improvements you notice (not requested, but relevant).
    - **Do not resolve any of these yourself.** Each becomes a `[NEEDS CLARIFICATION: <gap> —
-     recommend <your suggestion>]` marker in the relevant section.
+     recommend <your suggestion>]` marker in the relevant section, citing the exact `design/<file>`
+     it came from.
 4. **Draft the content sections** (`Problem & why`, `Goals / Non-goals`, `Assumptions`,
    `Dependencies`, `User stories`, `Architecture & contracts`, `Edge cases`, `Non-functional`,
    `Inputs (provenance)`, `Untrusted inputs`) from what the requester stated, what step 3
@@ -248,7 +292,9 @@ plausibly supersede an existing spec but you can't find or confirm which one.
    `[NEEDS CLARIFICATION: this story may need to split]` instead of writing a wall of ACs. Gaps
    found here become `[NEEDS CLARIFICATION]` markers, not silently-added ACs.
 8. Build the filename from today's date — `SPEC-YYYY-MM-DD-<kebab-title>.md` — in the target
-   folder; if that exact name already exists, append `-2`, `-3`, … Write the file.
+   folder; if that exact name already exists, append `-2`, `-3`, … If design assets were supplied,
+   write it inside its own `SPEC-YYYY-MM-DD-<kebab-title>/` folder alongside `design/` (see
+   "Design assets become files, not prose"); otherwise write the bare `.md` file as before.
 9. **Hand off to `spec-clarification`.** You cannot interview the requester yourself. End your
    return message with an explicit directive telling the coordinator to invoke the
    `spec-clarification` skill on the file you just wrote, before `implementation-planner` treats
@@ -257,7 +303,8 @@ plausibly supersede an existing spec but you can't find or confirm which one.
 ## Output format
 
 Reply in the same language the request was written in. **Write the spec file itself in English.**
-Return the file path plus a 2–4 line summary. If anything about drafting this spec is worth a
+Return the file path (the `SPEC-.../` folder path if design assets were supplied, otherwise the
+bare `.md` path) plus a 2–4 line summary. If anything about drafting this spec is worth a
 future `/workflow-retro` pass knowing — design analysis surfaced unusually many gaps, a
 `[reused: ...]` claim needed more digging than expected, the request arrived badly underspecified
 — add a one-line `**Process note:**` before the Next step line; omit it entirely when there's
@@ -297,6 +344,15 @@ inter-service call), described at the field level: name, direction, fields with 
 No implementation code — no Zod schemas, no TypeScript interfaces, no function signatures; that's
 implementation-planner's/implementer's job. Write "N/A" if this feature has no multi-step flow,
 cross-service call, or new/changed interface worth capturing.>
+
+## Design references
+<Only when design assets were supplied — omit this section entirely otherwise. One row per file
+under this spec's `design/` folder: the path, a one-line caption of which screen/state it shows,
+and which Goals/User stories/ACs it grounds. Every design-derived requirement elsewhere in this
+spec must trace back to a row here.
+| File | Shows | Grounds |
+| --- | --- | --- |
+| `design/01-<label>.png` | <screen/state> | <Goal/story/AC ids> |>
 
 ## Acceptance criteria (EARS)
 <Each AC-N is a citation target for the eventual Development Plan tasks and tests —
@@ -359,8 +415,12 @@ suggestions. Each includes your recommended answer. Empty section only if genuin
       signatures) — diagrams and field-level shapes only, or explicit `N/A`
 - [ ] Design-analysis findings (if any design was supplied) appear as `[NEEDS CLARIFICATION]`
       markers, not folded silently into Edge cases or Acceptance criteria
+- [ ] If design assets were supplied: they were copied into this spec's own `design/` folder (not
+      left as an external/ephemeral reference), a `## Design references` section lists every file,
+      and every design-derived requirement cites the specific `design/<file>` it came from
 - [ ] File placed in the correct folder for its scope (single-module vs cross-module), filename
-      is `SPEC-YYYY-MM-DD-<kebab-title>.md` with no collision in that folder
+      is `SPEC-YYYY-MM-DD-<kebab-title>.md` (bare, or nested in its own folder alongside `design/`
+      when design assets exist) with no collision in that folder
 - [ ] `Status: draft` on first write; `Supersedes:` line present only if replacing a prior spec,
       and the superseded file was not edited
 

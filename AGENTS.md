@@ -87,9 +87,41 @@ discretionary. Only skip when the user explicitly declines a specific handoff in
 
 See `.claude/agents/README.md` for the full per-agent rationale and token-chaining patterns.
 
+### Design assets — files, never prose
+
+Root cause of past redesign mismatches: a mockup pasted into chat got paraphrased into the spec/
+plan as text, and every downstream agent worked from that paraphrase instead of the actual pixels
+— losing icon presence, fill vs. outline, row/column grouping, and label position, one guess at a
+time. Fix, binding on the whole pipeline:
+
+- **Persist before dispatching.** If the user pastes a design image inline in this conversation
+  (not already a file path), save it to disk — e.g. under the scratchpad, or ask the user to
+  attach it as a file if no backing path is available — **before** dispatching `spec-creator` or
+  `implementation-planner`. Never hand either agent a text description as a substitute for the
+  image; both are instructed to refuse and ask if only given prose.
+- **Specs and plans that touch a design become folders, not bare files**, once assets exist:
+  `specs/SPEC-<date>-<title>/` with a `design/` subfolder (`spec-creator`), and
+  `docs/plans/<name>/` with its own `design/` subfolder if new assets arrive directly at planning
+  time (`implementation-planner`) — inheriting a spec's own `design/` folder by reference instead
+  of duplicating it. Both agents' own docs (`.claude/agents/spec-creator.md`,
+  `.claude/agents/implementation-planner.md`) carry the exact convention.
+- **Every design-derived requirement, plan row, and task cites the exact file** (`design/<file>`)
+  behind it — never "per the screenshot" with no path.
+- **`grilling`** (`.agents/skills/grilling/SKILL.md`) **and `spec-clarification`** re-open every
+  cited design file before interviewing, and treat a plan/spec decision that visually diverges from
+  the design as a question to raise, not something to accept because it was already decided.
+- **`implementer`** treats its task's `Design ref:` field as authoritative over prose, and — for UI
+  tasks — self-verifies with a screenshot compared against the cited file (via a dispatched
+  subagent) before claiming `DONE`, downgrading to `DONE_WITH_CONCERNS` if it can't check rather
+  than asserting an unverified visual match.
+- **`plan-verifier`** flags missing design-fidelity evidence as `CANNOT-VERIFY`, not a silent pass.
+
 ## Skills
 
-Use only skills defined in `.claude/skills/` (project skills) by default. Do **not** invoke external or third-party skills (e.g. `superpowers:*`, `andrej-karpathy-skills:*`, or any skill not under `.claude/skills/`) unless the user explicitly requests one.
+Use only skills defined in `.claude/skills/` or `.agents/skills/` (both project-owned — e.g.
+`grilling` lives under `.agents/skills/`) by default. Do **not** invoke external or third-party
+skills (e.g. `superpowers:*`, `andrej-karpathy-skills:*`, or any skill not under one of those two
+project folders) unless the user explicitly requests one.
 
 ## Read when
 
