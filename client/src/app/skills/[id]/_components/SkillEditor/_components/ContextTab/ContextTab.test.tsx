@@ -19,8 +19,8 @@ vi.mock("../../../../../../../lib/hooks/project-context", () => ({
 import { ContextTab } from "./ContextTab";
 
 const DOCS: DiscoveredDoc[] = [
-  { path: "specs/a.md", root_folder: "specs", filename: "a.md", tracked: true, token_estimate: 40 },
-  { path: "docs/b.md", root_folder: "docs", filename: "b.md", tracked: false, token_estimate: 60 },
+  { path: "specs/a.md", root_folder: "specs", filename: "a.md", tracked: true, token_estimate: 40, used_by_agents: 0 },
+  { path: "docs/b.md", root_folder: "docs", filename: "b.md", tracked: false, token_estimate: 60, used_by_agents: 0 },
 ];
 
 // Default fixture used by every test unless a test overrides one of the two

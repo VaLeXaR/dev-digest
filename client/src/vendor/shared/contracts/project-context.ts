@@ -17,6 +17,8 @@ export const DiscoveredDoc = z.object({
   tracked: z.boolean(),
   /** ceil(byteLength / 4), server-computed. */
   token_estimate: z.number().int(),
+  /** Distinct agents that would inject this doc at run time (direct attach ∪ enabled-skill inheritance). Computed fresh per request — never cached with the filesystem walk (D-UBA/D-FRESH). */
+  used_by_agents: z.number().int(),
 });
 export type DiscoveredDoc = z.infer<typeof DiscoveredDoc>;
 
@@ -27,6 +29,8 @@ export const DiscoveryResponse = z.object({
   token_budget: z.number().int(),
   /** ISO timestamp of the last scan; null when never scanned (e.g. repo not cloned). */
   scanned_at: z.string().nullable(),
+  /** % of discovered docs referenced by ≥1 agent or skill in this workspace; null when zero docs are discovered (D-COV, repo-level aggregate). */
+  coverage_pct: z.number().nullable(),
 });
 export type DiscoveryResponse = z.infer<typeof DiscoveryResponse>;
 

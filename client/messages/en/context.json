@@ -63,6 +63,7 @@
     "genericError": "Failed to create"
   },
   "upload": {
+    "menuLabel": "Upload",
     "file": "Upload file",
     "fileTitle": "Upload a .md file",
     "archive": "Upload archive",
@@ -76,6 +77,16 @@
     "conflictError": "A document already exists at this path",
     "genericError": "Failed to upload"
   },
+  "usedBy": {
+    "pill": "Used by {count, plural, one {# agent} other {# agents}}"
+  },
+  "coverage": {
+    "label": "Coverage"
+  },
+  "detail": {
+    "emptyTitle": "Select a document",
+    "emptyBody": "Choose a document from the list to preview or edit it here."
+  },
   "edit": {
     "action": "Edit",
     "title": "Edit document",
@@ -85,9 +96,9 @@
     "genericError": "Failed to save document"
   },
   "footer": {
-    "summary": "{count} documents · ~{tokens} tokens",
-    "lastScanned": "Last scanned {time}",
-    "neverScanned": "Not scanned yet"
+    "summary": "Indexed: {count} files · ~{tokens} tokens",
+    "lastScanned": "last scanned {time}",
+    "neverScanned": "not scanned yet"
   },
   "emptyState": {
     "title": "No documents found",

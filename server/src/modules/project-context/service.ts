@@ -15,6 +15,7 @@ import { resolveRootFolders, resolveTokenBudget } from './settings.js';
 import { getDiscovery, refreshDiscovery, type DiscoveryResult } from './discovery.js';
 import { extractMarkdownEntries } from './archive.js';
 import { createFolder, writeNewFile, extractArchive, editFile } from './writer.js';
+import { ProjectContextRepository, type UsageInfo } from './repository.js';
 
 /**
  * Orchestrates discovery/refresh, guarded content read, folder/file create,
@@ -25,9 +26,11 @@ import { createFolder, writeNewFile, extractArchive, editFile } from './writer.j
  */
 export class ProjectContextService {
   private repoRepo: RepoRepository;
+  private contextRepo: ProjectContextRepository;
 
   constructor(private container: Container) {
     this.repoRepo = new RepoRepository(container.db);
+    this.contextRepo = new ProjectContextRepository(container.db);
   }
 
   async discovery(workspaceId: string, repoId: string): Promise<DiscoveryResponse> {
@@ -40,7 +43,11 @@ export class ProjectContextService {
       repo.clonePath,
       rootFolders,
     );
-    return this.toResponse(result, tokenBudget);
+    const usageMap = await this.contextRepo.usageCounts(
+      workspaceId,
+      result.documents.map((d) => d.path),
+    );
+    return this.toResponse(result, tokenBudget, usageMap);
   }
 
   async refresh(workspaceId: string, repoId: string): Promise<DiscoveryResponse> {
@@ -53,7 +60,11 @@ export class ProjectContextService {
       repo.clonePath,
       rootFolders,
     );
-    return this.toResponse(result, tokenBudget);
+    const usageMap = await this.contextRepo.usageCounts(
+      workspaceId,
+      result.documents.map((d) => d.path),
+    );
+    return this.toResponse(result, tokenBudget, usageMap);
   }
 
   async getContent(workspaceId: string, repoId: string, path: string): Promise<DocContentResponse> {
@@ -164,14 +175,37 @@ export class ProjectContextService {
     return { owner: repo.owner, name: repo.name };
   }
 
-  private toResponse(result: DiscoveryResult, tokenBudget: number): DiscoveryResponse {
-    const tokenTotal = result.documents.reduce((sum, d) => sum + d.token_estimate, 0);
+  /**
+   * Merges the (possibly cached) filesystem-walk result with a fresh
+   * `usageMap` read — usage/coverage must never be folded into the
+   * discovery cache itself (D-FRESH), since attach changes don't trigger a
+   * rescan. `coverage_pct` is the repo-level aggregate (D-COV): the % of
+   * discovered docs referenced by ≥1 agent (direct or inherited) or ≥1
+   * skill, derived from the same `usageMap`'s `coveredByAny` flags — `null`
+   * when zero docs are discovered (avoids a divide-by-zero; ring shows a
+   * placeholder).
+   */
+  private toResponse(
+    result: DiscoveryResult,
+    tokenBudget: number,
+    usageMap: Map<string, UsageInfo>,
+  ): DiscoveryResponse {
+    const documents = result.documents.map((d) => ({
+      ...d,
+      used_by_agents: usageMap.get(d.path)?.agentCount ?? 0,
+    }));
+    const tokenTotal = documents.reduce((sum, d) => sum + d.token_estimate, 0);
+    const covered = result.documents.filter((d) => usageMap.get(d.path)?.coveredByAny).length;
+    const coveragePct = result.documents.length
+      ? Math.round((100 * covered) / result.documents.length)
+      : null;
     return {
-      documents: result.documents,
-      file_count: result.documents.length,
+      documents,
+      file_count: documents.length,
       token_total: tokenTotal,
       token_budget: tokenBudget,
       scanned_at: result.scannedAt,
+      coverage_pct: coveragePct,
     };
   }
 }

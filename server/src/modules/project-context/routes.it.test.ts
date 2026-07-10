@@ -8,6 +8,7 @@ import { startPg, dockerAvailable, type PgFixture } from '../../../test/helpers/
 import { buildApp } from '../../app.js';
 import { loadConfig } from '../../platform/config.js';
 import { MockAuthProvider, MockGitClient, type MockGitOptions } from '../../adapters/mocks.js';
+import { AgentsRepository } from '../agents/repository.js';
 import * as t from '../../db/schema.js';
 
 /**
@@ -134,6 +135,44 @@ d('project-context routes (Testcontainers pg)', () => {
     expect(body.token_total).toBe(
       Math.ceil(16 / 4) + Math.ceil(9 / 4),
     );
+
+    await app.close();
+  });
+
+  it('GET /repos/:id/context/docs computes coverage_pct as round(100 * covered / total) across N docs (D-COV)', async () => {
+    const { app, repoId, clonePath, workspaceId } = await setup();
+    writeFile(clonePath, 'specs/covered.md', 'a');
+    writeFile(clonePath, 'specs/uncovered-one.md', 'b');
+    writeFile(clonePath, 'specs/uncovered-two.md', 'c');
+
+    const agentsRepo = new AgentsRepository(pg.handle.db);
+    const agent = await agentsRepo.insert({
+      workspaceId,
+      name: 'coverage-agent',
+      provider: 'openrouter',
+      model: 'test-model',
+      systemPrompt: 'be helpful',
+    });
+    await agentsRepo.setContextDocs(agent.id, ['specs/covered.md']);
+
+    const res = await app.inject({ method: 'GET', url: `/repos/${repoId}/context/docs` });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.file_count).toBe(3);
+    // 1 of 3 discovered docs is covered -> round(100 * 1 / 3) = 33
+    expect(body.coverage_pct).toBe(Math.round((100 * 1) / 3));
+
+    await app.close();
+  });
+
+  it('GET /repos/:id/context/docs returns coverage_pct null when zero docs are discovered', async () => {
+    const { app, repoId } = await setup();
+
+    const res = await app.inject({ method: 'GET', url: `/repos/${repoId}/context/docs` });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.file_count).toBe(0);
+    expect(body.coverage_pct).toBeNull();
 
     await app.close();
   });

@@ -64,6 +64,7 @@ export async function scanRepoDocs(
       filename: basename(rel),
       tracked: tracked.has(rel),
       token_estimate: Math.ceil(size / 4),
+      used_by_agents: 0, // placeholder — overwritten fresh per request by the service (D-FRESH)
     });
   }
 

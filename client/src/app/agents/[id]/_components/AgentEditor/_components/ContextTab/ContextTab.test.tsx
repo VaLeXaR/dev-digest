@@ -50,6 +50,7 @@ function doc(overrides: Partial<DiscoveredDoc>): DiscoveredDoc {
     filename: "a.md",
     tracked: true,
     token_estimate: 100,
+    used_by_agents: 0,
     ...overrides,
   };
 }
