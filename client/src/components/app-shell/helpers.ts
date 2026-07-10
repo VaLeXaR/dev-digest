@@ -26,7 +26,11 @@ export function isTextInput(el: EventTarget | null): boolean {
 export function activeKeyFor(pathname: string): string {
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.includes("/multi-agent")) return "multi-agent";
-  if (pathname.includes("/onboarding")) return "onboarding-tour";
+  // NOTE: matches nav.ts's "onboarding" item key (repo-scoped Onboarding Tour
+  // route, /repos/:repoId/onboarding). The top-level Add-repository route
+  // (/onboarding, app/onboarding/page.tsx) never renders AppShell/Sidebar at
+  // all, so this substring match never applies to it in practice.
+  if (pathname.includes("/onboarding")) return "onboarding";
   if (pathname.includes("/context")) return "context";
   if (pathname.includes("/conventions")) return "conventions";
   if (pathname.includes("/pulls")) return "pulls";

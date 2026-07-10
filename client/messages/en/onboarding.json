@@ -5,13 +5,55 @@
   "regenerate": "Regenerate",
   "regenerating": "Regenerating…",
   "unknownError": "Unknown error",
+  "shareLink": "Share link",
+  "shareLinkCopied": "Link copied",
+  "staleHint": " · index has changed since",
+  "onThisPage": "On this page",
   "generate": {
     "title": "Generate onboarding tour",
-    "body": "DevDigest indexes the repo and specs, then writes a 5-section guided tour: overview, architecture, key modules, getting started, and conventions & gotchas.",
+    "body": "DevDigest indexes the repo and writes a guided tour: architecture, critical paths, how to run, a reading order, and first tasks. Takes 30–60s and ~5,000 tokens.",
     "cta": "Generate onboarding tour",
     "generating": "Generating…"
   },
+  "indexRequired": {
+    "title": "Index required",
+    "body": "This repository needs a completed index before DevDigest can generate an onboarding tour. Indexing happens automatically once the repo is synced."
+  },
   "loadError": {
     "title": "Couldn’t load the onboarding tour"
+  },
+  "header": {
+    "titlePrefix": "Onboarding for",
+    "subtitle": "Generated from index of {files} files · last refreshed {time} ago"
+  },
+  "sectionNav": {
+    "architecture": "Architecture overview",
+    "criticalPaths": "Critical paths",
+    "runLocally": "How to run locally",
+    "readingPath": "Guided reading path",
+    "firstTasks": "First tasks"
+  },
+  "architecture": {
+    "title": "Architecture overview"
+  },
+  "criticalPaths": {
+    "title": "Critical paths",
+    "open": "Open",
+    "empty": "No critical paths identified yet."
+  },
+  "runLocally": {
+    "title": "How to run locally",
+    "aiGenerated": "AI-generated · review before running",
+    "copy": "Copy",
+    "copied": "Copied",
+    "empty": "No run commands identified yet."
+  },
+  "readingPath": {
+    "title": "Guided reading path",
+    "empty": "No reading path identified yet."
+  },
+  "firstTasks": {
+    "title": "First tasks",
+    "empty": "No first tasks identified yet."
   }
 }
