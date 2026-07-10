@@ -2,7 +2,7 @@
 name: run-plan
 description: "Executes an already-approved, already-grilled Development Plan end to end: multi-agent implementer → plan-verifier (functional pass) → architecture-reviewer (fix-iterate loop) → final plan-verifier gate. Does NOT create specs or plans — spec-creator, spec-clarification, implementation-planner, and grilling are run manually before this skill. Test-writer is disabled by default (cost). Use via /run-plan docs/plans/<name>.md when a plan is ready to build."
 user-invocable: true
-version: "1.2.0"
+version: "1.3.0"
 ---
 
 # run-plan — execute a Development Plan
@@ -84,6 +84,15 @@ For each phase, in order:
   the parallel tool-call convention) so they run concurrently. Tasks with unresolved `Depends-on`
   wait for their dependency's `DONE` before dispatching.
 - **Single-agent mode:** dispatch one `implementer` per task, sequentially, in DAG order.
+- **Dispatch on the task's own `Depends-on`, not the whole phase's batch.** A phase groups tasks
+  for planning convenience (shared module, shared review boundary) — it is not itself a dependency.
+  If a task's `Depends-on` is a strict subset of the tasks dispatched alongside it in the same
+  phase (e.g. it names only one sibling, sequenced after it purely because both own the same
+  directory), dispatch it the moment THAT dependency reports `DONE` — do not hold it back waiting
+  for unrelated siblings in the same phase batch to also finish. Confirmed costly in practice: a
+  task whose only dependency was a 7-minute sibling sat undispatched for ~3.8 hours because two
+  *other*, unrelated siblings in the same phase batch stalled on an infra-level API error — nothing
+  about the delayed task actually needed those two to finish first.
 
 Handle each return per status:
 
@@ -95,7 +104,8 @@ Handle each return per status:
 | `BLOCKED` | Resolve the Owned-path or protected-file conflict (adjust the task or get user sign-off to widen scope), then re-dispatch. |
 
 A phase is complete only when every task in it reports `DONE` or an accepted `DONE_WITH_CONCERNS`.
-Do not start a dependent phase early.
+Do not start the NEXT phase early — this governs cross-phase advancement, not intra-phase dispatch
+order (see the `Depends-on`-driven dispatch bullet above for tasks within the current phase).
 
 ## Stage 2 — Plan-verifier (functional pass)
 

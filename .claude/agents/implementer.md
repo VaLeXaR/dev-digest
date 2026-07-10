@@ -28,6 +28,13 @@ run safe.
   **added** only if the task says so.
 - **No broad review.** Your self-check is narrow: write the code and make the module's existing
   tests pass. Full architecture / security auditing is `pr-self-review`'s job, not yours.
+- **Never background your own verification command and then end your turn waiting for it.** You
+  are a subagent — you do not receive the coordinator's task-notification when a background
+  process finishes, so ending your turn with "I'll wait for the test run to complete" stalls
+  indefinitely until the coordinator notices and has to intervene. Run `pnpm test`/`vitest`/`tsc`
+  synchronously in the foreground. If a command genuinely must run in the background, actively
+  poll and read its actual output yourself before ending your turn — never end a turn on an
+  assumption that a result will arrive on its own.
 
 ## What you receive
 
