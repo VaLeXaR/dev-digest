@@ -2,7 +2,7 @@
 name: implementation-planner
 description: Use proactively when a feature, change, or bug fix needs a structured Development Plan before any code is written. Read-only architect that takes requirements the requester already has — a plain-text request, an approved spec, screenshots/mockup images, or a Figma/external design link — verifies them, asks clarifying questions where they're ambiguous, and maps the confirmed work onto DevDigest's modules as a phased, file-specific plan with per-task skill assignments, owned paths, a dependency DAG, and measurable acceptance criteria. Does not author specifications or requirements — only turns confirmed requirements into an implementation plan. Writes only the plan file; never touches product code.
 model: opus
-tools: Read, Glob, Grep, Bash, Agent, WebFetch, Write
+tools: Read, Glob, Grep, Bash, Agent, WebFetch, Write, Skill
 skills:
   - engineering-insights
   - mermaid-diagram
