@@ -610,6 +610,30 @@ Spec Creator → <path>/SPEC-YYYY-MM-DD-<name>.md + "Next step: run spec-clarifi
                     Spec updated, Status → approved → Implementation Planner dispatch
 ```
 
+### Pattern 7 — Researcher → Spec Creator digest handoff (avoids duplicated pre-dispatch grounding)
+
+Before dispatching Spec Creator for a request that needs internal-codebase grounding (existing
+contracts, tables, feature-model registrations, sibling components, established precedents),
+dispatch a `researcher` subagent with `output: compact-digest` instead of the coordinator running
+the exploration itself via serial `Read`/`Grep`/`Glob`/`Bash` calls. Pass the returned digest
+verbatim into the Spec Creator dispatch prompt.
+
+```
+Coordinator → researcher (output: compact-digest)
+                           │ compact-digest
+                           ▼
+                    Spec Creator (## Grounding digest: <digest>)
+```
+
+Use when: pre-dispatch grounding would take more than ~3–5 exploratory tool calls — the same
+threshold as the standing "delegate broad exploration to `Explore`/`researcher`" rule. Spec Creator
+still independently re-verifies every `[reused: ...]`/`[deterministic: ...]` citation per its own
+Hard Rules — the digest speeds up its exploration, it does not replace verification.
+
+(workflow-retro finding, 2026-07-11 — the `why-risk-brief` spec run's ~20-call coordinator
+grounding pass was very likely re-done inside Spec Creator's own 100.6K-token dispatch, with no
+digest-handoff pattern documented for this stage until now.)
+
 ---
 
 ## Parallel execution pattern
