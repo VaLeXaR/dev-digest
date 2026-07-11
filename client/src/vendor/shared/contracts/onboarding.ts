@@ -44,10 +44,16 @@ export const OnboardingReadingPathEntry = z.object({
 });
 export type OnboardingReadingPathEntry = z.infer<typeof OnboardingReadingPathEntry>;
 
+export const OnboardingTaskComplexity = z.enum(['low', 'medium', 'high']);
+export type OnboardingTaskComplexity = z.infer<typeof OnboardingTaskComplexity>;
+
 export const OnboardingFirstTask = z.object({
   title: z.string(),
   rationale: z.string(),
   relatedFiles: z.array(z.string()).optional(),
+  // Optional: tours persisted before this field existed won't have it —
+  // the client omits the complexity pill rather than failing to parse.
+  complexity: OnboardingTaskComplexity.optional(),
 });
 export type OnboardingFirstTask = z.infer<typeof OnboardingFirstTask>;
 

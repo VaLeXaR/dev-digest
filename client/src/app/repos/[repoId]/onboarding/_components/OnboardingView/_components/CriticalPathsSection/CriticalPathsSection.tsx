@@ -34,11 +34,11 @@ export function CriticalPathsSection({
           <div style={s.fileRowText}>
             <span className="mono" style={s.fileRowPath}>
               {p.path}
-            </span>
+            </span>{" "}
             <span style={s.fileRowAnnotation}>— {p.why}</span>
           </div>
           <Button
-            kind="secondary"
+            kind="ghost"
             size="sm"
             onClick={() => openGithubBlob(repoFullName, defaultBranch, p.path)}
           >

@@ -7,6 +7,16 @@ import React from "react";
 const MERMAID_RE =
   /^\s*(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|C4Context)\b/;
 
+/** LLM output occasionally wraps the diagram in a ```mermaid fence despite
+ *  prompt instructions not to — strip it before validating/rendering rather
+ *  than silently dropping an otherwise-valid diagram. */
+const FENCE_RE = /^```(?:mermaid)?\s*\n([\s\S]*?)\n?```$/i;
+
+function unwrapFence(src: string): string {
+  const match = FENCE_RE.exec(src.trim());
+  return match ? (match[1] ?? "").trim() : src.trim();
+}
+
 function looksLikeMermaid(src: string): boolean {
   return MERMAID_RE.test(src.trim());
 }
@@ -24,7 +34,7 @@ export function MermaidDiagram({ chart }: { chart: string }) {
 
   React.useEffect(() => {
     let cancelled = false;
-    const src = (chart ?? "").trim();
+    const src = unwrapFence(chart ?? "");
     if (!looksLikeMermaid(src)) {
       setState("invalid");
       return;

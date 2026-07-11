@@ -135,6 +135,15 @@ function isIndexed(indexState: { degraded?: boolean; filesIndexed: number }): bo
   return !indexState.degraded && indexState.filesIndexed > 0;
 }
 
+/** The prompt forbids ``` fences in the `diagram` field, but the model
+ *  doesn't always comply — strip a wrapping ```mermaid fence before persisting
+ *  so stored tours always hold raw Mermaid syntax (client renders it as-is). */
+function stripMermaidFence(diagram: string): string {
+  const trimmed = diagram.trim();
+  const match = /^```(?:mermaid)?\s*\n([\s\S]*?)\n?```$/i.exec(trimmed);
+  return match ? (match[1] ?? '').trim() : trimmed;
+}
+
 /**
  * Merges the LLM's annotations onto the deterministic, server-ordered lists
  * — the ordered lists stay authoritative; any LLM-returned path not present
@@ -160,7 +169,10 @@ function mergeOnboardingTour(
   }));
 
   return {
-    architecture: llm.architecture,
+    architecture: {
+      summary: llm.architecture.summary,
+      diagram: stripMermaidFence(llm.architecture.diagram),
+    },
     criticalPaths,
     runLocally: { aiGenerated: true, commands: llm.runLocally.commands },
     readingPath,

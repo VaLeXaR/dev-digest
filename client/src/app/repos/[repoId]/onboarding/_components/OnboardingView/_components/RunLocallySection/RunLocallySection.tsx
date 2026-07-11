@@ -18,17 +18,17 @@ function CommandRow({ index, command, comment }: { index: number; command: strin
     setTimeout(() => setCopied(false), 1200);
   }
   return (
-    <div style={s.numberedRow}>
-      <span style={s.numberBadge}>{index + 1}</span>
-      <div style={s.commandRow}>
-        <span className="mono" style={s.commandText}>
-          {command}
-          {comment && <span style={s.commandComment}> # {comment}</span>}
-        </span>
-        <button type="button" title="Copy" aria-label="Copy" onClick={copy} style={s.copyBtn}>
-          {copied ? <Icon.Check size={14} /> : <Icon.Copy size={14} />}
-        </button>
-      </div>
+    <div style={s.commandRow}>
+      <span className="mono" style={s.commandIndex}>
+        {index + 1}
+      </span>
+      <span className="mono" style={s.commandText}>
+        {command}
+        {comment && <span style={s.commandComment}> # {comment}</span>}
+      </span>
+      <button type="button" title="Copy" aria-label="Copy" onClick={copy} style={s.copyBtn}>
+        {copied ? <Icon.Check size={14} /> : <Icon.Copy size={14} />}
+      </button>
     </div>
   );
 }

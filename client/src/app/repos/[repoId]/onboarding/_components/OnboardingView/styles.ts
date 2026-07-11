@@ -45,7 +45,9 @@ export const s = {
     textAlign: "left",
     padding: "6px 10px",
     fontSize: 13.5,
-    borderRadius: 6,
+    // Round only the right corners — the design's active-indicator bar
+    // (borderLeft below) has square, not rounded, ends.
+    borderRadius: "0 6px 6px 0",
     borderLeft: active ? "2px solid var(--accent)" : "2px solid transparent",
     color: active ? "var(--text-primary)" : "var(--text-secondary)",
     fontWeight: active ? 600 : 400,
@@ -81,7 +83,13 @@ export const s = {
     transition: "transform .15s",
     flexShrink: 0,
   }),
-  cardBody: { padding: "0 18px 18px", display: "flex", flexDirection: "column", gap: 12 } satisfies CSSProperties,
+  cardBody: {
+    padding: "0 18px 18px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+    color: "var(--text-secondary)",
+  } satisfies CSSProperties,
 
   emptyText: { fontSize: 13.5, color: "var(--text-muted)", fontStyle: "italic" } satisfies CSSProperties,
 
@@ -99,8 +107,11 @@ export const s = {
     border: "1px solid var(--border)",
   } satisfies CSSProperties,
   fileRowIcon: { color: "var(--text-muted)", flexShrink: 0 } satisfies CSSProperties,
-  fileRowText: { minWidth: 0, flex: 1, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" } satisfies CSSProperties,
-  fileRowPath: { fontSize: 13, fontWeight: 600, color: "var(--text-primary)" } satisfies CSSProperties,
+  // Plain block (not flex) so the path + annotation flow as normal inline
+  // text — the annotation wraps word-by-word right after the path instead
+  // of being pushed to its own line as a whole flex item when it's long.
+  fileRowText: { minWidth: 0, flex: 1 } satisfies CSSProperties,
+  fileRowPath: { fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" } satisfies CSSProperties,
   fileRowAnnotation: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
 
   // ---- Numbered rows (run-locally + reading-path + first-tasks) ----
@@ -131,6 +142,15 @@ export const s = {
     flex: 1,
     minWidth: 0,
   } satisfies CSSProperties,
+  // Line-number gutter INSIDE the command's own bordered row (not an
+  // external circular badge like the other numbered sections) — commands
+  // are single-line with no secondary description, so the design treats
+  // each row like one line of a code block.
+  commandIndex: {
+    fontSize: 13,
+    color: "var(--text-muted)",
+    flexShrink: 0,
+  } satisfies CSSProperties,
   commandText: {
     fontSize: 13,
     color: "var(--text-primary)",
@@ -151,11 +171,42 @@ export const s = {
 
   // ---- Reading path / first tasks text rows ----
   readingPathBody: { display: "flex", flexDirection: "column", gap: 2, minWidth: 0 } satisfies CSSProperties,
-  readingPathPath: { fontSize: 13.5, fontWeight: 650, color: "var(--text-primary)" } satisfies CSSProperties,
-  readingPathReason: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
+  readingPathPath: { fontSize: 13.5, fontWeight: 650, color: "var(--text-secondary)" } satisfies CSSProperties,
+  readingPathReason: { fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
 
-  taskBody: { display: "flex", flexDirection: "column", gap: 6, minWidth: 0, flex: 1 } satisfies CSSProperties,
+  // ---- First tasks (card grid) ----
+  taskGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+    gap: 12,
+  } satisfies CSSProperties,
+  taskCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    padding: "14px 16px",
+    borderRadius: 8,
+    background: "var(--bg-surface)",
+    border: "1px solid var(--border)",
+    // Grid items default to min-width:auto, which lets a long unbreakable
+    // path (button) push the card wider than its column — override to 0 so
+    // the card actually shrinks and the path below can ellipsis instead.
+    minWidth: 0,
+  } satisfies CSSProperties,
   taskTitle: { fontSize: 13.5, fontWeight: 650, color: "var(--text-primary)" } satisfies CSSProperties,
-  taskRationale: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
-  taskFiles: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 2 } satisfies CSSProperties,
+  taskPath: {
+    display: "block",
+    maxWidth: "100%",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    fontSize: 12.5,
+    color: "var(--text-muted)",
+    background: "none",
+    border: "none",
+    padding: 0,
+    textAlign: "left",
+    cursor: "pointer",
+    alignSelf: "flex-start",
+  } satisfies CSSProperties,
 } as const;

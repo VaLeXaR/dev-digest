@@ -112,36 +112,36 @@ export function OnboardingView() {
   return (
     <AppShell crumb={crumb}>
       <div style={s.container}>
-        <div style={s.headerRow}>
-          <div>
-            <h1 style={s.h1}>
-              {t("header.titlePrefix")} <span style={s.repoName}>{repoName}</span>
-            </h1>
-            <p style={s.subtitle}>
-              {t("header.subtitle", { files: tour.meta.filesIndexed, time: relativeAgo(tour.meta.generatedAt) })}
-              {stale && <span style={s.staleHint}>{t("staleHint")}</span>}
-            </p>
-          </div>
-          <div style={s.actions}>
-            <Button
-              kind="secondary"
-              icon="RefreshCw"
-              onClick={handleRegenerate}
-              loading={regenerate.isPending}
-              disabled={regenerate.isPending}
-            >
-              {t("regenerate")}
-            </Button>
-            <Button kind="secondary" icon={shareCopied ? "Check" : "Link"} onClick={handleShare}>
-              {shareCopied ? t("shareLinkCopied") : t("shareLink")}
-            </Button>
-          </div>
-        </div>
-
         <div style={s.layout}>
           <OnThisPageNav label={t("onThisPage")} sections={sections} />
 
           <div style={s.sections}>
+            <div style={s.headerRow}>
+              <div>
+                <h1 style={s.h1}>
+                  {t("header.titlePrefix")} <span style={s.repoName}>{repoName}</span>
+                </h1>
+                <p style={s.subtitle}>
+                  {t("header.subtitle", { files: tour.meta.filesIndexed, time: relativeAgo(tour.meta.generatedAt) })}
+                  {stale && <span style={s.staleHint}>{t("staleHint")}</span>}
+                </p>
+              </div>
+              <div style={s.actions}>
+                <Button
+                  kind="secondary"
+                  icon="RefreshCw"
+                  onClick={handleRegenerate}
+                  loading={regenerate.isPending}
+                  disabled={regenerate.isPending}
+                >
+                  {t("regenerate")}
+                </Button>
+                <Button kind="secondary" icon={shareCopied ? "Check" : "Link"} onClick={handleShare}>
+                  {shareCopied ? t("shareLinkCopied") : t("shareLink")}
+                </Button>
+              </div>
+            </div>
+
             <ArchitectureSection id="architecture" title={t("sectionNav.architecture")} architecture={tour.architecture} />
             <CriticalPathsSection
               id="criticalPaths"
@@ -169,6 +169,11 @@ export function OnboardingView() {
               id="firstTasks"
               title={t("sectionNav.firstTasks")}
               emptyText={t("firstTasks.empty")}
+              complexityLabels={{
+                low: t("firstTasks.complexity.low"),
+                medium: t("firstTasks.complexity.medium"),
+                high: t("firstTasks.complexity.high"),
+              }}
               tasks={tour.firstTasks}
               repoFullName={activeRepo?.full_name}
               defaultBranch={activeRepo?.default_branch}

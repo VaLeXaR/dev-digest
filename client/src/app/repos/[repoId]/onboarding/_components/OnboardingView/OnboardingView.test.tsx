@@ -59,7 +59,12 @@ function tour(overrides: Partial<OnboardingTour> = {}): OnboardingTour {
       { path: "src/api/public/index.ts", reason: "Understand the public contract before touching it" },
     ],
     firstTasks: [
-      { title: "Add rate limiting", rationale: "No rate limiting exists yet.", relatedFiles: ["src/middleware/auth.ts"] },
+      {
+        title: "Add rate limiting",
+        rationale: "No rate limiting exists yet.",
+        relatedFiles: ["src/middleware/auth.ts"],
+        complexity: "medium",
+      },
     ],
     meta: { filesIndexed: 12450, generatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), indexedAtSha: "abc123" },
     ...overrides,
@@ -143,13 +148,13 @@ describe("OnboardingView", () => {
     expect(paths[0]).toHaveTextContent("src/router.ts");
   });
 
-  it("ready: renders first-tasks with title, rationale, and a related-file chip", () => {
+  it("ready: renders first-tasks with title, primary related file, and a complexity badge", () => {
     mockOnboarding({ state: "ready", tour: tour(), currentIndexedSha: "abc123" });
     renderWithIntl(<OnboardingView />);
 
     expect(screen.getByText("Add rate limiting")).toBeInTheDocument();
-    expect(screen.getByText("No rate limiting exists yet.")).toBeInTheDocument();
     expect(screen.getByText("src/middleware/auth.ts")).toBeInTheDocument();
+    expect(screen.getByText("Medium complexity")).toBeInTheDocument();
   });
 
   it("ready: an invalid Mermaid string renders no diagram", () => {

@@ -33,7 +33,8 @@ const TASK_FRAMING = [
   'Mermaid diagram), a numbered list of shell commands to run the project',
   'locally (each with an optional one-line comment), and a short list of',
   'first-task suggestions for a new contributor (title + rationale + optional',
-  'related file paths).',
+  'related file paths + a complexity rating of "low", "medium", or "high"',
+  'reflecting how much codebase context the task requires).',
 ].join('\n');
 
 function buildSystemMessage(): string {

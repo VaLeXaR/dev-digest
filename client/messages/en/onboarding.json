@@ -54,6 +54,11 @@
   },
   "firstTasks": {
     "title": "First tasks",
-    "empty": "No first tasks identified yet."
+    "empty": "No first tasks identified yet.",
+    "complexity": {
+      "low": "Low complexity",
+      "medium": "Medium complexity",
+      "high": "High complexity"
+    }
   }
 }
