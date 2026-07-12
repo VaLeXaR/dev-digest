@@ -230,6 +230,13 @@ function GroupSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetFile, targetNonce]);
   const [summaryVisible, setSummaryVisible] = useState<Record<string, boolean>>({});
+  // Tracked locally per file path, NOT via generateSummary.isPending/.variables —
+  // that mutation hook is shared across every file in this group, so its
+  // single in-flight state can't represent two files generating at once
+  // (triggering file B while file A is still pending would silently
+  // reassign the shared "which file" tracking to B, re-enabling A's button
+  // mid-flight and allowing a duplicate concurrent generate call).
+  const [pendingFiles, setPendingFiles] = useState<Record<string, boolean>>({});
 
   const roleLabel =
     role === "core"
@@ -323,8 +330,7 @@ function GroupSection({
                   )}
                   <div style={s.fileCardHeaderRight}>
                     {(hasPatch || file.pseudocode_summary != null) && (() => {
-                      const isGeneratingThis =
-                        generateSummary.isPending && generateSummary.variables === file.path;
+                      const isGeneratingThis = pendingFiles[file.path] ?? false;
                       return (
                         <button
                           type="button"
@@ -338,7 +344,11 @@ function GroupSection({
                                 [file.path]: !isSum,
                               }));
                             } else {
-                              generateSummary.mutate(file.path);
+                              setPendingFiles((prev) => ({ ...prev, [file.path]: true }));
+                              generateSummary.mutate(file.path, {
+                                onSettled: () =>
+                                  setPendingFiles((prev) => ({ ...prev, [file.path]: false })),
+                              });
                             }
                           }}
                           aria-label={
