@@ -102,6 +102,13 @@ before analysing — do not silently pick.
      node .claude/skills/workflow-retro/scripts/analyze-journals.cjs \
        "<session-dir>/subagents/agent-*.jsonl" --json
      ```
+   - **On Windows, invoke this via the `PowerShell` tool with a native `C:\Users\...`
+     path, not the `Bash` tool with a git-bash `/c/...` path.** Node on Windows resolves
+     a `/c/...`-style argument as a relative path against the *current* drive's root, not
+     `C:\...` — the script then fails silently with `no readable journal files matched`
+     and no further diagnostic (confirmed 2026-07-12). If that error appears, re-run the
+     same command through `PowerShell` with a `C:\Users\...`-style path before assuming
+     the journals don't exist.
    - It prints per-agent and total tokens, **two cache-ratio figures** (`read_ratio` =
      cache-read ÷ all input-side tokens, the headline "cache hit %" this skill quotes;
      `hit_rate` = cache-read ÷ (cache-read + cache-write), a secondary "is caching
