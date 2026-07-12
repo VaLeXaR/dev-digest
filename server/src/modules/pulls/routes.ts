@@ -3,11 +3,103 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { PrMeta, PrDetail, GitHubClient, PrReviewComment } from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
+import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+
+type PrAggregates = Pick<
+  PrMeta,
+  'score' | 'last_run_cost_usd' | 'last_run_tokens_in' | 'last_run_tokens_out' | 'findings_counts'
+>;
+
+/**
+ * Latest-review score, last-completed-run cost/tokens, and cumulative
+ * per-severity finding counts (excluding dismissed) for a set of PR ids.
+ * Shared by the list endpoint (per-row COST/FINDINGS/SCORE columns) and the
+ * single-PR detail endpoint (top-of-Overview PR Brief banner) so both stay
+ * in lock-step — same query, same semantics, computed once per request.
+ */
+async function computePrAggregates(db: Db, prIds: string[]): Promise<Map<string, PrAggregates>> {
+  const result = new Map<string, PrAggregates>();
+  if (prIds.length === 0) return result;
+
+  // Latest-review SCORE per PR for the score ring. Computed on read from
+  // reviews (no FK denorm); the list is small, so one IN-query + JS grouping
+  // is cheap.
+  const scoreByPr = new Map<string, number | null>();
+  const reviewRows = await db
+    .select({ prId: t.reviews.prId, score: t.reviews.score })
+    .from(t.reviews)
+    .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
+    .orderBy(desc(t.reviews.createdAt));
+  // Rows are newest-first → first seen per PR is the latest review.
+  for (const rv of reviewRows) {
+    if (!scoreByPr.has(rv.prId)) scoreByPr.set(rv.prId, rv.score);
+  }
+
+  // Cost + tokens of the last completed run per PR.
+  const costByPr = new Map<string, number | null>();
+  const tokensInByPr = new Map<string, number | null>();
+  const tokensOutByPr = new Map<string, number | null>();
+  const runRows = await db
+    .select({
+      prId: t.agentRuns.prId,
+      costUsd: t.agentRuns.costUsd,
+      tokensIn: t.agentRuns.tokensIn,
+      tokensOut: t.agentRuns.tokensOut,
+    })
+    .from(t.agentRuns)
+    .where(
+      and(inArray(t.agentRuns.prId, prIds as [string, ...string[]]), eq(t.agentRuns.status, 'done')),
+    )
+    .orderBy(desc(t.agentRuns.ranAt));
+  for (const rc of runRows) {
+    if (rc.prId && !costByPr.has(rc.prId)) {
+      costByPr.set(rc.prId, rc.costUsd ?? null);
+      tokensInByPr.set(rc.prId, rc.tokensIn ?? null);
+      tokensOutByPr.set(rc.prId, rc.tokensOut ?? null);
+    }
+  }
+
+  // Per-severity finding counts, cumulative across every review (not just the
+  // latest run) — matches the list's existing FINDINGS column semantics.
+  const findingsByPr = new Map<string, { CRITICAL: number; WARNING: number; SUGGESTION: number }>();
+  const findingCounts = await db
+    .select({ prId: t.reviews.prId, severity: t.findings.severity, cnt: count() })
+    .from(t.findings)
+    .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+    .where(
+      and(
+        inArray(t.reviews.prId, prIds as [string, ...string[]]),
+        eq(t.reviews.kind, 'review'),
+        isNull(t.findings.dismissedAt),
+      ),
+    )
+    .groupBy(t.reviews.prId, t.findings.severity);
+  for (const row of findingCounts) {
+    if (!findingsByPr.has(row.prId)) {
+      findingsByPr.set(row.prId, { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 });
+    }
+    const entry = findingsByPr.get(row.prId)!;
+    if (row.severity === 'CRITICAL' || row.severity === 'WARNING' || row.severity === 'SUGGESTION') {
+      entry[row.severity] = Number(row.cnt);
+    }
+  }
+
+  for (const prId of prIds) {
+    result.set(prId, {
+      score: scoreByPr.get(prId) ?? null,
+      last_run_cost_usd: costByPr.get(prId) ?? null,
+      last_run_tokens_in: tokensInByPr.get(prId) ?? null,
+      last_run_tokens_out: tokensOutByPr.get(prId) ?? null,
+      findings_counts: findingsByPr.get(prId) ?? null,
+    });
+  }
+  return result;
+}
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -111,68 +203,12 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // Latest-review SCORE per PR for the list's score ring. Computed on read
-    // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap.
     const prIds = rows.map((r) => r.id);
-    const latestReviewByPr = new Map<string, { score: number | null }>();
-    const latestRunCostByPr = new Map<string, number | null>();
-    const findingCountsByPr = new Map<string, { CRITICAL: number; WARNING: number; SUGGESTION: number }>();
-    if (prIds.length > 0) {
-      const reviewRows = await container.db
-        .select({ prId: t.reviews.prId, score: t.reviews.score })
-        .from(t.reviews)
-        .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
-        .orderBy(desc(t.reviews.createdAt));
-      // Rows are newest-first → first seen per PR is the latest review.
-      for (const rv of reviewRows) {
-        if (!latestReviewByPr.has(rv.prId)) latestReviewByPr.set(rv.prId, { score: rv.score });
-      }
-
-      // Cost of the last completed run per PR, for the COST column.
-      const runCostRows = await container.db
-        .select({ prId: t.agentRuns.prId, costUsd: t.agentRuns.costUsd })
-        .from(t.agentRuns)
-        .where(
-          and(
-            inArray(t.agentRuns.prId, prIds as [string, ...string[]]),
-            eq(t.agentRuns.status, 'done'),
-          ),
-        )
-        .orderBy(desc(t.agentRuns.ranAt));
-      for (const rc of runCostRows) {
-        if (rc.prId && !latestRunCostByPr.has(rc.prId)) {
-          latestRunCostByPr.set(rc.prId, rc.costUsd ?? null);
-        }
-      }
-
-      // Per-severity finding counts for the FINDINGS column.
-      const findingCounts = await container.db
-        .select({ prId: t.reviews.prId, severity: t.findings.severity, cnt: count() })
-        .from(t.findings)
-        .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
-        .where(
-          and(
-            inArray(t.reviews.prId, prIds as [string, ...string[]]),
-            eq(t.reviews.kind, 'review'),
-            isNull(t.findings.dismissedAt),
-          ),
-        )
-        .groupBy(t.reviews.prId, t.findings.severity);
-      for (const row of findingCounts) {
-        if (!findingCountsByPr.has(row.prId)) {
-          findingCountsByPr.set(row.prId, { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 });
-        }
-        const entry = findingCountsByPr.get(row.prId)!;
-        if (row.severity === 'CRITICAL' || row.severity === 'WARNING' || row.severity === 'SUGGESTION') {
-          entry[row.severity] = Number(row.cnt);
-        }
-      }
-    }
+    const aggregatesByPr = await computePrAggregates(container.db, prIds);
 
     const now = Date.now();
     return rows.map((r) => {
-      const review = latestReviewByPr.get(r.id);
+      const agg = aggregatesByPr.get(r.id);
       return {
         id: r.id,
         number: r.number,
@@ -193,9 +229,11 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         }),
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
-        score: review ? review.score : null,
-        last_run_cost_usd: latestRunCostByPr.get(r.id) ?? null,
-        findings_counts: findingCountsByPr.get(r.id) ?? null,
+        score: agg?.score ?? null,
+        last_run_cost_usd: agg?.last_run_cost_usd ?? null,
+        last_run_tokens_in: agg?.last_run_tokens_in ?? null,
+        last_run_tokens_out: agg?.last_run_tokens_out ?? null,
+        findings_counts: agg?.findings_counts ?? null,
       };
     });
   });
@@ -214,6 +252,17 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       .from(t.repos)
       .where(eq(t.repos.id, pr.repoId));
     if (!repo) throw new NotFoundError('Repo not found');
+
+    // Latest-review score, last-run cost/tokens, and cumulative finding
+    // counts — same aggregates the list shows, now surfaced on the detail
+    // endpoint too for the top-of-Overview PR Brief banner.
+    const aggregates = (await computePrAggregates(container.db, [pr.id])).get(pr.id) ?? {
+      score: null,
+      last_run_cost_usd: null,
+      last_run_tokens_in: null,
+      last_run_tokens_out: null,
+      findings_counts: null,
+    };
 
     // Local-first: refresh detail from GitHub when a token is configured;
     // otherwise serve the persisted files/commits/body (seeded or previously
@@ -258,7 +307,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         })
         .where(eq(t.pullRequests.id, pr.id));
 
-      return { ...detail, id: pr.id };
+      return { ...detail, id: pr.id, ...aggregates };
     } catch (err) {
       app.log.warn({ err }, 'GitHub PR detail refresh skipped (no token / offline); serving persisted detail');
       const files = await container.db.select().from(t.prFiles).where(eq(t.prFiles.prId, pr.id));
@@ -290,6 +339,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
           author: c.author,
           committed_at: c.committedAt?.toISOString() ?? null,
         })),
+        ...aggregates,
       };
     }
   });

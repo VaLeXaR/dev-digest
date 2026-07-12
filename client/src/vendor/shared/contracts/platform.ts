@@ -192,6 +192,9 @@ export const PrMeta = z.object({
   score: z.number().int().nullish(),
   // Cost of the last completed agent run (list endpoint only; null/absent until a run completes).
   last_run_cost_usd: z.number().nullish(),
+  // Tokens in/out of the last completed agent run (same run as last_run_cost_usd).
+  last_run_tokens_in: z.number().int().nullish(),
+  last_run_tokens_out: z.number().int().nullish(),
   // Per-severity finding counts for the list FINDINGS column (null until reviewed).
   findings_counts: z.object({
     CRITICAL: z.number().int(),

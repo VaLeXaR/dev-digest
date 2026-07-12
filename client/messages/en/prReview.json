@@ -1,4 +1,14 @@
 {
+  "prBrief": {
+    "title": "PR Brief",
+    "sourceTooltip": "Risk level and description come from the generated brief; findings, blockers, and score come from the latest agent review, when one has run.",
+    "costTooltip": "Cost of the latest agent review",
+    "empty": {
+      "title": "No brief yet",
+      "description": "Generate a Why+Risk brief for this PR.",
+      "button": "Generate brief"
+    }
+  },
   "finding": {
     "accepted": "accepted",
     "dismissed": "dismissed",
@@ -112,7 +122,7 @@
     "outOfScope": "Out of scope",
     "recalculate": "Recalculate",
     "recalcError": "Failed to recalculate intent",
-    "empty": "No intent yet — click Recalculate to analyze this PR",
+    "empty": "No intent yet",
     "riskAreas": "Risk areas",
     "generateRisks": "Generate",
     "recalcRisksError": "Failed to generate risks",

@@ -17,19 +17,10 @@
     "noCommits": "No commits found for this line."
   },
   "card": {
-    "title": "Why & Risk Brief",
-    "empty": "No brief yet — generate one to see the reasoning and review focus for this PR.",
     "riskLevel": {
       "high": "High risk",
       "medium": "Medium risk",
       "low": "Low risk"
-    },
-    "risks": {
-      "title": "Risks",
-      "unlinked": "not linked to a file",
-      "toggle": "Toggle explanation for {title}",
-      "goto": "Go to {file} in diff",
-      "gotoExternal": "Open {file} on GitHub"
     },
     "reviewFocus": {
       "title": "Review focus — read these first",

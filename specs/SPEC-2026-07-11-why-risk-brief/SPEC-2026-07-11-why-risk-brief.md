@@ -24,8 +24,16 @@ raw diff bodies (translated from the requester's Ukrainian description).
 **Non-goals**
 - Re-deriving intent, blast radius, or Smart-Diff grouping — those are consumed as inputs, not
   recomputed here.
-- Replacing the shipped `VerdictBanner` (verdict + PR score + findings/blockers count) at the top
-  of the Overview tab — that is a distinct, already-shipped component (see `design/01`).
+- ~~Replacing the shipped `VerdictBanner` (verdict + PR score + findings/blockers count) at the top
+  of the Overview tab — that is a distinct, already-shipped component (see `design/01`).~~
+  **Reversed 2026-07-12: this assumption was false.** `VerdictBanner` was shipped, but only ever
+  rendered per-run inside `ReviewRunAccordion` (Findings tab) — never at the top of the Overview
+  tab as the design shows. Built per direct user request: `OverviewTab` now renders `VerdictBanner`
+  as its first element, sourced from the latest actual review (verdict/summary) plus new PR-detail
+  aggregate fields (`score`/`findings_counts`/`last_run_cost_usd`/`last_run_tokens_in`/
+  `last_run_tokens_out` — the last two are new) for score/findings/blockers/cost/tokens. No
+  regenerate action (user explicitly declined it, despite the mockup showing one). See
+  `client/INSIGHTS.md` and `server/INSIGHTS.md` (2026-07-12 entries) for the implementation.
 - Semantic search / embeddings / RAG relevance ranking over Context-Folder docs — that is an
   explicit Non-goal of the Context Folder feature (`specs/SPEC-2026-07-08-project-context.md:68`)
   and this spec does not introduce it.
@@ -129,7 +137,7 @@ returns `null`/404 when never generated.
 ## Design references
 | File | Shows | Grounds |
 | --- | --- | --- |
-| `design/01-overview-pr-brief.png` | PR Overview tab: a "PR BRIEF" label above the shipped `VerdictBanner` (verdict + PR score + "6 findings · 2 blockers"), the Intent and Blast Radius cards, and a bottom "REVIEW FOCUS — READ THESE FIRST" card listing `path:line — reason` rows | User stories 1&3, AC-9, AC-10, AC-11, AC-16; the review-focus rows render as `PrBriefCard`'s sub-section, confirmed below the two-column grid rather than as the mockup's literal separate bottom card |
+| `design/01-overview-pr-brief.png` | PR Overview tab: a "PR BRIEF" label above the shipped `VerdictBanner` (verdict + PR score + "6 findings · 2 blockers"), the Intent and Blast Radius cards, and a bottom "REVIEW FOCUS — READ THESE FIRST" card listing `path:line — reason` rows | User stories 1&3, AC-9, AC-10, AC-11, AC-16; `review_focus[]` renders as the mockup's literal separate bottom card (2026-07-12 reversal — see AC-16) |
 | `design/02-files-changed-smart-diff.png` | PR "Files changed" tab: reviewer-ordered diff grouped into Core logic / Wiring / Boilerplate with per-file "🪄 What this does" one-line summaries | Context only — the already-shipped Smart Diff feature that is a *candidate input source* for grouped diff statistics; not part of this card |
 
 ## Acceptance criteria (EARS)
@@ -169,11 +177,29 @@ returns `null`/404 when never generated.
   overlaps.
 - AC-15: IF Smart Diff grouping has not been generated for the PR, THEN the system shall assemble
   the diff-statistics input from raw per-file additions/deletions instead of blocking generation.
-- AC-16: The system shall render `PrBriefCard` as a single card placed below the Intent/Blast
-  Radius two-column grid on the Overview tab, with `review_focus[]` rendered as that same card's
-  sub-section rather than a separate card.
-- AC-17: The system shall render `PrBriefCard`'s `risks[]` independently of `IntentCard`'s
-  existing "RISK AREAS" section, without modifying `IntentCard`'s existing risks display.
+- AC-16: ~~The system shall render `PrBriefCard`'s `what`/`why`/`risk_level`/`risks[]` as one card
+  placed below the Intent/Blast Radius two-column grid, and `review_focus[]` as its own separate
+  card immediately below that, matching `design/01-overview-pr-brief.png`'s literal layout.~~
+  **Superseded 2026-07-12 (second reversal):** `what`/`why`/`risk_level` no longer render as a
+  `PrBriefCard` block at all — they moved into a new `PrBriefBanner`, merged with the existing
+  top-of-Overview verdict/score banner (see AC-19). `PrBriefCard` now renders ONLY
+  `review_focus[]`, as its own card below the Intent/Blast Radius grid. Root cause the user flagged:
+  a separate "Why & Risk Brief" card next to the top PR Brief banner showed two independently
+  colored/labeled summaries (verdict-driven vs risk_level-driven) that didn't visually agree,
+  reading as confusing duplication.
+- AC-17: ~~The system shall render `PrBriefCard`'s `risks[]` independently of `IntentCard`'s
+  existing "RISK AREAS" section, without modifying `IntentCard`'s existing risks display.~~
+  **Superseded 2026-07-12:** `risks[]` is no longer rendered anywhere in the UI (user-confirmed
+  decision — a second, independent risk list read as confusing next to `IntentCard`'s own RISK
+  AREAS). The server still generates and persists `risks[]` (schema/generation unchanged, AC-5);
+  only the client-side display was dropped. `IntentCard`'s RISK AREAS section is unaffected.
+- AC-19 (new, 2026-07-12): The system shall render a single top-of-Overview banner
+  (`PrBriefBanner`) whenever a brief exists, with its icon/color/label driven by `risk_level`
+  (not the latest review's verdict) and its body text set to the brief's `what`/`why`. Findings
+  count, blockers, score, and cost/tokens are separate optional enrichment from the latest agent
+  review (`kind='review'`, has a verdict) — shown when one has run, omitted otherwise (a brief can
+  exist before any review ever runs). No regenerate action on this banner (user declined it
+  despite the mockup showing one).
 - AC-18: IF a risk's `file_refs` are all dropped by AC-6, THEN the system shall still render that
   risk's `title`, `explanation`, and `severity`, visually marked as unlinked, instead of dropping
   the risk entirely.
