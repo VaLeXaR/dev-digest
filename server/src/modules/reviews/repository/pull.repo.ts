@@ -135,3 +135,29 @@ export async function getBlastSummary(
   if (!row) return undefined;
   return { summary: row.summary, generatedAt: row.generatedAt };
 }
+
+// ---- per-file pseudocode summary (Smart Diff) ------------------------------
+
+export async function upsertFileSummary(
+  db: Db,
+  prId: string,
+  filePath: string,
+  summary: string,
+): Promise<void> {
+  await db
+    .insert(t.prFileSummaries)
+    .values({ prId, filePath, summary, generatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: [t.prFileSummaries.prId, t.prFileSummaries.filePath],
+      set: { summary, generatedAt: new Date() },
+    });
+}
+
+/** All persisted per-file summaries for a PR, keyed by file path. */
+export async function getFileSummaries(db: Db, prId: string): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ filePath: t.prFileSummaries.filePath, summary: t.prFileSummaries.summary })
+    .from(t.prFileSummaries)
+    .where(eq(t.prFileSummaries.prId, prId));
+  return new Map(rows.map((r) => [r.filePath, r.summary]));
+}

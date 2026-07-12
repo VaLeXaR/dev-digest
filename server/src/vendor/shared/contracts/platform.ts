@@ -19,6 +19,7 @@ export const FeatureModelId = z.enum([
   'conventions',
   'blast_summary',
   'why_risk_brief',
+  'smart_diff_summary',
 ]);
 export type FeatureModelId = z.infer<typeof FeatureModelId>;
 
@@ -91,6 +92,13 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     description: 'Composes a PR why+risk brief from derived facts.',
     defaultProvider: 'openai',
     defaultModel: 'gpt-4.1',
+  },
+  {
+    id: 'smart_diff_summary',
+    label: 'Smart Diff · File Summary',
+    description: 'Writes a one-line "what this does" pseudocode summary for a changed file.',
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
   },
 ];
 

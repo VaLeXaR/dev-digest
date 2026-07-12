@@ -2,8 +2,9 @@
    Fetches grouped file classification (core / wiring / boilerplate) for a PR. */
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
+import { notify } from "../toast";
 import type { SmartDiff, LineContextResponse } from "@devdigest/shared";
 
 export function useSmartDiff(prId: string | null | undefined) {
@@ -11,6 +12,24 @@ export function useSmartDiff(prId: string | null | undefined) {
     queryKey: ["smart-diff", prId ?? ""],
     queryFn: () => api.get<SmartDiff>(`/pulls/${prId!}/smart-diff`),
     enabled: !!prId,
+  });
+}
+
+/**
+ * Generates (one LLM call) and persists a one-line pseudocode summary for a
+ * single changed file — triggered by that file's own "summary" button.
+ * Invalidates the smart-diff query on success so the new
+ * `pseudocode_summary` shows up without a manual refetch.
+ */
+export function useGenerateFileSummary(prId: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: string) =>
+      api.post<{ file: string; summary: string }>(`/pulls/${prId!}/smart-diff/file-summary`, { file }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["smart-diff", prId ?? ""] });
+    },
+    onError: () => notify.error("Failed to generate the file summary"),
   });
 }
 

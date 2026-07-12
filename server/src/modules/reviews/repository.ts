@@ -165,6 +165,16 @@ export class ReviewRepository {
     return pullRepo.getBlastSummary(this.db, prId);
   }
 
+  // ---- per-file pseudocode summary (Smart Diff) --------------------------
+
+  upsertFileSummary(prId: string, filePath: string, summary: string): Promise<void> {
+    return pullRepo.upsertFileSummary(this.db, prId, filePath, summary);
+  }
+
+  getFileSummaries(prId: string): Promise<Map<string, string>> {
+    return pullRepo.getFileSummaries(this.db, prId);
+  }
+
   // ---- observability: agent_runs + run_traces ----------------------------
 
   /** Create an agent_runs row in `running` state; returns its id (= the runId). */

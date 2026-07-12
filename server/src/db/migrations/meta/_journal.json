@@ -113,6 +113,13 @@
       "when": 1783771649642,
       "tag": "0015_volatile_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1783862082372,
+      "tag": "0016_shocking_havok",
+      "breakpoints": true
     }
   ]
 }

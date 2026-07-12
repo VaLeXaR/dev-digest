@@ -71,7 +71,10 @@
     "statsLine": "{files} files · +{additions} −{deletions}",
     "findingLines": "{count} finding-lines",
     "groupedByRole": "Smart Diff · grouped by role",
-    "summary": "summary"
+    "summary": "summary",
+    "generateSummary": "generate summary",
+    "generatingSummary": "generating…",
+    "whatThisDoes": "What this does:"
   },
   "list": {
     "breadcrumb": "Pull Requests",
