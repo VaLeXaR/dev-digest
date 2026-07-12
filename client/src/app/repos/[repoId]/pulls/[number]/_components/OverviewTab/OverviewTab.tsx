@@ -11,12 +11,15 @@ import {
   useSettings,
   useBlast,
   useGenerateBlastSummary,
+  useBrief,
+  useGenerateBrief,
 } from "../../../../../../../lib/hooks";
 import { FEATURE_MODELS, PROVIDER_LABELS } from "../../../../../../../lib/feature-models";
 import { notify } from "../../../../../../../lib/toast";
 import type { SecretsStatus } from "@devdigest/shared";
 import { IntentCard } from "./_components/IntentCard";
 import { BlastRadiusCard } from "./_components/BlastRadiusCard";
+import { PrBriefCard } from "./_components/PrBriefCard";
 import { s } from "./styles";
 
 interface OverviewTabProps {
@@ -49,6 +52,8 @@ export function OverviewTab({
   const { data: settings } = useSettings();
   const { data: blastData, isLoading: blastLoading } = useBlast(prId);
   const explainMutation = useGenerateBlastSummary();
+  const { data: briefData, isLoading: briefLoading } = useBrief(prId);
+  const generateBrief = useGenerateBrief();
 
   const handleRecalculate = () => {
     if (secretsStatus) {
@@ -94,6 +99,18 @@ export function OverviewTab({
     </Button>
   );
 
+  const regenerateButton = (
+    <Button
+      kind="secondary"
+      size="sm"
+      icon="RefreshCw"
+      loading={generateBrief.isPending}
+      onClick={() => generateBrief.mutate(prId)}
+    >
+      {t("intent.generateRisks")}
+    </Button>
+  );
+
   return (
     <>
       <div style={s.gridTwoCol} data-testid="overview-grid">
@@ -116,6 +133,16 @@ export function OverviewTab({
           headSha={headSha}
         />
       </div>
+
+      <PrBriefCard
+        briefData={briefData}
+        briefLoading={briefLoading}
+        regenerateButton={regenerateButton}
+        onGoToDiff={onGoToDiff}
+        changedFiles={changedFiles}
+        repoFullName={repoFullName}
+        headSha={headSha}
+      />
 
       {prBody && (
         <section>

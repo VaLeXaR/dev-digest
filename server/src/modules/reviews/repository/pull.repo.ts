@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { Intent } from '@devdigest/shared';
-import { Risks } from '@devdigest/shared';
+import { Risks, WhyRiskBrief } from '@devdigest/shared';
 import type { PullRow } from '../../../db/rows.js';
 
 // ---- PR lookup (workspace-scoped) -----------------------------------------
@@ -85,6 +85,30 @@ export async function getRisks(db: Db, prId: string): Promise<Risks | undefined>
     .then((rows) => rows[0]);
   if (!row) return undefined;
   const parsed = Risks.safeParse(row.json);
+  return parsed.success ? parsed.data : undefined;
+}
+
+// ---- why+risk brief ---------------------------------------------------------
+
+export async function upsertWhyRiskBrief(
+  db: Db,
+  prId: string,
+  brief: WhyRiskBrief,
+): Promise<void> {
+  await db
+    .insert(t.prWhyRiskBrief)
+    .values({ prId, json: brief })
+    .onConflictDoUpdate({ target: t.prWhyRiskBrief.prId, set: { json: brief } });
+}
+
+export async function getWhyRiskBrief(db: Db, prId: string): Promise<WhyRiskBrief | undefined> {
+  const row = await db
+    .select()
+    .from(t.prWhyRiskBrief)
+    .where(eq(t.prWhyRiskBrief.prId, prId))
+    .then((rows) => rows[0]);
+  if (!row) return undefined;
+  const parsed = WhyRiskBrief.safeParse(row.json);
   return parsed.success ? parsed.data : undefined;
 }
 

@@ -61,6 +61,13 @@ export const prBrief = pgTable('pr_brief', {
   json: jsonb('json').notNull(),
 });
 
+export const prWhyRiskBrief = pgTable('pr_why_risk_brief', {
+  prId: uuid('pr_id')
+    .primaryKey()
+    .references(() => pullRequests.id, { onDelete: 'cascade' }),
+  json: jsonb('json').notNull(),
+});
+
 export const prBlastSummary = pgTable('pr_blast_summary', {
   prId: uuid('pr_id')
     .primaryKey()

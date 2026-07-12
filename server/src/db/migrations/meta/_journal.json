@@ -106,6 +106,13 @@
       "when": 1783596817655,
       "tag": "0014_needy_speed",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1783771649642,
+      "tag": "0015_volatile_stryfe",
+      "breakpoints": true
     }
   ]
 }

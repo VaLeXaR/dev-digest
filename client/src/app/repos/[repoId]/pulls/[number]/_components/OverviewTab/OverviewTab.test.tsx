@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../../../../messages/en/prReview.json";
+import briefMessages from "../../../../../../../../messages/en/brief.json";
 
 vi.mock("../../../../../../../lib/hooks", () => ({
   useIntent: vi.fn(),
@@ -11,6 +12,8 @@ vi.mock("../../../../../../../lib/hooks", () => ({
   useSettings: vi.fn(),
   useBlast: vi.fn(),
   useGenerateBlastSummary: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useBrief: vi.fn(),
+  useGenerateBrief: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 vi.mock("../../../../../../../lib/toast", () => ({
@@ -22,7 +25,7 @@ vi.mock("../../../../../../../lib/feature-models", () => ({
   PROVIDER_LABELS: {},
 }));
 
-import { useIntent, useRecalculateIntent, useRisks, useSecretsStatus, useSettings, useBlast, useGenerateBlastSummary } from "../../../../../../../lib/hooks";
+import { useIntent, useRecalculateIntent, useRisks, useSecretsStatus, useSettings, useBlast, useGenerateBlastSummary, useBrief } from "../../../../../../../lib/hooks";
 import { OverviewTab } from "./OverviewTab";
 import blastMessages from "../../../../../../../../messages/en/blast.json";
 
@@ -31,11 +34,12 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.mocked(useSettings).mockReturnValue({ data: undefined } as ReturnType<typeof useSettings>);
   vi.mocked(useBlast).mockReturnValue({ data: undefined, isLoading: false } as ReturnType<typeof useBlast>);
+  vi.mocked(useBrief).mockReturnValue({ data: undefined, isLoading: false } as ReturnType<typeof useBrief>);
 });
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ prReview: messages, blast: blastMessages }}>
+    <NextIntlClientProvider locale="en" messages={{ prReview: messages, blast: blastMessages, brief: briefMessages }}>
       {ui}
     </NextIntlClientProvider>,
   );
@@ -174,5 +178,38 @@ describe("OverviewTab", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /src\/routes\/checkout\.ts.*42/ }));
     expect(onGoToDiff).toHaveBeenCalledWith("src/routes/checkout.ts", 42);
+  });
+
+  it("renders PrBriefCard below the Intent/Blast Radius grid and leaves IntentCard's RISK AREAS unchanged (AC-16/AC-17)", () => {
+    vi.mocked(useIntent).mockReturnValue({ data: BASE_INTENT, isLoading: false } as ReturnType<typeof useIntent>);
+    vi.mocked(useRisks).mockReturnValue({
+      data: {
+        risks: [
+          { kind: "security", title: "Possible secret leak", severity: "high", explanation: "", file_refs: [] },
+        ],
+        pr_id: "pr1",
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useRisks>);
+    vi.mocked(useRecalculateIntent).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof useRecalculateIntent>);
+    vi.mocked(useSecretsStatus).mockReturnValue({ data: undefined } as ReturnType<typeof useSecretsStatus>);
+    vi.mocked(useBrief).mockReturnValue({ data: undefined, isLoading: false } as ReturnType<typeof useBrief>);
+
+    const { container } = renderWithIntl(
+      <OverviewTab prBody={null} prId="pr1" onGoToDiff={vi.fn()} changedFiles={[]} />,
+    );
+
+    const grid = container.querySelector('[data-testid="overview-grid"]');
+    expect(grid).toBeInTheDocument();
+
+    // AC-17: IntentCard's RISK AREAS section still renders unchanged, unaffected by PrBriefCard.
+    expect(screen.getByText("Risk areas")).toBeInTheDocument();
+    expect(screen.getByText("Possible secret leak")).toBeInTheDocument();
+
+    // AC-16: PrBriefCard renders as a sibling AFTER the grid, not inside it.
+    const briefTitle = screen.getByText("Why & Risk Brief");
+    expect(grid?.contains(briefTitle)).toBe(false);
+    const position = grid!.compareDocumentPosition(briefTitle);
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

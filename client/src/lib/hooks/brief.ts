@@ -9,6 +9,7 @@ import type {
   PrBlastRecord,
   PrIntentRecord,
   PrRisksRecord,
+  PrWhyRiskBriefRecord,
   SecretsStatus,
   Settings,
 } from "@devdigest/shared";
@@ -97,5 +98,28 @@ export function useGenerateRisks() {
         notify.error("Failed to generate risks");
       }
     },
+  });
+}
+
+export function useBrief(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["why-risk-brief", prId ?? ""],
+    queryFn: () => api.get<PrWhyRiskBriefRecord>(`/pulls/${prId!}/brief`),
+    enabled: !!prId,
+    // 404 = no brief generated yet — show empty state immediately, no spin.
+    retry: false,
+  });
+}
+
+export function useGenerateBrief() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prId: string) =>
+      api.post<PrWhyRiskBriefRecord>(`/pulls/${prId}/brief/generate`),
+    onSuccess: (data, prId) => {
+      qc.setQueryData(["why-risk-brief", prId], data);
+      qc.invalidateQueries({ queryKey: ["why-risk-brief", prId] });
+    },
+    onError: () => notify.error("Failed to generate brief"),
   });
 }

@@ -18,6 +18,7 @@ export const FeatureModelId = z.enum([
   'conformance',
   'conventions',
   'blast_summary',
+  'why_risk_brief',
 ]);
 export type FeatureModelId = z.infer<typeof FeatureModelId>;
 
@@ -83,6 +84,13 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     description: 'Summarizes the blast radius of a pull request.',
     defaultProvider: 'openrouter',
     defaultModel: 'deepseek/deepseek-v4-flash',
+  },
+  {
+    id: 'why_risk_brief',
+    label: 'PR Review · Why+Risk Brief',
+    description: 'Composes a PR why+risk brief from derived facts.',
+    defaultProvider: 'openai',
+    defaultModel: 'gpt-4.1',
   },
 ];
 
