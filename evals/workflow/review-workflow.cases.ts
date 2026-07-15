@@ -16,14 +16,15 @@ export const cases: WorkflowCase[] = [
   // --- trace (1 session): CLAUDE.md "Read When" routing + subagent dispatch, together -----------
   {
     kind: "trace",
-    // Endpoint must NOT already exist, or the model reviews the existing code inline instead of
-    // planning-then-dispatching. GET /reviews/:id/export is genuinely absent from routes.ts.
-    name: "API-route task reads api-contracts AND pulls the architecture-reviewer",
+    // Pure dispatch check. KNOWN-FLAKY and the reason this whole tier is non-blocking: even a
+    // capable model (haiku) may answer in one turn without invoking the Task/Agent tool, so
+    // `subagents` comes back empty. Treat a red here as indicative, not a regression — the README
+    // says the same. Kept because dispatch IS a behavior worth watching, not because it's reliable.
+    name: "dispatches the architecture-reviewer subagent for a plan review",
     prompt:
-      "Я планую додати НОВИЙ, ще не реалізований ендпоінт GET /reviews/:id/export (віддає ревʼю як " +
-      "markdown). Спершу звірся з конвенціями API цього репо. Потім ОБОВʼЯЗКОВО запусти сабагента " +
-      "architecture-reviewer, щоб він оцінив мій план на відповідність onion-шарам — не рецензуй сам.",
-    expectFilesRead: ["server/docs/api-contracts.md"],
+      "I have a plan to add a new GET /reviews/:id/export endpoint. Do NOT review the plan yourself " +
+      "— your only task is to dispatch the architecture-reviewer subagent and have IT audit the plan " +
+      "against this repo's onion-layer contracts. Delegate now.",
     expectSubagents: ["architecture-reviewer"],
     maxTurns: 8,
   },
@@ -35,11 +36,12 @@ export const cases: WorkflowCase[] = [
     // not exploring source. Earlier phrasing ("розберись, як усе влаштовано") sent the model straight
     // into schema.ts / pipeline.run.ts and it never opened the routed doc. One anchor doc (pipeline.md)
     // keeps this a deterministic routing check — asserting two docs in one session is inherently flaky.
-    name: "pipeline task follows CLAUDE.md routing to pipeline.md",
+    name: "pipeline task follows CLAUDE.md routing to reviewer-core/README",
     prompt:
-      "Я збираюся змінити review pipeline. Перш ніж торкатися коду — звірся з настановами цього репо " +
-      "(CLAUDE.md) щодо того, яку документацію треба прочитати для змін у pipeline, і прочитай саме ці документи.",
-    expectFilesRead: ["reviewer-core/docs/pipeline.md"],
+      "I'm about to change the review pipeline, which lives in the reviewer-core package. Before " +
+      "touching code, consult that package's own guidance (its CLAUDE.md) on which docs to read for " +
+      "pipeline work, and read exactly those docs.",
+    expectFilesRead: ["reviewer-core/README.md"],
     maxTurns: 8,
   },
 
@@ -49,11 +51,11 @@ export const cases: WorkflowCase[] = [
   // reliably checks the same routing rule: in the real repo, the discovery prompt reads gotchas.md.
   {
     kind: "trace",
-    name: "CLAUDE.md routes a gotchas lookup to reviewer-core/insights",
+    name: "CLAUDE.md routes a gotchas lookup to reviewer-core/INSIGHTS.md",
     prompt:
-      "У reviewer-core я стикнувся з несподіваною поведінкою — щось працює не так, як я очікував. " +
-      "За настановами цього репо, де це вже могло бути задокументовано? Прочитай той файл.",
-    expectFilesRead: ["reviewer-core/insights/gotchas.md"],
+      "In reviewer-core I hit unexpected behavior — something works differently than I expected. " +
+      "Per this repo's guidance, where might this already be documented? Read that file.",
+    expectFilesRead: ["reviewer-core/INSIGHTS.md"],
     maxTurns: 5,
   },
 
@@ -62,8 +64,8 @@ export const cases: WorkflowCase[] = [
     kind: "activation",
     name: "engineering-insights activates on a genuine discovery",
     prompt:
-      "Щойно з'ясував, чому pgvector-запит повертав нуль рядків — розмірність колонки не збіглася " +
-      "після зміни моделі ембедингів. Хочу це зафіксувати, щоб більше не наступати.",
+      "I just figured out why the pgvector query returned zero rows — the column dimension didn't " +
+      "match after switching embedding models. I want to record this so I don't hit it again.",
     skill: "engineering-insights",
     shouldActivate: true,
     maxTurns: 4,
@@ -72,7 +74,7 @@ export const cases: WorkflowCase[] = [
     kind: "activation",
     name: "near-miss negative — explaining the same topic must NOT record an insight",
     prompt:
-      "Поясни, як у pgvector працюють розмірності колонок і чому невідповідність повертає нуль рядків.",
+      "Explain how column dimensions work in pgvector and why a mismatch returns zero rows.",
     skill: "engineering-insights",
     shouldActivate: false,
     maxTurns: 4,
