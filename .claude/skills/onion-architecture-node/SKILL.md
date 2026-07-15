@@ -106,3 +106,5 @@ Validated against the real graph: **0 errors, 15 warnings** today. The gate exit
 - Circular deps — mostly via `platform/container.ts` DI root + one genuine `agents/helpers → agents/repository` cycle.
 
 When you burn down a `warn` backlog in code, tighten the severity in `.dependency-cruiser.cjs` in the same change.
+
+<!-- ci-trigger: touch to exercise the onion-architecture-node skill eval — no behavioral change -->
