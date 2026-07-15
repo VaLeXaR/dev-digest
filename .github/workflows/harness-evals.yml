@@ -6,18 +6,19 @@
 #   CLAUDE.md / any agent / engine change → the workflow tier   (tool tier, non-blocking)
 # A changed artifact with NO written evals is reported as SKIP, not a failure.
 #
-# Backend: OpenRouter (no Claude subscription on CI). Models are a knob, not code:
-#   - skills (content tier)       → DeepSeek, called natively (no proxy) — cheap, and it passes.
-#   - agents/workflow (tool tier)  → google/gemini-2.5-flash through the bundled LiteLLM proxy
-#     (evals/proxy/). The proxy's wildcard route forwards ANY EVAL_MODEL slug to OpenRouter, so the
-#     tool jobs work for both non-Anthropic (Gemini/DeepSeek) and anthropic/* models. Trade-off: the
-#     tool-tier cases carry strict thresholds (e.g. 1.0) calibrated for a Claude judge, so a cheap
-#     model red-flakes them over exact rule-name/path wording (see evals/INSIGHTS.md) — the real fix
-#     is to relax/repair the cases, not the model. Switch EVAL_TOOLS_MODEL to anthropic/claude-haiku-4.5
-#     for the calibrated model (still routed via the proxy).
+# Backend: OpenRouter (no Claude subscription on CI). All three tier models are a knob, not code:
+#   - skills (content tier)  → deepseek/deepseek-chat, called natively (no proxy) — cheap, stable.
+#   - agents (tool tier)     → anthropic/claude-haiku-4.5 via the LiteLLM proxy. A cheap NON-Anthropic
+#     model (Gemini) proved too flaky for judged agent-quality — it non-deterministically bails
+#     ("can't find main") or varies rule-name spelling, red-flaking cases that pass locally. Haiku is
+#     instructable, matches the cases' calibration, and is still cheap.
+#   - workflow (tool tier)   → google/gemini-2.5-flash via the proxy. This tier asserts on subagent
+#     DISPATCH, and Gemini is the cheap model verified to actually dispatch (README). Non-blocking.
+# The proxy's wildcard route forwards ANY slug (anthropic/* AND non-Anthropic), so both tool jobs
+# work whatever the model resolves to. Judge is decoupled (EVAL_JUDGE_MODEL).
 # Override per-run via workflow_dispatch inputs, or repo-wide via Actions VARIABLES — NOT Secrets;
-# the workflow reads vars.EVAL_SKILLS_MODEL / vars.EVAL_TOOLS_MODEL (a Secret of the same name is
-# invisible to the vars.* context and is silently ignored). Nothing is surfaced in the app UI.
+# the workflow reads vars.EVAL_SKILLS_MODEL / vars.EVAL_AGENTS_MODEL / vars.EVAL_WORKFLOW_MODEL /
+# vars.EVAL_JUDGE_MODEL (a Secret of the same name is invisible to vars.* and silently ignored).
 
 name: harness-evals
 
@@ -33,8 +34,12 @@ on:
         description: "Override EVAL_MODEL for the content (skills) tier — OpenRouter slug"
         required: false
         default: ""
-      tools_model:
-        description: "Override EVAL_MODEL for the tool (agents/workflow) tiers — OpenRouter slug"
+      agents_model:
+        description: "Override EVAL_MODEL for the agents tier — OpenRouter slug"
+        required: false
+        default: ""
+      workflow_model:
+        description: "Override EVAL_MODEL for the workflow tier — OpenRouter slug"
         required: false
         default: ""
       judge_model:
@@ -140,7 +145,7 @@ jobs:
         # match that would also pull sibling dirs sharing the prefix (e.g. foo vs foo-lite).
         run: pnpm vitest run "skills/${{ matrix.skill }}/"
 
-  # ── 3. Agents (tool tier) — Gemini Flash via LiteLLM proxy. BLOCKING. ───────
+  # ── 3. Agents (tool tier) — claude-haiku-4.5 via LiteLLM proxy. BLOCKING. ───
   agents-evals:
     needs: detect
     if: needs.detect.outputs.agents != '[]'
@@ -151,12 +156,12 @@ jobs:
         agent: ${{ fromJSON(needs.detect.outputs.agents) }}
     env:
       EVAL_BACKEND: openrouter
-      # Proxy on: the LiteLLM wildcard forwards ANY EVAL_MODEL slug (anthropic/* AND non-Anthropic
-      # like Gemini/DeepSeek) to OpenRouter, so this job works regardless of which model the var/
-      # default resolves to. Set EVAL_TOOLS_MODEL as an Actions VARIABLE (not a Secret) to override.
+      # Proxy on: the LiteLLM wildcard forwards ANY EVAL_MODEL slug to OpenRouter, so this job works
+      # whatever the model resolves to. Default is Anthropic (instructable, stable for judged quality)
+      # — override via the EVAL_AGENTS_MODEL Actions VARIABLE (not a Secret).
       OPENROUTER_BASE_URL: http://localhost:4000
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EVAL_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_MODEL: ${{ inputs.agents_model || vars.EVAL_AGENTS_MODEL || 'anthropic/claude-haiku-4.5' }}
       EVAL_JUDGE_MODEL: ${{ inputs.judge_model || vars.EVAL_JUDGE_MODEL || 'anthropic/claude-haiku-4.5' }}
     steps:
       - uses: actions/checkout@v4
@@ -192,7 +197,9 @@ jobs:
       EVAL_BACKEND: openrouter
       OPENROUTER_BASE_URL: http://localhost:4000 # proxy on — see agents-evals rationale
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EVAL_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'google/gemini-2.5-flash' }}
+      # Gemini here: the workflow tier asserts on subagent DISPATCH, and Gemini is the cheap model
+      # verified to dispatch (README). Override via the EVAL_WORKFLOW_MODEL Actions VARIABLE.
+      EVAL_MODEL: ${{ inputs.workflow_model || vars.EVAL_WORKFLOW_MODEL || 'google/gemini-2.5-flash' }}
       EVAL_JUDGE_MODEL: ${{ inputs.judge_model || vars.EVAL_JUDGE_MODEL || 'anthropic/claude-haiku-4.5' }}
     steps:
       - uses: actions/checkout@v4

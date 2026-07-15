@@ -3,7 +3,7 @@ import { fixtureReader } from "../../src/index.js";
 
 const fx = fixtureReader(import.meta.url);
 
-const REVIEW_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
+const REVIEW_PROMPT = `Audit the diff shown BELOW against DevDigest's documented structural contracts. The complete diff is inlined in this message — audit exactly what is shown here. Do NOT run git, look for a \`main\` branch, or ask which files to audit; the diff to review is the content that follows.
 
 ${fx("checkout-service.diff")}`;
 
@@ -14,7 +14,7 @@ ${fx("checkout-service.diff")}`;
 // but only the strict variant (which keeps the "cite the exact documented rule per finding" hard
 // rule) should reliably emit the identifier. The checkout diff's textbook violations don't
 // discriminate — the model volunteers `inward-only-dependencies`/`di-discipline` either way.
-const REVIEWER_CORE_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
+const REVIEWER_CORE_PROMPT = `Audit the diff shown BELOW against DevDigest's documented structural contracts. The complete diff is inlined in this message — audit exactly what is shown here. Do NOT run git, look for a \`main\` branch, or ask which files to audit; the diff to review is the content that follows.
 
 ${fx("reviewer-core-gate.diff")}`;
 
@@ -23,7 +23,7 @@ ${fx("reviewer-core-gate.diff")}`;
 // surfaces the COST of relaxing the citation rule: freed from "every finding must name a
 // documented contract", the lite variant is more prone to fabricating a judgment/best-practice
 // finding where the strict variant stays silent.
-const BENIGN_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
+const BENIGN_PROMPT = `Audit the diff shown BELOW against DevDigest's documented structural contracts. The complete diff is inlined in this message — audit exactly what is shown here. Do NOT run git, look for a \`main\` branch, or ask which files to audit; the diff to review is the content that follows.
 
 ${fx("benign-refactor.diff")}`;
 
