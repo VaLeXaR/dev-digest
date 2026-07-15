@@ -1,0 +1,76 @@
+# Workflow evals — systemic tier. Loads the LIVE harness (CLAUDE.md + skills + subagents) and
+# asserts cross-cutting behavior: CLAUDE.md "Read when" routing, subagent dispatch, skill activation.
+#
+# Trigger: a change to any CLAUDE.md (routing), any agent (dispatch behavior), or the workflow eval
+# cases themselves. There is no per-artifact matrix — the whole tier runs as one job.
+#
+# NON-BLOCKING (`continue-on-error`): these assertions are behaviour-shaped and probabilistic
+# (a model may answer inline instead of dispatching, or perform an action instead of activating a
+# skill), and OpenRouter can rate-limit a burst — so a red here is indicative, never a merge gate.
+#
+# Model is a knob: EVAL_WORKFLOW_MODEL (Actions VARIABLE) → default anthropic/claude-haiku-4.5,
+# routed through the LiteLLM proxy. Gemini was tried first (it dispatches) but flaked on skill
+# activation / routing; haiku reliably does both. The proxy's wildcard forwards any slug, so a
+# non-Anthropic model still works if you set the Variable to one. Judge: EVAL_JUDGE_MODEL.
+
+name: eval-workflow
+
+on:
+  pull_request:
+    paths:
+      - "CLAUDE.md"
+      - "**/CLAUDE.md"
+      - ".claude/agents/**"
+      - "evals/workflow/**"
+  workflow_dispatch:
+    inputs:
+      workflow_model:
+        description: "Override EVAL_MODEL for the workflow tier — OpenRouter slug"
+        required: false
+        default: ""
+      judge_model:
+        description: "Override EVAL_JUDGE_MODEL (the grader) — OpenRouter slug"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-workflow-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: evals
+
+jobs:
+  workflow-evals:
+    runs-on: ubuntu-latest
+    continue-on-error: true # reports, never blocks merge — behaviour-shaped + rate-limit flake
+    env:
+      EVAL_BACKEND: openrouter
+      OPENROUTER_BASE_URL: http://localhost:4000 # proxy on — wildcard forwards any slug
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.workflow_model || vars.EVAL_WORKFLOW_MODEL || 'anthropic/claude-haiku-4.5' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || vars.EVAL_JUDGE_MODEL || 'anthropic/claude-haiku-4.5' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - name: Start LiteLLM proxy
+        run: docker compose -f proxy/docker-compose.yml up -d
+      - run: pnpm proxy:wait
+      - run: pnpm vitest run workflow --no-file-parallelism
+      - if: failure()
+        run: docker compose -f proxy/docker-compose.yml logs --tail 100
+      - if: always()
+        run: docker compose -f proxy/docker-compose.yml down
