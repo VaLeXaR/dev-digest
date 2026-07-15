@@ -6,13 +6,14 @@ import messages from "../../../../../../../../messages/en/prReview.json";
 vi.mock("@/lib/hooks", () => ({
   useSmartDiff: vi.fn(),
   useLineContext: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useGenerateFileSummary: vi.fn(() => ({ mutate: vi.fn(), isPending: false, variables: undefined })),
 }));
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ repoId: "r1", number: "42" }),
 }));
 
-import { useSmartDiff, useLineContext } from "@/lib/hooks";
+import { useSmartDiff, useLineContext, useGenerateFileSummary } from "@/lib/hooks";
 import { SmartDiffViewer } from "./SmartDiffViewer";
 
 afterEach(cleanup);
@@ -191,6 +192,174 @@ describe("SmartDiffViewer", () => {
 
     // summary button should NOT be visible (all files have null pseudocode_summary)
     expect(screen.queryByRole("button", { name: /^summary for/i })).not.toBeInTheDocument();
+  });
+
+  it("hides the 'What this does' text while the file is collapsed, and reveals it on expand", () => {
+    const dataWithSummary = {
+      ...BASE_DATA,
+      groups: [
+        {
+          role: "core" as const,
+          files: [
+            {
+              path: "src/middleware/rateLimit.ts",
+              additions: 84,
+              deletions: 8,
+              patch: "@@ -24,3 +24,5 @@\n context\n+const key = bucketKey(req);",
+              // No findings -> collapsed by default.
+              findings: [] as { line: number; severity: string }[],
+              pseudocode_summary: "This function rate-limits by bucket key",
+            },
+          ],
+        },
+      ],
+    };
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: dataWithSummary,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    // Collapsed by default (no findings) -> the summary button shows, but
+    // the "What this does" text itself must not render yet.
+    expect(screen.getByRole("button", { name: "summary for src/middleware/rateLimit.ts" })).toBeInTheDocument();
+    expect(screen.queryByText("This function rate-limits by bucket key")).not.toBeInTheDocument();
+
+    // Expand the file card (click the header, not the summary button).
+    fireEvent.click(screen.getByTitle("src/middleware/rateLimit.ts"));
+
+    expect(screen.getByText("This function rate-limits by bucket key")).toBeInTheDocument();
+  });
+
+  it("shows a 'generate summary' button for a file with a patch but no pseudocode_summary yet, and clicking it triggers generation", () => {
+    const mutate = vi.fn();
+    vi.mocked(useGenerateFileSummary).mockReturnValue({
+      mutate,
+      isPending: false,
+      variables: undefined,
+    } as unknown as ReturnType<typeof useGenerateFileSummary>);
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: BASE_DATA,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    const generateButton = screen.getByRole("button", {
+      name: "generate summary for src/middleware/rateLimit.ts",
+    });
+    fireEvent.click(generateButton);
+    expect(mutate).toHaveBeenCalledWith(
+      "src/middleware/rateLimit.ts",
+      expect.objectContaining({ onSettled: expect.any(Function) }),
+    );
+  });
+
+  it("does not show a summary/generate button for a file with no patch and no existing summary", () => {
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: BASE_DATA,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    expect(
+      screen.queryByRole("button", { name: /summary for package-lock\.json/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the 'generating…' label and disables the button while THIS file's summary is being generated, without affecting other files in the same group", () => {
+    // mutate() intentionally never calls its onSettled callback here, so the
+    // per-file pending state (tracked locally, not via the shared mutation's
+    // own isPending/variables) stays "true" for this assertion.
+    vi.mocked(useGenerateFileSummary).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      variables: undefined,
+    } as unknown as ReturnType<typeof useGenerateFileSummary>);
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: BASE_DATA,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    const generateButton = screen.getByRole("button", {
+      name: "generate summary for src/middleware/rateLimit.ts",
+    });
+    fireEvent.click(generateButton);
+
+    expect(generateButton).toBeDisabled();
+    expect(generateButton).toHaveTextContent(/generating/i);
+  });
+
+  it("generating one file's summary does not disable or affect a SIBLING file's generate button in the same role group (regression: shared-mutation pending state)", () => {
+    // Both files live in the same "core" group, so both are rendered by the
+    // SAME GroupSection instance sharing ONE useGenerateFileSummary() call —
+    // this is exactly the scenario where the old isPending/variables-based
+    // tracking broke (triggering file B reassigned the shared "which file"
+    // state away from file A).
+    const twoFilesSameGroup = {
+      ...BASE_DATA,
+      groups: [
+        {
+          role: "core" as const,
+          files: [
+            {
+              path: "src/middleware/rateLimit.ts",
+              additions: 84,
+              deletions: 8,
+              patch: "@@ -24,3 +24,5 @@\n context\n+const key = bucketKey(req);",
+              findings: [] as { line: number; severity: string }[],
+              pseudocode_summary: null,
+            },
+            {
+              path: "src/other.ts",
+              additions: 10,
+              deletions: 1,
+              patch: "@@ -1,1 +1,2 @@\n context\n+other change",
+              findings: [] as { line: number; severity: string }[],
+              pseudocode_summary: null,
+            },
+          ],
+        },
+      ],
+    };
+    vi.mocked(useGenerateFileSummary).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      variables: undefined,
+    } as unknown as ReturnType<typeof useGenerateFileSummary>);
+    vi.mocked(useSmartDiff).mockReturnValue({
+      data: twoFilesSameGroup,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useSmartDiff>);
+
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    const rateLimitButton = screen.getByRole("button", {
+      name: "generate summary for src/middleware/rateLimit.ts",
+    });
+    const otherButton = screen.getByRole("button", {
+      name: "generate summary for src/other.ts",
+    });
+
+    fireEvent.click(rateLimitButton);
+
+    expect(rateLimitButton).toBeDisabled();
+    // The sibling file's own button, in the SAME group/SAME mutation hook
+    // instance, must stay enabled/idle — it must not be driven by the shared
+    // mutation's single isPending/variables.
+    expect(otherButton).not.toBeDisabled();
+    expect(otherButton).toHaveTextContent(/generate summary/i);
+
+    // Now trigger the second file too, then confirm the first STAYS disabled
+    // (didn't get silently re-enabled when the shared mutation's tracked
+    // "variables" moved to the second file under the old implementation).
+    fireEvent.click(otherButton);
+    expect(rateLimitButton).toBeDisabled();
+    expect(otherButton).toBeDisabled();
   });
 
   it("scrolls to the exact target line, not just the file, even when the file starts collapsed", async () => {

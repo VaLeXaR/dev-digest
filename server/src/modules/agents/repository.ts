@@ -249,4 +249,54 @@ export class AgentsRepository {
       })
       .where(and(eq(t.agentSkills.agentId, agentId), eq(t.agentSkills.skillId, skillId)));
   }
+
+  // ---- agent_context_docs (attached Project Context doc refs) -------------
+
+  /** Attached context-doc paths for an agent, in `order` ascending. */
+  async contextDocPaths(agentId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ path: t.agentContextDocs.path })
+      .from(t.agentContextDocs)
+      .where(eq(t.agentContextDocs.agentId, agentId))
+      .orderBy(asc(t.agentContextDocs.order));
+    return rows.map((r) => r.path);
+  }
+
+  /**
+   * Replace the full set of attached context-doc paths for an agent, order =
+   * index (whole-list replace, mirroring `setSkills`'s delete-then-insert
+   * mechanics — run inside a transaction here since both statements must land
+   * together). Per D2, a context-docs change is itself a config change: unlike
+   * `setSkills` (which never bumps), this bumps `agents.version` and snapshots
+   * `agent_versions` via the same path `update()` uses, so a run trace's
+   * agent version stays reproducible now that attached paths shape the
+   * effective prompt. Only bumps when the resulting ordered path list actually
+   * differs from what's currently stored, so re-saving an unchanged order does
+   * not burn a version.
+   */
+  async setContextDocs(agentId: string, paths: string[]): Promise<void> {
+    const existing = await this.contextDocPaths(agentId);
+    const changed = existing.length !== paths.length || existing.some((p, i) => p !== paths[i]);
+
+    await this.db.transaction(async (tx) => {
+      await tx.delete(t.agentContextDocs).where(eq(t.agentContextDocs.agentId, agentId));
+      if (paths.length > 0) {
+        await tx
+          .insert(t.agentContextDocs)
+          .values(paths.map((path, i) => ({ agentId, path, order: i })));
+      }
+    });
+
+    if (!changed) return;
+
+    const [agent] = await this.db.select().from(t.agents).where(eq(t.agents.id, agentId));
+    if (!agent) return;
+    const nextVersion = agent.version + 1;
+    const [row] = await this.db
+      .update(t.agents)
+      .set({ version: nextVersion })
+      .where(eq(t.agents.id, agentId))
+      .returning();
+    if (row) await this.snapshotVersion(row, nextVersion);
+  }
 }

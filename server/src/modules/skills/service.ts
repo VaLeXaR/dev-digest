@@ -65,6 +65,25 @@ export class SkillsService {
     return this.repo.getAgentsBySkill(skillId);
   }
 
+  /** Attached context-doc paths for a skill, workspace-scoped (undefined = not found). */
+  async contextDocs(workspaceId: string, skillId: string): Promise<string[] | undefined> {
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    return this.repo.contextDocPaths(skillId);
+  }
+
+  /**
+   * Replace the skill's attached context-doc paths (workspace-scoped). Bumps
+   * the skill's version + snapshots `skill_versions` (D2). Returns the
+   * resulting ordered paths, or undefined if the skill isn't in this workspace.
+   */
+  async setContextDocs(workspaceId: string, skillId: string, paths: string[]): Promise<string[] | undefined> {
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    await this.repo.setContextDocs(skillId, paths);
+    return this.repo.contextDocPaths(skillId);
+  }
+
   async importConfirm(workspaceId: string, previews: SkillPreview[]): Promise<Skill[]> {
     const results: Skill[] = [];
     for (const preview of previews) {

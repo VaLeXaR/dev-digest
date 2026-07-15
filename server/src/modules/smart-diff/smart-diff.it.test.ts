@@ -3,7 +3,8 @@ import { startPg, dockerAvailable, type PgFixture } from '../../../test/helpers/
 import { buildApp } from '../../app.js';
 import { loadConfig } from '../../platform/config.js';
 import { seed } from '../../db/seed.js';
-import { MockGitHubClient, MockGitClient } from '../../adapters/mocks.js';
+import { MockGitHubClient, MockGitClient, MockLLMProvider } from '../../adapters/mocks.js';
+import { eq } from 'drizzle-orm';
 import * as t from '../../db/schema.js';
 import { SmartDiff, LineContextResponse, type RepoRef } from '@devdigest/shared';
 
@@ -343,6 +344,139 @@ d('SmartDiff endpoint (Testcontainers pg)', () => {
     });
 
     expect(res.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  function buildAppWithLLM(llm: MockLLMProvider) {
+    return buildApp({
+      config: config(),
+      db: pg.handle.db,
+      overrides: {
+        github: new MockGitHubClient(),
+        // smart_diff_summary's default provider is 'openrouter' (platform.ts
+        // FEATURE_MODELS) — the override-map KEY is what container.llm(provider)
+        // resolves; the MockLLMProvider id ('openai') is unrelated to the key.
+        llm: { openrouter: llm },
+      },
+    });
+  }
+
+  it('POST .../smart-diff/file-summary issues exactly one LLM call, persists, and a subsequent GET .../smart-diff includes it', async () => {
+    const FILE = 'src/middleware/ratelimit.ts';
+    const llm = new MockLLMProvider('openai', {
+      completionText: 'New token-bucket limiter: read bucketKey -> Redis INCR -> if over limit return 429, else next().',
+    });
+    const app = await buildAppWithLLM(llm);
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+
+    await pg.handle.db.insert(t.prFiles).values({
+      prId: pr.id,
+      path: FILE,
+      additions: 12,
+      deletions: 0,
+      patch: '@@ -24,0 +25,8 @@\n+  const key = bucketKey(req);\n+  const count = await redis.incr(key);',
+    });
+
+    const postRes = await app.inject({
+      method: 'POST',
+      url: ['/pulls', pr.id, 'smart-diff/file-summary'].join('/'),
+      payload: { file: FILE },
+    });
+
+    expect(postRes.statusCode).toBe(200);
+    const postBody = postRes.json();
+    expect(postBody.file).toBe(FILE);
+    expect(postBody.summary).toContain('token-bucket limiter');
+    expect(llm.calls.filter((c) => c.method === 'complete')).toHaveLength(1);
+
+    const getRes = await app.inject({
+      method: 'GET',
+      url: ['/pulls', pr.id, 'smart-diff'].join('/'),
+    });
+    const body = SmartDiff.parse(getRes.json());
+    const found = body.groups.flatMap((g) => g.files).find((f) => f.path === FILE);
+    expect(found?.pseudocode_summary).toContain('token-bucket limiter');
+
+    // GET must read the persisted row, never re-generate — call count stays at 1.
+    expect(llm.calls.filter((c) => c.method === 'complete')).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('a second file-summary generate upserts in place — one row per (pr_id, file_path), latest content wins', async () => {
+    const FILE = 'src/middleware/ratelimit.ts';
+    const app1 = await buildAppWithLLM(new MockLLMProvider('openai', { completionText: 'v1 summary' }));
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    await pg.handle.db.insert(t.prFiles).values({
+      prId: pr.id,
+      path: FILE,
+      additions: 1,
+      deletions: 0,
+      patch: '@@ -1,0 +2 @@\n+x',
+    });
+
+    await app1.inject({
+      method: 'POST',
+      url: ['/pulls', pr.id, 'smart-diff/file-summary'].join('/'),
+      payload: { file: FILE },
+    });
+    await app1.close();
+
+    const app2 = await buildAppWithLLM(new MockLLMProvider('openai', { completionText: 'v2 summary' }));
+    const secondRes = await app2.inject({
+      method: 'POST',
+      url: ['/pulls', pr.id, 'smart-diff/file-summary'].join('/'),
+      payload: { file: FILE },
+    });
+
+    expect(secondRes.statusCode).toBe(200);
+    expect(secondRes.json().summary).toBe('v2 summary');
+
+    const rows = await pg.handle.db
+      .select()
+      .from(t.prFileSummaries)
+      .where(eq(t.prFileSummaries.prId, pr.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.summary).toBe('v2 summary');
+
+    await app2.close();
+  });
+
+  it('POST .../smart-diff/file-summary returns 404 for a file not part of this PR\'s diff', async () => {
+    const app = await buildAppWithLLM(new MockLLMProvider('openai', { completionText: 'unused' }));
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: ['/pulls', pr.id, 'smart-diff/file-summary'].join('/'),
+      payload: { file: 'src/not-in-this-pr.ts' },
+    });
+
+    expect(res.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  it('POST .../smart-diff/file-summary returns 400 for a file with no patch', async () => {
+    const FILE = 'package-lock.json';
+    const app = await buildAppWithLLM(new MockLLMProvider('openai', { completionText: 'unused' }));
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    await pg.handle.db.insert(t.prFiles).values({
+      prId: pr.id,
+      path: FILE,
+      additions: 3,
+      deletions: 1,
+      patch: null,
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: ['/pulls', pr.id, 'smart-diff/file-summary'].join('/'),
+      payload: { file: FILE },
+    });
+
+    expect(res.statusCode).toBe(400);
 
     await app.close();
   });

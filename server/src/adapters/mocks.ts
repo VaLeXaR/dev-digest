@@ -249,6 +249,8 @@ export interface MockGitOptions {
   head?: string;
   /** Head `currentHead()` returns AFTER `sync()` runs — simulates fetch+reset advancing HEAD. */
   syncedHead?: string;
+  /** Repo-relative paths `listTrackedFiles()` reports as git-tracked. */
+  trackedFiles?: string[];
 }
 
 export class MockGitClient implements GitClient {
@@ -295,6 +297,11 @@ export class MockGitClient implements GitClient {
   }
   async showFile(_repo: RepoRef, _ref: string, path: string): Promise<string> {
     return this.opts.files?.[path] ?? '';
+  }
+  async listTrackedFiles(_repo: RepoRef, pathspecs?: string[]): Promise<string[]> {
+    const tracked = this.opts.trackedFiles ?? [];
+    if (!pathspecs || pathspecs.length === 0) return tracked;
+    return tracked.filter((p) => pathspecs.some((spec) => p === spec || p.startsWith(`${spec}/`)));
   }
 }
 

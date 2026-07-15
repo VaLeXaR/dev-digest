@@ -184,6 +184,29 @@ export class AgentsService {
     return this.skillLinks(agentId);
   }
 
+  /** Attached Project Context doc paths for an agent, ordered. */
+  async contextDocs(workspaceId: string, agentId: string): Promise<string[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    return this.repo.contextDocPaths(agentId);
+  }
+
+  /**
+   * Set / reorder the agent's attached Project Context doc paths. Per D2, this
+   * routes through the repository's version-bump + `agent_versions` snapshot
+   * path — unlike `setSkills`, which never bumps.
+   */
+  async setContextDocs(
+    workspaceId: string,
+    agentId: string,
+    paths: string[],
+  ): Promise<string[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    await this.repo.setContextDocs(agentId, paths);
+    return this.repo.contextDocPaths(agentId);
+  }
+
   /**
    * Dynamic model list from the provider adapter's /models. Degrades gracefully
    * to [] if the provider key is not configured (the editor still renders).

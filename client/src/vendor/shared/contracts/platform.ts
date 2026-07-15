@@ -18,6 +18,8 @@ export const FeatureModelId = z.enum([
   'conformance',
   'conventions',
   'blast_summary',
+  'why_risk_brief',
+  'smart_diff_summary',
 ]);
 export type FeatureModelId = z.infer<typeof FeatureModelId>;
 
@@ -84,6 +86,20 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     defaultProvider: 'openrouter',
     defaultModel: 'deepseek/deepseek-v4-flash',
   },
+  {
+    id: 'why_risk_brief',
+    label: 'PR Review · Why+Risk Brief',
+    description: 'Composes a PR why+risk brief from derived facts.',
+    defaultProvider: 'openai',
+    defaultModel: 'gpt-4.1',
+  },
+  {
+    id: 'smart_diff_summary',
+    label: 'Smart Diff · File Summary',
+    description: 'Writes a one-line "what this does" pseudocode summary for a changed file.',
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
+  },
 ];
 
 // ---- Settings ----
@@ -100,6 +116,10 @@ export const SettingsKnown = z.object({
   automatic_reviews: z.boolean().default(false),
   /** Per-feature model overrides (provider+model), keyed by FeatureModelId. */
   feature_models: z.record(FeatureModelId, FeatureModelChoice).default({}),
+  /** Root folders scanned for Project Context markdown docs (repo-relative). */
+  context_root_folders: z.array(z.string()).default(['specs', 'docs', 'insights']),
+  /** Token budget for the Project Context attach warning. */
+  context_token_budget: z.number().int().min(0).default(4000),
 });
 export type SettingsKnown = z.infer<typeof SettingsKnown>;
 
@@ -180,6 +200,9 @@ export const PrMeta = z.object({
   score: z.number().int().nullish(),
   // Cost of the last completed agent run (list endpoint only; null/absent until a run completes).
   last_run_cost_usd: z.number().nullish(),
+  // Tokens in/out of the last completed agent run (same run as last_run_cost_usd).
+  last_run_tokens_in: z.number().int().nullish(),
+  last_run_tokens_out: z.number().int().nullish(),
   // Per-severity finding counts for the list FINDINGS column (null until reviewed).
   findings_counts: z.object({
     CRITICAL: z.number().int(),

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision, primaryKey } from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
@@ -61,6 +61,13 @@ export const prBrief = pgTable('pr_brief', {
   json: jsonb('json').notNull(),
 });
 
+export const prWhyRiskBrief = pgTable('pr_why_risk_brief', {
+  prId: uuid('pr_id')
+    .primaryKey()
+    .references(() => pullRequests.id, { onDelete: 'cascade' }),
+  json: jsonb('json').notNull(),
+});
+
 export const prBlastSummary = pgTable('pr_blast_summary', {
   prId: uuid('pr_id')
     .primaryKey()
@@ -68,3 +75,21 @@ export const prBlastSummary = pgTable('pr_blast_summary', {
   summary: text('summary').notNull(),
   generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Per-file one-line "what this does" pseudocode summary (Smart Diff), generated
+ * on demand per file rather than all-at-once for the whole PR — one row per
+ * (pr_id, file_path), not per-PR like the other artifacts above. */
+export const prFileSummaries = pgTable(
+  'pr_file_summaries',
+  {
+    prId: uuid('pr_id')
+      .notNull()
+      .references(() => pullRequests.id, { onDelete: 'cascade' }),
+    filePath: text('file_path').notNull(),
+    summary: text('summary').notNull(),
+    generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.prId, table.filePath] }),
+  }),
+);

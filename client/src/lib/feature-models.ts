@@ -52,4 +52,11 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     defaultProvider: "openai",
     defaultModel: "gpt-5.4",
   },
+  {
+    id: "why_risk_brief",
+    label: "PR Review · Why+Risk Brief",
+    description: "Composes a PR why+risk brief from derived facts.",
+    defaultProvider: "openai",
+    defaultModel: "gpt-4.1",
+  },
 ];

@@ -11,7 +11,9 @@ interface IntentCardProps {
   intentData: PrIntentRecord | undefined;
   risksData: Risks | undefined;
   risksLoading: boolean;
-  recalcButton: React.ReactNode;
+  /** Optional — OverviewTab no longer passes this (recalculation is now
+   * triggered only via the unified empty-state "Generate brief" action). */
+  recalcButton?: React.ReactNode;
 }
 
 const RISK_ICON: Record<RiskSeverity, IconName> = {

@@ -87,7 +87,9 @@ export const s = {
 
   filePath: {
     flex: 1,
-    color: "var(--text-secondary)",
+    fontSize: 12.5,
+    fontWeight: 500,
+    color: "var(--text-primary)",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
@@ -95,12 +97,34 @@ export const s = {
     textAlign: "left",
   } satisfies CSSProperties,
 
+  findingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: "var(--crit)",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
+  fileCardHeaderRight: {
+    marginLeft: "auto",
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
   diffBadge: {
-    fontFamily: "monospace",
-    fontSize: 12,
-    color: "var(--text-muted)",
+    fontSize: 11.5,
     whiteSpace: "nowrap",
     flexShrink: 0,
+  } satisfies CSSProperties,
+
+  diffBadgeAdd: {
+    color: "var(--code-add-text)",
+  } satisfies CSSProperties,
+
+  diffBadgeDel: {
+    color: "var(--code-del-text)",
   } satisfies CSSProperties,
 
   findingsBadge: {
@@ -118,31 +142,43 @@ export const s = {
     flexShrink: 0,
   } satisfies CSSProperties,
 
+  // Pill matching the design's "summary" badge exactly (icon + accent-filled
+  // pill, design/02-files-changed-smart-diff.png). User-confirmed: the
+  // "generate summary" (not-yet-generated) state uses this SAME styling —
+  // no separate muted variant.
   summaryButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
     fontSize: 11,
-    fontWeight: 600,
-    color: "var(--accent-text)",
-    background: "var(--bg-elevated)",
-    border: "1px solid var(--border)",
-    borderRadius: 4,
-    padding: "1px 6px",
+    border: "none",
+    borderRadius: 5,
+    padding: "2px 7px",
     cursor: "pointer",
     flexShrink: 0,
+    color: "var(--accent-text)",
+    background: "var(--accent-bg)",
   } satisfies CSSProperties,
 
   summaryText: {
+    display: "flex",
+    gap: 7,
     fontSize: 12,
-    color: "var(--text-muted)",
-    padding: "5px 10px 7px",
+    color: "var(--text-secondary)",
+    padding: "8px 12px 8px 33px",
     borderTop: "1px solid var(--border)",
-    fontStyle: "italic",
-    lineHeight: "1.5",
+    lineHeight: 1.5,
+  } satisfies CSSProperties,
+
+  summaryIcon: {
+    color: "var(--accent)",
+    flexShrink: 0,
+    marginTop: 2,
   } satisfies CSSProperties,
 
   summaryLabel: {
+    color: "var(--text-primary)",
     fontWeight: 600,
-    fontStyle: "normal",
-    color: "var(--text-secondary)",
   } satisfies CSSProperties,
 
   banner: {

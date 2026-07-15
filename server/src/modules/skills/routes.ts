@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { SkillType, SkillPreview } from '@devdigest/shared';
+import { SkillType, SkillPreview, SetContextDocsBody, type ContextDocsResponse } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError, ValidationError } from '../../platform/errors.js';
@@ -79,6 +79,24 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     if (!agents) throw new NotFoundError('Skill not found');
     return agents;
   });
+
+  app.get('/skills/:id/context-docs', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const paths = await service.contextDocs(workspaceId, req.params.id);
+    if (!paths) throw new NotFoundError('Skill not found');
+    return { paths } satisfies ContextDocsResponse;
+  });
+
+  app.put(
+    '/skills/:id/context-docs',
+    { schema: { params: IdParams, body: SetContextDocsBody } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const paths = await service.setContextDocs(workspaceId, req.params.id, req.body.paths);
+      if (!paths) throw new NotFoundError('Skill not found');
+      return { paths } satisfies ContextDocsResponse;
+    },
+  );
 
   app.post('/skills/import/preview-url', { schema: { body: ImportUrlBody } }, async (req) => {
     await getContext(app.container, req);

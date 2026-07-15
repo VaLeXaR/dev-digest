@@ -89,6 +89,9 @@ export default function PRDetailPage() {
   );
   const lethalTrifecta = allFindings.filter((f) => f.kind === "lethal_trifecta");
   const findingsCount = allFindings.length;
+  // Latest actual review (kind='review', has a verdict) — backs the top-of-Overview
+  // PR Brief banner. kind='summary' rows carry no verdict, so skip those.
+  const latestReview = runs.find((r) => r.verdict != null) ?? null;
 
   const repoName = activeRepo?.full_name ?? repoId;
   // The real "owner/repo" (null until the repo is loaded) — used to build
@@ -156,6 +159,12 @@ export default function PRDetailPage() {
             changedFiles={pr.files?.map((f) => f.path) ?? []}
             repoFullName={repoFullName}
             headSha={pr.head_sha}
+            latestReview={latestReview}
+            score={pr.score}
+            findingsCounts={pr.findings_counts}
+            lastRunCostUsd={pr.last_run_cost_usd}
+            lastRunTokensIn={pr.last_run_tokens_in}
+            lastRunTokensOut={pr.last_run_tokens_out}
           />
         )}
 

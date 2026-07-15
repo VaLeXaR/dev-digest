@@ -15,5 +15,17 @@
     "blame": "blame",
     "noHistory": "No history available for this line.",
     "noCommits": "No commits found for this line."
+  },
+  "card": {
+    "riskLevel": {
+      "high": "High risk",
+      "medium": "Medium risk",
+      "low": "Low risk"
+    },
+    "reviewFocus": {
+      "title": "Review focus — read these first",
+      "goto": "Go to {file} line {line} in diff",
+      "gotoExternal": "Open {file} line {line} on GitHub"
+    }
   }
 }

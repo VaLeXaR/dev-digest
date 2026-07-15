@@ -8,6 +8,8 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { SkillsRepository } from '../skills/repository.js';
+import { resolveAttachedSpecs } from '../project-context/resolver.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -41,11 +43,20 @@ export type RunOutcome = {
  * review. Per-agent failures are isolated.
  */
 export class ReviewRunExecutor {
+  // No DI seam on Container for the skills repo (mirrors how BlastService/
+  // IntentService construct their own `new ReviewRepository(container.db)`
+  // internally — server INSIGHTS 2026-07-02) — constructed once here instead
+  // of adding a 4th constructor param, which would force every existing
+  // caller (ReviewService) to change.
+  private skillsRepo: SkillsRepository;
+
   constructor(
     private container: Container,
     private repo: ReviewRepository,
     private agents: Container['agentsRepo'],
-  ) {}
+  ) {
+    this.skillsRepo = new SkillsRepository(container.db);
+  }
 
   /**
    * Background execution of the queued agent runs (NOT awaited by the route).
@@ -185,14 +196,37 @@ export class ReviewRunExecutor {
       );
 
       // Load enabled skills linked to this agent; bodies are injected into the
-      // prompt as a "Skills / rules" section by assemblePrompt.
-      const skillBodies = await runLog.step('Loading enabled skills', async () => {
+      // prompt as a "Skills / rules" section by assemblePrompt. Kept as the
+      // filtered link list (not just bodies) so the Project Context step below
+      // can also read each enabled skill's attached doc paths without a second
+      // `linkedSkills` query.
+      const enabledSkillLinks = await runLog.step('Loading enabled skills', async () => {
         const links = await this.agents.linkedSkills(agent.id);
-        return links
-          .filter((l) => l.enabled && l.skill.enabled)
-          .map((l) => `### ${l.skill.name}\n${l.skill.body}`);
+        return links.filter((l) => l.enabled && l.skill.enabled);
       });
+      const skillBodies = enabledSkillLinks.map((l) => `### ${l.skill.name}\n${l.skill.body}`);
       runLog.info(`${skillBodies.length} enabled skill(s) loaded`);
+
+      // Project Context (T-09) — resolve the agent's own attached doc paths
+      // plus each enabled linked skill's attached paths into readable spec
+      // text. Concatenation order is agent-FIRST, then skills in link order:
+      // the resolver dedups by path, first-occurrence wins, so getting this
+      // order right is what makes "agent attach wins over inherited skill
+      // attach" true (server INSIGHTS 2026-07-02 — a global dedup/cap applied
+      // after merging silently breaks per-entity precedence).
+      const agentContextPaths = await this.agents.contextDocPaths(agent.id);
+      const skillContextPaths: string[] = [];
+      for (const l of enabledSkillLinks) {
+        skillContextPaths.push(...(await this.skillsRepo.contextDocPaths(l.skill.id)));
+      }
+      const orderedContextPaths = [...agentContextPaths, ...skillContextPaths];
+      const { specs, snapshot: specsSnapshot, read: specsRead } = await resolveAttachedSpecs({
+        orderedPaths: orderedContextPaths,
+        clonePath: this.container.git.clonePathFor(repo),
+      });
+      runLog.info(
+        `Project context: ${specsRead.length} doc(s) injected, ${orderedContextPaths.length - specsRead.length} skipped`,
+      );
 
       // Per-agent repo-intel toggle (Agent editor). When an agent opts out we
       // skip all enrichment entirely so its prompt is identical to the
@@ -242,6 +276,11 @@ export class ReviewRunExecutor {
         // Linked skills — injected as "Skills / rules" section. Omitted when
         // the agent has no enabled skills.
         ...(skillBodies.length > 0 ? { skills: skillBodies } : {}),
+        // T-09 — Project Context: agent + inherited-skill attached docs,
+        // resolved above. Omitted when nothing resolved so the prompt stays
+        // byte-identical to the pre-feature shape (AC-22) — reviewer-core's
+        // own omit-when-empty + untrusted-wrap handle the rest unmodified.
+        ...(specs.length > 0 ? { specs } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -309,7 +348,10 @@ export class ReviewRunExecutor {
           findings: findingRows.length,
           grounding,
         },
-        prompt_assembly: outcome.assembly,
+        // specs_snapshot is added onto the assembly object here — assemblePrompt
+        // itself never emits it (it's not part of PromptParts/AssembledPrompt);
+        // reviewer-core stays unmodified (server INSIGHTS / plan T-09 gotcha).
+        prompt_assembly: { ...outcome.assembly, specs_snapshot: specsSnapshot },
         tool_calls: outcome.chunks.map((c) => ({
           tool: 'review_file',
           args: c.label,
@@ -318,7 +360,7 @@ export class ReviewRunExecutor {
         })),
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        specs_read: specsRead,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),

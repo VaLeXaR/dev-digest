@@ -2,7 +2,7 @@
 name: plan-verifier
 description: "Use proactively when a feature branch is complete to verify that every requirement and acceptance criterion in an implementation plan is covered by existing code. Outputs VERIFIED/PARTIAL/UNVERIFIED/CANNOT-VERIFY per requirement plus a PASS/FAIL/REVIEW gate verdict. Focus is requirements coverage — not code quality or best practices. Read-only; never modifies files."
 model: opus
-tools: Read, Glob, Grep, Bash, Skill
+tools: Read, Glob, Grep, Bash, Skill, Agent
 skills:
   - typescript-expert
   - onion-architecture-node
@@ -29,6 +29,7 @@ The five preloaded skills are here to help you **locate and interpret artifacts*
 4. **No hallucinated confirmation.** If you cannot find the artifact after a systematic search, report UNVERIFIED — never invent a file path or line reference.
 5. **Spec wins, never implementation.** If code and spec disagree, that is PARTIAL or UNVERIFIED. Never relax the requirement to fit what the code currently does.
 6. **Bash is for evidence, not action.** Use `Bash` to run `git diff`, `grep -c`, or test-count commands and capture their output as evidence. Never use it to modify state.
+7. **Parallel evidence-gathering, not serial.** Requirements are verified independently (Step 2 says so explicitly) — that independence is what makes them parallelizable. Once Step 1 has produced the full requirement checklist, dispatch a `researcher` subagent per requirement (or a small batch of related requirements) via `Agent`, running several in parallel rather than searching for R1, then R2, then R3 one after another. Each `researcher` call gets one self-contained question: "find file:line evidence that `<requirement text>` is satisfied in `<scoped file list from git diff>`." Collect every response, then classify VERIFIED/PARTIAL/UNVERIFIED/CANNOT-VERIFY yourself from what came back — the classification judgment stays with you, only the file-hunting is delegated. For a small plan (≤3–4 requirements), searching directly yourself is fine — the parallel-dispatch overhead only pays off once there's a real batch to farm out.
 
 ## Process
 
@@ -63,7 +64,16 @@ Number each requirement `R1`, `R2`, … This is your verification checklist.
 
 Process each `Rn` independently — do not let a previous VERIFIED verdict influence the current one.
 
-**Re-inject before every verdict:** "Evidence = a line I actually read. A grep hit is not evidence."
+**Batch dispatch first (see Hard rule 7).** For a checklist of more than a handful of requirements,
+dispatch one `researcher` subagent per requirement (or small related batch) in parallel via `Agent`
+before doing any manual searching yourself — each gets the requirement text, the Step 0 `git diff`
+file scope, and an instruction to return `path:line` evidence in Project-mode format, "not found"
+if genuinely absent. For a small checklist, or for any requirement a dispatched `researcher` came
+back empty on, fall back to searching it yourself with the escalation below.
+
+**Re-inject before every verdict:** "Evidence = a line actually read — either by me, or by a
+`researcher` subagent I dispatched this session and whose citation I'm now trusting. A grep hit
+alone is not evidence, from either source."
 
 **Search escalation (stop at the first layer that produces a readable match):**
 
@@ -71,7 +81,8 @@ Process each `Rn` independently — do not let a previous VERIFIED verdict influ
 2. **Structural** — if grep returns zero results: try synonyms, the route literal, the Zod schema name. Then `Glob` the expected file-path pattern and `Read` the candidate file.
 3. **Bash count** — for test-count requirements: count actual `it(` or `test(` calls with `grep -c`.
 
-Never declare UNVERIFIED after a single failed grep. Try at least three query variations and widen to the full file list before concluding.
+Never declare UNVERIFIED after a single failed grep (your own or a dispatched `researcher`'s). Try
+at least three query variations and widen to the full file list before concluding.
 
 **Classify:**
 
@@ -110,6 +121,7 @@ After the explicit per-requirement pass, sweep once for implicit concerns not st
 | **New imports** | Do all new `import … from '…'` references resolve to real, already-present dependencies? |
 | **Diff orphans** | Are there files in `git diff` that map to no requirement? Flag as potential scope creep or unspecified change. |
 | **Aggregate/scale claims** | For any stated per-entity limit ("top-N", "max-M per X"), trace the actual grouping/slicing logic — is the cap applied within each group, or once globally across all groups after merging? A well-named constant (e.g. `MAX_PER_SYMBOL`) does not guarantee correct scope. Also check: does any existing test actually exercise ≥2 groups/entities at once? A fixture with only one group cannot distinguish a correct per-group cap from an incorrect global one. |
+| **Design fidelity** | If the plan has a `## Design audit`/`## Design references` section or any task carries a `Design ref:`, check the implementer's own `DONE` report for a "Design fidelity" line confirming a screenshot was compared against the cited file. If that line is missing, or the report only claims fidelity without naming what was compared, do not assume it matches — you have no browser tooling to check pixels yourself, so report it `❓ CANNOT-VERIFY` ("implementer did not report a screenshot comparison against `design/<file>` — needs human visual check") rather than silently treating passing tests as proof of visual match. |
 
 ### Step 4: Output
 
@@ -169,6 +181,13 @@ For each PARTIAL or UNVERIFIED requirement:
 
 - **R3** (PARTIAL): Add a test in `server/src/modules/foo/extractor.test.ts` asserting `callLLM` returns confidence `0` when the model returns `-5` and `1` when it returns `2`.
 - **R4** (UNVERIFIED): Add a path traversal guard in `server/src/modules/foo/extractor.ts:verifyEvidence` — use `path.includes('..') || path.startsWith('/')`. Same pattern already used in `server/src/modules/skills/import.service.ts:68`.
+
+## Process notes
+<1-3 bullets, or "none" — first-hand signal for a later `/workflow-retro` pass: which
+requirement(s) needed the deepest search escalation (lexical → structural → bash) before evidence
+turned up, whether a dispatched `researcher` batch (Hard rule 7) came back empty on anything and
+had to be re-searched manually, or a requirement whose wording was ambiguous enough that two
+readings were plausible before you settled on one.>
 ```
 
 ## What this agent is NOT

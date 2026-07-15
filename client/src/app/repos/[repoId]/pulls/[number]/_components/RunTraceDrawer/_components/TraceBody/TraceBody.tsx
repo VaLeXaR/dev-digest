@@ -13,7 +13,32 @@ import { TraceSection } from "../TraceSection";
 import { ToolCallRow } from "../ToolCallRow";
 import { PromptBlock } from "../PromptBlock";
 import { FindingsSection } from "../FindingsSection";
+import { AttachedSpecsModal, type SpecSnapshotDoc } from "../AttachedSpecsModal";
 import { Row, Stat } from "../atoms";
+
+/** Head-bar row (mirrors PromptBlock's dot+label layout) that opens
+    AttachedSpecsModal on click. Renders only when the caller has a non-empty
+    specs_snapshot — guarded in TraceBody before this component is used. */
+function AttachedSpecsRow({ snapshot }: { snapshot: SpecSnapshotDoc[] }) {
+  const t = useTranslations("prReview");
+  const [open, setOpen] = React.useState(false);
+  const tokens = React.useMemo(
+    () => snapshot.reduce((sum, d) => sum + Math.ceil(d.content.length / 4), 0),
+    [snapshot],
+  );
+  return (
+    <div style={s.promptRow}>
+      <div onClick={() => setOpen(true)} style={s.promptHead}>
+        <span style={s.promptDot(PROMPT_COLORS.specs)} />
+        <span style={s.promptLabel}>{t("context.row")}</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)" }}>
+          {t("context.rowSummary", { count: snapshot.length, tokens })}
+        </span>
+      </div>
+      {open && <AttachedSpecsModal specs={snapshot} onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
 
 export function TraceBody({ trace, findings }: { trace: RunTrace; findings: FindingRecord[] }) {
   const t = useTranslations("runs");
@@ -83,6 +108,9 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
         )}
         {trace.prompt_assembly.specs != null && (
           <PromptBlock label={t("trace.prompt.specs")} text={trace.prompt_assembly.specs} color={PROMPT_COLORS.specs} />
+        )}
+        {trace.prompt_assembly.specs_snapshot != null && trace.prompt_assembly.specs_snapshot.length > 0 && (
+          <AttachedSpecsRow snapshot={trace.prompt_assembly.specs_snapshot} />
         )}
         {trace.prompt_assembly.callers != null && (
           <PromptBlock label={t("trace.prompt.callers")} text={trace.prompt_assembly.callers} color={PROMPT_COLORS.callers} />

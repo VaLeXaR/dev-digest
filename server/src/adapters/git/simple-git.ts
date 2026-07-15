@@ -133,6 +133,16 @@ export class SimpleGitClient implements GitClient {
   async showFile(repo: RepoRef, ref: string, path: string): Promise<string> {
     return this.git(repo).show([`${ref}:${path}`]);
   }
+
+  async listTrackedFiles(repo: RepoRef, pathspecs?: string[]): Promise<string[]> {
+    if (!(await this.exists(this.clonePathFor(repo)))) return [];
+    const raw = await this.git(repo).raw([
+      'ls-files',
+      '-z',
+      ...(pathspecs ? ['--', ...pathspecs] : []),
+    ]);
+    return raw.split('\0').filter((s) => s.length > 0);
+  }
 }
 
 function parseBlamePorcelain(raw: string): BlameLine[] {

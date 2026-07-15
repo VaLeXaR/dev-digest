@@ -10,6 +10,10 @@ const LineContextQuery = z.object({
   line: z.coerce.number().int().positive(),
 });
 
+const FileSummaryInput = z.object({
+  file: z.string().min(1),
+});
+
 const smartDiffRoutes: FastifyPluginAsync = async (appBase) => {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
   const service = new SmartDiffService(app.container);
@@ -36,6 +40,19 @@ const smartDiffRoutes: FastifyPluginAsync = async (appBase) => {
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
       return service.getLineContext(req.params.id, workspaceId, req.query.file, req.query.line);
+    },
+  );
+
+  // POST /pulls/:id/smart-diff/file-summary { file }
+  // Generates (one LLM call) and persists a one-line pseudocode summary for
+  // a single changed file — triggered by that file's own "summary" button.
+  app.post(
+    '/pulls/:id/smart-diff/file-summary',
+    { schema: { params: IdParams, body: FileSummaryInput } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const summary = await service.generateFileSummary(req.params.id, workspaceId, req.body.file);
+      return { file: req.body.file, summary };
     },
   );
 };

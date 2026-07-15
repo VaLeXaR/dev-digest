@@ -50,7 +50,7 @@ describe("IntentCard", () => {
       />,
     );
 
-    expect(screen.getByText("No intent yet — click Recalculate to analyze this PR")).toBeInTheDocument();
+    expect(screen.getByText("No intent yet")).toBeInTheDocument();
   });
 
   it("renders risk chips by severity", () => {

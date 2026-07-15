@@ -28,6 +28,13 @@ run safe.
   **added** only if the task says so.
 - **No broad review.** Your self-check is narrow: write the code and make the module's existing
   tests pass. Full architecture / security auditing is `pr-self-review`'s job, not yours.
+- **Never background your own verification command and then end your turn waiting for it.** You
+  are a subagent — you do not receive the coordinator's task-notification when a background
+  process finishes, so ending your turn with "I'll wait for the test run to complete" stalls
+  indefinitely until the coordinator notices and has to intervene. Run `pnpm test`/`vitest`/`tsc`
+  synchronously in the foreground. If a command genuinely must run in the background, actively
+  poll and read its actual output yourself before ending your turn — never end a turn on an
+  assumption that a result will arrive on its own.
 
 ## What you receive
 
@@ -61,7 +68,7 @@ For every module in your `Owned paths`, read its INSIGHTS file at the **module r
 - `reviewer-core/INSIGHTS.md` for reviewer-core tasks
 - `e2e/INSIGHTS.md` for e2e tasks
 
-Also honour the `Known gotchas` the planner wrote into your task.
+Also honour the `Known gotchas` the implementation-planner wrote into your task.
 Treat every entry as high-confidence guidance.
 
 ### Step 2 — Read the affected files
@@ -69,18 +76,33 @@ Treat every entry as high-confidence guidance.
 Before writing anything, read each file listed in `Owned paths`. If a file does not exist yet,
 read the nearest sibling to understand naming and structure conventions already in use.
 
+If understanding this task requires tracing a pattern or convention that lives **outside** your
+`Owned paths` (e.g. "how does an existing sibling module wire its DI container entry"), delegate
+that lookup to a `researcher` subagent via `Agent` instead of grepping broadly yourself — it keeps
+your own context focused on the files you're actually editing. Only worth it for a real
+cross-file investigation; a single quick grep inside your own `Owned paths` doesn't need it.
+
 Also read the module's `CLAUDE.md`:
 
 - `server/CLAUDE.md` — feature module conventions, DI via container, test suffixes
 - `client/CLAUDE.md` — App Router conventions, TanStack Query keys, i18n via next-intl
 - `reviewer-core/CLAUDE.md` — pure engine rules, groundFindings gate
 
-**If the task includes a UI design reference** (screenshot path, mockup image, or design description):
-treat the visual design as authoritative — it overrides any conflicting text description. Before
-writing the first line of component code, extract every visible element from the design:
-section headers, labels, badges, button states, default collapsed/expanded state, toggle placement,
-inline content vs badge-on-card differences, empty/loading states. List them explicitly in your
-working notes. A component that passes tests but ignores the design is wrong.
+**If your task carries a `Design ref:` field:** that field names a real file path (this plan's own
+`design/` folder, or an inherited spec's) — `Read` it yourself before writing the first line of
+component code. Treat it as authoritative: it overrides any conflicting text in the task's
+`Action` description, and it overrides any older plan decision that kept a visible element the
+design doesn't show. Extract every visible element from the image region by region — section
+headers, labels, badges, icon presence/position, fill vs. outline, row vs. column grouping,
+button states, default collapsed/expanded/selected state, empty/loading states — and list them
+explicitly in your working notes before coding. A component that passes tests but ignores the
+design is wrong, even if it satisfies the task's prose `Action`.
+
+**If the task's `Action` describes visual/UI work but carries no `Design ref:` field and no design
+was otherwise supplied**, that is `NEEDS_CONTEXT` — do not build UI from a prose description alone
+when the plan implies a design exists. If the task genuinely has no design source (pure
+behavioral/logic change to an existing screen, nothing new to lay out), proceed normally; only
+stop when the task's own wording implies a design that isn't actually reachable.
 
 ### Step 3 — Apply the skill set for your Type
 
@@ -188,6 +210,25 @@ After tests pass, do a **diff-review** of your own changes. Look for things test
 
 If local verification passes, it must mirror CI — do not claim DONE if you skipped any phase.
 
+**If your task carries a `Design ref:` field, tests passing is not enough — self-verify visually
+before claiming DONE.** You do not have browser/screenshot tools yourself, so dispatch a
+`general-purpose` subagent via `Agent` with: the route/component you just built, an instruction to
+use the `run` skill (or equivalent project tooling) to launch the app and screenshot the affected
+screen, and the exact `Design ref:` path to compare it against element by element (text, icon
+presence/position, fill vs. outline, grouping, spacing, default state) — ask it to report concrete
+mismatches, not a vague "looks fine." Fix every mismatch it finds and re-dispatch to confirm before
+outputting `DONE`. If the dispatched check could not run at all (e.g. no dev server reachable in
+this environment), do not claim visual fidelity you didn't verify — output `DONE_WITH_CONCERNS`
+and say plainly that the design comparison could not be performed, naming what blocked it.
+
+**Exception:** if the live check needs a route/page that is a *different*, still-in-flight task's
+Owned path in the same multi-agent run (e.g. your task adds a sidebar item linking to a route a
+sibling task is still building), don't substitute an unrelated existing page just to get a
+screenshot — skip the live render, note it plainly, and output `DONE_WITH_CONCERNS` pointing at
+the task that will complete the target route. That task's own design-fidelity check will cover the
+same element once the real route exists — a second live-verification dispatch against a
+placeholder page is redundant, not extra rigor.
+
 Confirm all of the following before outputting the result:
 
 - [ ] Tests pass (command from task's `Acceptance`)
@@ -196,6 +237,9 @@ Confirm all of the following before outputting the result:
 - [ ] If schema changed: `pnpm db:migrate` was run
 - [ ] If shared contracts changed: both vendor copies are in sync
 - [ ] No files outside `Owned paths` were modified (unless noted in the report)
+- [ ] If task carried a `Design ref:`: a screenshot of the live result was compared against it
+      (by a dispatched subagent) and every mismatch found was fixed, or the inability to check was
+      reported honestly as a `DONE_WITH_CONCERNS` reason
 
 ### Step 7 — Record non-obvious findings
 
@@ -224,12 +268,19 @@ Reply in the same language the request was written in. Start your response with 
 - Tests: `<command>` — pass
 - Typecheck: `<command>` — pass
 - Diff-review: clean
+- Design fidelity: `<Design ref: path>` — screenshot compared, no mismatches remaining (omit this
+  line entirely if the task had no `Design ref:`)
 
 ### Touched paths
 <list every file actually modified — coordinator uses this to detect overlap with other parallel tasks>
 
 ### Out of scope / follow-ups
 - <anything noticed but not touched, or "none">
+
+### Process notes
+<1-3 bullets, or "none" — first-hand signal for a later `/workflow-retro` pass, not a code
+finding: what took more attempts than expected, what context in the task description was already
+obvious from the code (i.e. wasted plan detail), or what you almost missed until a test caught it.>
 ```
 
 ---
@@ -242,7 +293,7 @@ Reply in the same language the request was written in. Start your response with 
 ### Concern
 <one paragraph: what the issue is, why it matters, what the coordinator should decide>
 
-### Changed / Verification / Touched paths
+### Changed / Verification / Touched paths / Process notes
 <same blocks as DONE>
 ```
 

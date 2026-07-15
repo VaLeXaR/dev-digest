@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { Skeleton, SectionLabel } from "@devdigest/ui";
+import { Skeleton, SectionLabel, Icon } from "@devdigest/ui";
 import { useTranslations } from "next-intl";
-import { useSmartDiff, useLineContext } from "@/lib/hooks";
+import { useSmartDiff, useLineContext, useGenerateFileSummary } from "@/lib/hooks";
 import type { SmartDiffRole, SmartDiffFile, LineContextResponse } from "@devdigest/shared";
 import { s } from "./styles";
 import { parsePatch } from "./parsePatch";
@@ -192,6 +192,7 @@ function LineContextBlock({
 }
 
 function GroupSection({
+  prId,
   role,
   files,
   defaultExpanded,
@@ -203,6 +204,7 @@ function GroupSection({
   lineContext,
   onFindingClick,
 }: {
+  prId: string;
   role: SmartDiffRole;
   files: SmartDiffFile[];
   defaultExpanded: boolean;
@@ -217,6 +219,7 @@ function GroupSection({
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
+  const generateSummary = useGenerateFileSummary(prId);
 
   React.useEffect(() => {
     if (!targetFile) return;
@@ -227,6 +230,13 @@ function GroupSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetFile, targetNonce]);
   const [summaryVisible, setSummaryVisible] = useState<Record<string, boolean>>({});
+  // Tracked locally per file path, NOT via generateSummary.isPending/.variables —
+  // that mutation hook is shared across every file in this group, so its
+  // single in-flight state can't represent two files generating at once
+  // (triggering file B while file A is still pending would silently
+  // reassign the shared "which file" tracking to B, re-enabling A's button
+  // mid-flight and allowing a duplicate concurrent generate call).
+  const [pendingFiles, setPendingFiles] = useState<Record<string, boolean>>({});
 
   const roleLabel =
     role === "core"
@@ -299,33 +309,76 @@ function GroupSection({
                   }}
                   aria-expanded={isExpanded}
                 >
-                  <span style={s.filePath} title={file.path}>
+                  <Icon.ChevronRight
+                    size={13}
+                    style={{
+                      color: "var(--text-muted)",
+                      transform: isExpanded ? "rotate(90deg)" : "none",
+                      transition: "transform .12s",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Icon.FileText size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+                  <span style={s.filePath} title={file.path} className="mono">
                     {file.path}
                   </span>
-                  <span style={s.diffBadge}>
-                    +{file.additions} -{file.deletions}
-                  </span>
-                  {file.pseudocode_summary != null && (
-                    <button
-                      type="button"
-                      style={s.summaryButton}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSummaryVisible((prev) => ({
-                          ...prev,
-                          [file.path]: !isSum,
-                        }));
-                      }}
-                      aria-label={`summary for ${file.path}`}
-                    >
-                      % {t("smartDiff.summary")}
-                    </button>
+                  {file.findings.length > 0 && (
+                    <span
+                      style={s.findingDot}
+                      title={`${file.findings.length} finding(s)`}
+                    />
                   )}
+                  <div style={s.fileCardHeaderRight}>
+                    {(hasPatch || file.pseudocode_summary != null) && (() => {
+                      const isGeneratingThis = pendingFiles[file.path] ?? false;
+                      return (
+                        <button
+                          type="button"
+                          style={s.summaryButton}
+                          disabled={isGeneratingThis}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (file.pseudocode_summary != null) {
+                              setSummaryVisible((prev) => ({
+                                ...prev,
+                                [file.path]: !isSum,
+                              }));
+                            } else {
+                              setPendingFiles((prev) => ({ ...prev, [file.path]: true }));
+                              generateSummary.mutate(file.path, {
+                                onSettled: () =>
+                                  setPendingFiles((prev) => ({ ...prev, [file.path]: false })),
+                              });
+                            }
+                          }}
+                          aria-label={
+                            file.pseudocode_summary != null
+                              ? `summary for ${file.path}`
+                              : `generate summary for ${file.path}`
+                          }
+                        >
+                          <Icon.Sparkles size={11} />
+                          {isGeneratingThis
+                            ? t("smartDiff.generatingSummary")
+                            : file.pseudocode_summary != null
+                              ? t("smartDiff.summary")
+                              : t("smartDiff.generateSummary")}
+                        </button>
+                      );
+                    })()}
+                    <span style={s.diffBadge} className="mono tnum">
+                      <span style={s.diffBadgeAdd}>+{file.additions}</span>{" "}
+                      <span style={s.diffBadgeDel}>−{file.deletions}</span>
+                    </span>
+                  </div>
                 </div>
-                {file.pseudocode_summary != null && isSum && (
+                {isExpanded && file.pseudocode_summary != null && isSum && (
                   <div style={s.summaryText}>
-                    <span style={s.summaryLabel}>What this does:</span>{" "}
-                    {file.pseudocode_summary}
+                    <Icon.Sparkles size={13} style={s.summaryIcon} />
+                    <span>
+                      <b style={s.summaryLabel}>{t("smartDiff.whatThisDoes")} </b>
+                      {file.pseudocode_summary}
+                    </span>
                   </div>
                 )}
                 {hasPatch && isExpanded && (
@@ -534,6 +587,7 @@ export function SmartDiffViewer({ prId, targetFile, targetLine, targetNonce, onF
       {data.groups.map((group) => (
         <GroupSection
           key={group.role}
+          prId={prId}
           role={group.role}
           files={group.files}
           defaultExpanded={group.role !== "boilerplate"}

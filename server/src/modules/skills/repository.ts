@@ -174,6 +174,48 @@ export class SkillsRepository {
     return result;
   }
 
+  /**
+   * Replace the full set of attached context-doc paths for a skill (D1:
+   * delete-then-bulk-insert, `order` = array index). Per D2 this ALWAYS bumps
+   * `version` + snapshots `skill_versions` — unlike `setSkills`-style link
+   * writes elsewhere, attached paths shape the skill's serialized context, so
+   * every write must be reproducible from a version snapshot. Returns
+   * undefined if no such skill exists.
+   */
+  async setContextDocs(skillId: string, paths: string[]): Promise<SkillRow | undefined> {
+    return this.db.transaction(async (tx) => {
+      await tx.delete(t.skillContextDocs).where(eq(t.skillContextDocs.skillId, skillId));
+      if (paths.length > 0) {
+        await tx
+          .insert(t.skillContextDocs)
+          .values(paths.map((path, order) => ({ skillId, path, order })));
+      }
+
+      const [existing] = await tx.select().from(t.skills).where(eq(t.skills.id, skillId));
+      if (!existing) return undefined;
+
+      const nextVersion = existing.version + 1;
+      const [row] = await tx
+        .update(t.skills)
+        .set({ version: nextVersion })
+        .where(eq(t.skills.id, skillId))
+        .returning();
+
+      if (row) await this.snapshotVersion(row.id, nextVersion, row.body);
+      return row;
+    });
+  }
+
+  /** Attached context-doc paths for a skill, in `order` ascending. */
+  async contextDocPaths(skillId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ path: t.skillContextDocs.path })
+      .from(t.skillContextDocs)
+      .where(eq(t.skillContextDocs.skillId, skillId))
+      .orderBy(asc(t.skillContextDocs.order));
+    return rows.map((r) => r.path);
+  }
+
   private async snapshotVersion(skillId: string, version: number, body: string): Promise<void> {
     await this.db
       .insert(t.skillVersions)

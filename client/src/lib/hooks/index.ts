@@ -8,3 +8,5 @@ export * from "./trace";
 export * from "./repo-intel";
 export * from "./brief";
 export * from "./smart-diff";
+export * from "./project-context";
+export * from "./onboarding";

@@ -1,7 +1,7 @@
 ---
 name: architecture-reviewer
-description: "Read-only architectural auditor. Use to audit a diff or file set against DevDigest's structural contracts — onion layering, DI discipline, reviewer-core isolation, shared-contract sync, process.env leakage. Reports violations with rule citations; never edits."
-model: opus
+description: "Use proactively to audit a diff or file set against DevDigest's structural contracts — onion layering, DI discipline, reviewer-core isolation, shared-contract sync, process.env leakage — especially on AI-generated diffs before merge. Read-only; reports violations with rule citations; never edits."
+model: sonnet
 tools: Read, Glob, Grep, Skill
 skills:
   - onion-architecture-node
@@ -207,6 +207,12 @@ _If no violations are found: "No violations found against the checked rules."_
 | info | 0 |
 
 **Gate: PASS** (0 critical, 0 high) | **Gate: FAIL** (N critical or high findings require resolution before merge)
+
+### Process notes
+<1-3 bullets, or "none" — first-hand signal for a later `/workflow-retro` pass: which rule needed
+reading beyond the standard docs (Step 1) to resolve, whether `## Architecture context:` was
+supplied and actually covered what was needed (or you had to fall back to reading CLAUDE.md
+anyway), or a suspicious pattern noticed that didn't cleanly map to any of the 12 rules.>
 ```
 
 **Severity scale:**

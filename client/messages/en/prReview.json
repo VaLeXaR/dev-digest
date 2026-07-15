@@ -1,4 +1,14 @@
 {
+  "prBrief": {
+    "title": "PR Brief",
+    "sourceTooltip": "Risk level and description come from the generated brief; findings, blockers, and score come from the latest agent review, when one has run.",
+    "costTooltip": "Cost of the latest agent review",
+    "empty": {
+      "title": "No brief yet",
+      "description": "Generate a Why+Risk brief for this PR.",
+      "button": "Generate brief"
+    }
+  },
   "finding": {
     "accepted": "accepted",
     "dismissed": "dismissed",
@@ -61,7 +71,10 @@
     "statsLine": "{files} files · +{additions} −{deletions}",
     "findingLines": "{count} finding-lines",
     "groupedByRole": "Smart Diff · grouped by role",
-    "summary": "summary"
+    "summary": "summary",
+    "generateSummary": "generate summary",
+    "generatingSummary": "generating…",
+    "whatThisDoes": "What this does:"
   },
   "list": {
     "breadcrumb": "Pull Requests",
@@ -112,7 +125,7 @@
     "outOfScope": "Out of scope",
     "recalculate": "Recalculate",
     "recalcError": "Failed to recalculate intent",
-    "empty": "No intent yet — click Recalculate to analyze this PR",
+    "empty": "No intent yet",
     "riskAreas": "Risk areas",
     "generateRisks": "Generate",
     "recalcRisksError": "Failed to generate risks",
@@ -122,5 +135,14 @@
     "goToReview": "Jump to this run’s findings below",
     "openTrace": "Open run trace & logs",
     "deleteRun": "Delete run"
+  },
+  "context": {
+    "row": "Attached Specs",
+    "rowSummary": "{count} document(s) · ~{tokens} tokens",
+    "modalTitle": "Attached Specs",
+    "searchPlaceholder": "Search in this block…",
+    "copy": "Copy",
+    "copied": "Copied",
+    "empty": "No documents were injected for this run."
   }
 }
