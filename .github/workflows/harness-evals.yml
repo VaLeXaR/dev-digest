@@ -8,16 +8,16 @@
 #
 # Backend: OpenRouter (no Claude subscription on CI). Models are a knob, not code:
 #   - skills (content tier)       → DeepSeek, called natively (no proxy) — cheap, and it passes.
-#   - agents/workflow (tool tier)  → anthropic/claude-haiku-4.5 via OpenRouter's Anthropic Skin
-#     (ANTHROPIC_BASE_URL defaults to https://openrouter.ai/api in src/runtime/env.ts — no proxy,
-#     no docker). Anthropic slugs run the Agent SDK's subagent/skill trace out of the box AND match
-#     the thresholds the tool-tier cases were calibrated on (a cheap non-Anthropic model like Gemini
-#     Flash red-flakes strict cases over rule-name wording, not substance — see evals/INSIGHTS.md).
-#     Cheap non-Anthropic tool-tier models are still supported via the bundled LiteLLM proxy
-#     (evals/proxy/) if you switch EVAL_TOOLS_MODEL to e.g. google/gemini-2.5-flash — you'd then need
-#     to restore the proxy steps + OPENROUTER_BASE_URL below.
-# Override per-run via workflow_dispatch inputs, or repo-wide via Actions variables
-# (vars.EVAL_SKILLS_MODEL / vars.EVAL_TOOLS_MODEL). Nothing is surfaced in the app UI.
+#   - agents/workflow (tool tier)  → google/gemini-2.5-flash through the bundled LiteLLM proxy
+#     (evals/proxy/). The proxy's wildcard route forwards ANY EVAL_MODEL slug to OpenRouter, so the
+#     tool jobs work for both non-Anthropic (Gemini/DeepSeek) and anthropic/* models. Trade-off: the
+#     tool-tier cases carry strict thresholds (e.g. 1.0) calibrated for a Claude judge, so a cheap
+#     model red-flakes them over exact rule-name/path wording (see evals/INSIGHTS.md) — the real fix
+#     is to relax/repair the cases, not the model. Switch EVAL_TOOLS_MODEL to anthropic/claude-haiku-4.5
+#     for the calibrated model (still routed via the proxy).
+# Override per-run via workflow_dispatch inputs, or repo-wide via Actions VARIABLES — NOT Secrets;
+# the workflow reads vars.EVAL_SKILLS_MODEL / vars.EVAL_TOOLS_MODEL (a Secret of the same name is
+# invisible to the vars.* context and is silently ignored). Nothing is surfaced in the app UI.
 
 name: harness-evals
 
@@ -133,7 +133,7 @@ jobs:
         # match that would also pull sibling dirs sharing the prefix (e.g. foo vs foo-lite).
         run: pnpm vitest run "skills/${{ matrix.skill }}/"
 
-  # ── 3. Agents (tool tier) — claude-haiku-4.5 via OpenRouter Anthropic Skin. BLOCKING. ─
+  # ── 3. Agents (tool tier) — Gemini Flash via LiteLLM proxy. BLOCKING. ───────
   agents-evals:
     needs: detect
     if: needs.detect.outputs.agents != '[]'
@@ -144,12 +144,13 @@ jobs:
         agent: ${{ fromJSON(needs.detect.outputs.agents) }}
     env:
       EVAL_BACKEND: openrouter
-      # No OPENROUTER_BASE_URL → SDK's ANTHROPIC_BASE_URL defaults to the Skin (openrouter.ai/api),
-      # so anthropic/* slugs run without the LiteLLM proxy. Set it back to a proxy only for
-      # non-Anthropic tool-tier models.
+      # Proxy on: the LiteLLM wildcard forwards ANY EVAL_MODEL slug (anthropic/* AND non-Anthropic
+      # like Gemini/DeepSeek) to OpenRouter, so this job works regardless of which model the var/
+      # default resolves to. Set EVAL_TOOLS_MODEL as an Actions VARIABLE (not a Secret) to override.
+      OPENROUTER_BASE_URL: http://localhost:4000
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EVAL_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'anthropic/claude-haiku-4.5' }}
-      EVAL_JUDGE_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'anthropic/claude-haiku-4.5' }}
+      EVAL_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'google/gemini-2.5-flash' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -161,11 +162,18 @@ jobs:
           cache: pnpm
           cache-dependency-path: evals/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: Start LiteLLM proxy
+        run: docker compose -f proxy/docker-compose.yml up -d
+      - run: pnpm proxy:wait
       - name: eval agents/${{ matrix.agent }}
         # Trailing slash anchors the filter to this exact dir (a bare name substring-matches
         # sibling dirs, e.g. architecture-reviewer vs architecture-reviewer-lite).
         # Sequential: keep concurrency low against OpenRouter.
         run: pnpm vitest run "agents/${{ matrix.agent }}/" --no-file-parallelism
+      - if: failure()
+        run: docker compose -f proxy/docker-compose.yml logs --tail 100
+      - if: always()
+        run: docker compose -f proxy/docker-compose.yml down
 
   # ── 4. Workflow tier — live harness. NON-BLOCKING (activation/dispatch flake). ─
   workflow-evals:
@@ -175,10 +183,10 @@ jobs:
     continue-on-error: true # reports, never blocks merge — activation/dispatch cases stay flaky
     env:
       EVAL_BACKEND: openrouter
-      # No OPENROUTER_BASE_URL → Anthropic Skin (no proxy) for anthropic/* slugs. See agents-evals.
+      OPENROUTER_BASE_URL: http://localhost:4000 # proxy on — see agents-evals rationale
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EVAL_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'anthropic/claude-haiku-4.5' }}
-      EVAL_JUDGE_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'anthropic/claude-haiku-4.5' }}
+      EVAL_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'google/gemini-2.5-flash' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -190,4 +198,11 @@ jobs:
           cache: pnpm
           cache-dependency-path: evals/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: Start LiteLLM proxy
+        run: docker compose -f proxy/docker-compose.yml up -d
+      - run: pnpm proxy:wait
       - run: pnpm vitest run workflow --no-file-parallelism
+      - if: failure()
+        run: docker compose -f proxy/docker-compose.yml logs --tail 100
+      - if: always()
+        run: docker compose -f proxy/docker-compose.yml down
