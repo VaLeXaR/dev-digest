@@ -37,6 +37,10 @@ on:
         description: "Override EVAL_MODEL for the tool (agents/workflow) tiers — OpenRouter slug"
         required: false
         default: ""
+      judge_model:
+        description: "Override EVAL_JUDGE_MODEL (the grader) for all tiers — OpenRouter slug"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -116,7 +120,10 @@ jobs:
       EVAL_BACKEND: openrouter
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       EVAL_MODEL: ${{ inputs.skills_model || vars.EVAL_SKILLS_MODEL || 'deepseek/deepseek-chat' }}
-      EVAL_JUDGE_MODEL: ${{ inputs.skills_model || vars.EVAL_SKILLS_MODEL || 'deepseek/deepseek-chat' }}
+      # Judge decoupled from the task model: a stronger, cross-family grader (not DeepSeek judging
+      # DeepSeek) cuts self-preference and the wording/misfire false-fails. Routes direct (skills
+      # tier) or via the proxy (tool tiers) — anthropic/* works on both /chat/completions paths.
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || vars.EVAL_JUDGE_MODEL || 'anthropic/claude-haiku-4.5' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -150,7 +157,7 @@ jobs:
       OPENROUTER_BASE_URL: http://localhost:4000
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       EVAL_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'google/gemini-2.5-flash' }}
-      EVAL_JUDGE_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || vars.EVAL_JUDGE_MODEL || 'anthropic/claude-haiku-4.5' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -186,7 +193,7 @@ jobs:
       OPENROUTER_BASE_URL: http://localhost:4000 # proxy on — see agents-evals rationale
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       EVAL_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'google/gemini-2.5-flash' }}
-      EVAL_JUDGE_MODEL: ${{ inputs.tools_model || vars.EVAL_TOOLS_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || vars.EVAL_JUDGE_MODEL || 'anthropic/claude-haiku-4.5' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
