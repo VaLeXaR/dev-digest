@@ -1,0 +1,126 @@
+# Agent evals — tool tier. Runs the eval for each CHANGED subagent.
+#
+# Trigger: a change to an agent (`.claude/agents/<name>.md`) or its eval (`evals/agents/<name>/**`).
+# `detect` (scripts/ci-detect.mjs) maps the diff to the agents that have evals; a changed agent
+# with NO eval is reported as SKIP, not a failure.
+#
+# Model is a knob, not code: EVAL_AGENTS_MODEL (Actions VARIABLE) → default anthropic/claude-haiku-4.5,
+# routed through the bundled LiteLLM proxy (its wildcard forwards ANY slug, so a non-Anthropic model
+# also works). A cheap non-Anthropic model (Gemini) proved too flaky for judged agent-quality — haiku
+# is instructable and matches the cases' calibration. Judge: EVAL_JUDGE_MODEL.
+
+name: eval-agents
+
+on:
+  pull_request:
+    paths:
+      - ".claude/agents/**"
+      - "evals/agents/**"
+  workflow_dispatch:
+    inputs:
+      agents_model:
+        description: "Override EVAL_MODEL for the agents tier — OpenRouter slug"
+        required: false
+        default: ""
+      judge_model:
+        description: "Override EVAL_JUDGE_MODEL (the grader) — OpenRouter slug"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-agents-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: evals
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      agents: ${{ steps.detect.outputs.agents }}
+      skipped_agents: ${{ steps.detect.outputs.skipped_agents }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so we can diff against the PR base
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck # fail fast before spending any tokens
+
+      - name: Compute changed files
+        working-directory: . # repo root — paths must be repo-relative for ci-detect
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual run = sweep every agent that has an eval.
+            { for d in evals/agents/*/; do [ -d "$d" ] && echo "${d}dispatch"; done; } > changed.txt
+          else
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            git diff --name-only "origin/${{ github.base_ref }}...HEAD" > changed.txt
+          fi
+          echo "----- changed files -----"; cat changed.txt
+
+      - name: Detect eval targets
+        id: detect
+        run: |
+          export CHANGED_FILES="$(cat ../changed.txt)"
+          node scripts/ci-detect.mjs
+
+      - name: Note skipped agents (no evals)
+        if: steps.detect.outputs.skipped_agents != ''
+        run: |
+          {
+            echo "### Skipped — changed but no evals written"
+            echo "- agents: \`${{ steps.detect.outputs.skipped_agents }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  agents-evals:
+    needs: detect
+    if: needs.detect.outputs.agents != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: ${{ fromJSON(needs.detect.outputs.agents) }}
+    env:
+      EVAL_BACKEND: openrouter
+      # Proxy on: the LiteLLM wildcard forwards ANY EVAL_MODEL slug to OpenRouter, so this job works
+      # whatever the model resolves to. Override via the EVAL_AGENTS_MODEL Actions VARIABLE.
+      OPENROUTER_BASE_URL: http://localhost:4000
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.agents_model || vars.EVAL_AGENTS_MODEL || 'anthropic/claude-haiku-4.5' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || vars.EVAL_JUDGE_MODEL || 'anthropic/claude-haiku-4.5' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Start LiteLLM proxy
+        run: docker compose -f proxy/docker-compose.yml up -d
+      - run: pnpm proxy:wait
+      - name: eval agents/${{ matrix.agent }}
+        # Trailing slash anchors the filter to this exact dir (a bare name substring-matches
+        # sibling dirs, e.g. architecture-reviewer vs architecture-reviewer-lite).
+        # Sequential: keep concurrency low against OpenRouter.
+        run: pnpm vitest run "agents/${{ matrix.agent }}/" --no-file-parallelism
+      - if: failure()
+        run: docker compose -f proxy/docker-compose.yml logs --tail 100
+      - if: always()
+        run: docker compose -f proxy/docker-compose.yml down
