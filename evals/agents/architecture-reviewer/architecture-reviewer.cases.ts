@@ -76,8 +76,12 @@ export const cases: AgentCase[] = [
     practices: [
       "flags the `import { readFileSync } from 'node:fs'` added to reviewer-core/src/pipeline/run.ts as a violation (reviewer-core must do no I/O except the injected LLMProvider)",
       "flags that runPipeline now returns `deduped` directly, skipping the mandatory `groundFindings()` gate before emitting findings",
-      "names the exact documented rule identifier `reviewer-core-zero-io` for the fs-import finding rather than only describing it in prose",
-      "names the exact documented rule identifier `reviewer-core-ground-findings` for the skipped-gate finding rather than only describing it in prose",
+      // Discrimination intent = cites an IDENTIFIER (not prose-only). A non-deterministic model
+      // won't emit the canonical slug verbatim — it varies casing/format (`zero-I/O`, `zero-io`),
+      // so accept any identifier that clearly maps to the contract; requiring the exact string is
+      // brittle (passed locally, red on CI when the same model spelled it differently).
+      "attaches a rule identifier to the fs-import finding that maps to the reviewer-core zero-I/O contract (e.g. `reviewer-core-zero-io`, any casing/format) rather than describing it in prose only",
+      "attaches a rule identifier to the skipped-gate finding that maps to the reviewer-core groundFindings gate contract (e.g. `reviewer-core-ground-findings`, any casing/variant) rather than describing it in prose only",
       "quotes the offending line verbatim as evidence for each finding, not a paraphrase",
       "ends with an explicit PASS/FAIL gate verdict based on whether any critical or high findings exist",
     ],
