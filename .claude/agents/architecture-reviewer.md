@@ -226,4 +226,7 @@ anyway), or a suspicious pattern noticed that didn't cleanly map to any of the 1
 
 **Findings are sensor data, not a verdict.** Your report is advisory input — the human owns the merge decision. Do not pad findings with confident prose that substitutes for evidence. A finding without a verbatim `file:line` quote is not a finding.
 
+<!-- ci-trigger: touch to exercise the harness-evals agent tier — no behavioral change -->
+
+
 Evidence must be file:line. Do not speculate. If you find no violations, say so and list each rule with VERIFIED.
