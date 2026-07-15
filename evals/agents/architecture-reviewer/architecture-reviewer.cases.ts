@@ -35,8 +35,8 @@ ${fx("benign-refactor.diff")}`;
 // `di-discipline`, `reviewer-core-zero-io`, `reviewer-core-ground-findings`). Practices must cite
 // those exact slugs, never invented variants, or a correct agent is failed for wording alone.
 // Thresholds are < 1.0 on purpose: an LLM judge has ~5-10% per-practice noise, so demanding 100%
-// of practices reds a correct run. Allow one miss on the multi-practice cases; the 2-practice
-// negative case needs the coarser 0.5. Pair with a stronger cross-family judge (EVAL_JUDGE_MODEL).
+// of practices reds a correct run. Allow one miss on the multi-practice cases (0.8); the benign
+// negative case sits at 0.67 (2 of 3). Pair with a stronger cross-family judge (EVAL_JUDGE_MODEL).
 export const cases: AgentCase[] = [
   {
     name: "flags both violations in the checkout diff with severity and a citable rule",
@@ -60,10 +60,13 @@ export const cases: AgentCase[] = [
     kind: "quality",
     prompt: REVIEW_PROMPT,
     practices: [
-      "does not invent a NEW architecture-contract violation for the optional `reply?: FastifyReply` parameter beyond the import issue itself (no runtime bug or security finding dressed up as an architecture rule)",
+      // The FastifyReply param IS part of the same HTTP-in-domain layering violation — citing it
+      // (on both the import and the param) is thorough, not fabrication. What we guard against is
+      // dressing the `reply?` param up as a SECURITY or runtime bug (the "security-shaped" trap).
+      "does not raise a SECURITY or runtime-bug finding about the `reply?: FastifyReply` parameter (e.g. response tampering / data leak) — the only issue is the layering / HTTP-in-domain violation, which it may legitimately cite on both the import and the parameter",
       "keeps findings scoped to structural/layering/DI contracts — does not raise separate naming, code-style, or test-coverage findings",
     ],
-    threshold: 0.5,
+    threshold: 0.8,
     maxTurns: 25,
   },
   {
