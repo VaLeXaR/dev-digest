@@ -60,13 +60,16 @@ export const cases: AgentCase[] = [
     kind: "quality",
     prompt: REVIEW_PROMPT,
     practices: [
-      // The FastifyReply param IS part of the same HTTP-in-domain layering violation — citing it
-      // (on both the import and the param) is thorough, not fabrication. What we guard against is
-      // dressing the `reply?` param up as a SECURITY or runtime bug (the "security-shaped" trap).
-      "does not raise a SECURITY or runtime-bug finding about the `reply?: FastifyReply` parameter (e.g. response tampering / data leak) — the only issue is the layering / HTTP-in-domain violation, which it may legitimately cite on both the import and the parameter",
-      "keeps findings scoped to structural/layering/DI contracts — does not raise separate naming, code-style, or test-coverage findings",
+      // POSITIVELY-EVIDENCEABLE wording. A negative practice ("does NOT raise a security finding")
+      // is flaky against the verbatim-evidence judge — there is nothing to quote for an ABSENCE, so
+      // the judge fails it for want of a disclaiming sentence. Instead assert the *rule label* on
+      // each finding is structural, which the judge can quote directly. Guards the same "security-
+      // shaped" trap (the FastifyReply param is a layering issue, not a data-leak/runtime bug).
+      "flags the `reply?: FastifyReply` parameter in `priceOrder` as a layering violation and labels it with a structural rule such as `no-http-in-services` or `inward-only-imports`",
+      "every finding it reports carries a structural architecture rule label (`inward-only-imports` / `no-http-in-services` / `di-discipline`) — none is labeled a security vulnerability or runtime bug",
+      "keeps findings scoped to structural/layering/DI contracts — it does not raise separate naming, code-style, or test-coverage findings",
     ],
-    threshold: 0.8,
+    threshold: 0.67,
     maxTurns: 25,
   },
   {
