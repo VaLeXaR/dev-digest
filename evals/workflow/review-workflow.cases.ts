@@ -22,9 +22,9 @@ export const cases: WorkflowCase[] = [
     // says the same. Kept because dispatch IS a behavior worth watching, not because it's reliable.
     name: "dispatches the architecture-reviewer subagent for a plan review",
     prompt:
-      "I have a plan to add a new GET /reviews/:id/export endpoint. Do NOT review the plan yourself " +
-      "— your only task is to dispatch the architecture-reviewer subagent and have IT audit the plan " +
-      "against this repo's onion-layer contracts. Delegate now.",
+      "Use the architecture-reviewer subagent to audit this plan against the repo's onion-layer " +
+      "contracts: 'Add a new GET /reviews/:id/export endpoint that returns a review as markdown.' " +
+      "Invoke that subagent to do the assessment — do not audit it yourself.",
     expectSubagents: ["architecture-reviewer"],
     maxTurns: 8,
   },
