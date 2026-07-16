@@ -61,8 +61,9 @@ export type EvalRunResult = z.infer<typeof EvalRunResult>;
  */
 export const EvalRunBatchRecord = z.object({
   id: z.string(),
-  agent_id: z.string(),
-  agent_version: z.number().int(),
+  owner_kind: EvalOwnerKind,
+  owner_id: z.string(),
+  owner_version: z.number().int(),
   ran_at: z.string(),
   recall: z.number().nullable(),
   precision: z.number().nullable(),

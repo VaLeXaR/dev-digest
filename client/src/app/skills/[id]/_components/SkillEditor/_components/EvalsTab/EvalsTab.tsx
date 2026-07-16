@@ -1,52 +1,29 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button, IconBtn, Badge, Icon } from "@devdigest/ui";
-import type { Agent, EvalCase, EvalRunRecord } from "@devdigest/shared";
+import type { Skill, EvalCase, EvalRunRecord } from "@devdigest/shared";
 import {
-  useEvalCases,
-  useEvalCaseLastRuns,
-  useEvalBatches,
-  useRunEvalSet,
+  useSkillEvalCases,
+  useSkillEvalCaseLastRuns,
+  useRunSkillEvalSet,
   useRunEvalCase,
   useDeleteEvalCase,
 } from "../../../../../../../lib/hooks/eval";
 import { EvalCaseEditor } from "../../../../../../../components/eval/EvalCaseEditor/EvalCaseEditor";
-import { formatDeltaPts, formatPct, latestTwoBatches, type CaseStatus } from "./constants";
 import { s } from "./styles";
 
 type EditorState = { mode: "new" } | { mode: "edit"; evalCase: EvalCase };
-
-function MetricTile({
-  label,
-  value,
-  delta,
-  color,
-}: {
-  label: string;
-  value: string;
-  delta: { text: string; color: string } | null;
-  color: string;
-}) {
-  return (
-    <div style={s.tile}>
-      <div style={s.tileLabel}>{label}</div>
-      <div style={s.tileValueRow}>
-        <span style={s.tileValue(color)}>{value}</span>
-        {delta && <span style={s.tileDelta(delta.color)}>{delta.text}</span>}
-      </div>
-    </div>
-  );
-}
+type CaseStatus = "pass" | "fail" | "never-run";
 
 function caseStatus(run: EvalRunRecord | undefined): CaseStatus {
   if (!run) return "never-run";
   return run.pass ? "pass" : "fail";
 }
 
-/** First expected-output entry's severity/category, or "empty []" for a pure-precision case (R10). */
+/** First expected-output entry's severity/category, or "empty []" for a pure-precision case. */
 function caseBadgeText(c: EvalCase): string {
   const first = c.expected_output[0];
   if (!first) return "empty []";
@@ -105,21 +82,22 @@ function CaseRow({
 }
 
 /**
- * Evals tab (design/03) — EVAL METRICS row sourced from the agent's latest
- * batch (G7), "View full dashboard →" (R20/AC-28, no fetch), and the eval
- * cases list with pass / fail / never-run states (R2/R10).
+ * Skill Evals tab (design/07) — a trimmed variant of the agent EvalsTab
+ * (`AgentEditor/_components/EvalsTab/EvalsTab.tsx`): "Eval cases" heading +
+ * `<passing>/<total> passing` badge, "Run all evals" + "+ New eval case", and
+ * per-case rows with the same pass/fail/never-run + `empty []` rendering.
+ * Deliberately OMITS the EVAL METRICS tile row and "View full dashboard →"
+ * link — skills are not on the cross-agent Eval Dashboard (plan Design audit).
  */
-export function EvalsTab({ agent }: { agent: Agent }) {
+export function EvalsTab({ skill }: { skill: Skill }) {
   const t = useTranslations("eval");
+  const qc = useQueryClient();
 
-  const { data: cases, isLoading: casesLoading } = useEvalCases(agent.id);
-  // Per-case status source of truth (R2/AC-4/G7) — the case's own latest run,
-  // batch OR scratch, NOT `useAgentEvalDashboard(...).recent_runs` (scoped to
-  // the latest BATCH only, which would miss a case run only via this tab's own
-  // ▷ or the editor's "Run case"/"Run on save").
-  const { data: lastRuns } = useEvalCaseLastRuns(agent.id);
-  const { data: batches } = useEvalBatches(agent.id);
-  const runSet = useRunEvalSet(agent.id);
+  const { data: cases, isLoading: casesLoading } = useSkillEvalCases(skill.id);
+  // Per-case status source of truth (mirrors the agent tab's G7 decision) —
+  // batch OR scratch run, from the skill-scoped last-runs read.
+  const { data: lastRuns } = useSkillEvalCaseLastRuns(skill.id);
+  const runSet = useRunSkillEvalSet(skill.id);
   const runCase = useRunEvalCase();
   const deleteCase = useDeleteEvalCase();
 
@@ -131,62 +109,36 @@ export function EvalsTab({ agent }: { agent: Agent }) {
     return map;
   }, [lastRuns]);
 
-  const [latestBatch, previousBatch] = latestTwoBatches(batches);
-
   const casesList = cases ?? [];
   const passingCount = casesList.filter((c) => runByCase.get(c.id)?.pass === true).length;
 
+  // `useRunEvalCase`/`useDeleteEvalCase` are owner-agnostic and only scope
+  // their own cache invalidation via an optional `agentId` (T-06/T-07 known
+  // limitation) — invalidate the skill-scoped last-runs/cases queries here so
+  // a per-case run/delete from this tab still refreshes the passing count.
   async function handleRunCase(c: EvalCase) {
-    await runCase.mutateAsync({ caseId: c.id, agentId: agent.id });
+    await runCase.mutateAsync({ caseId: c.id });
+    qc.invalidateQueries({ queryKey: ["skill-eval-case-last-runs", skill.id] });
   }
 
   function handleDeleteCase(c: EvalCase) {
     if (!confirm(`Delete "${c.name}"?`)) return;
-    deleteCase.mutate({ id: c.id, agentId: agent.id });
+    deleteCase.mutate(
+      { id: c.id },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: ["skill-eval-cases", skill.id] });
+          qc.invalidateQueries({ queryKey: ["skill-eval-case-last-runs", skill.id] });
+        },
+      },
+    );
   }
 
   return (
     <div style={s.wrap}>
-      <div style={s.metricsHeaderRow}>
-        <div style={s.metricsTitleGroup}>
-          <Icon.Gauge size={13} />
-          <span style={s.metricsTitle}>EVAL METRICS</span>
-        </div>
-        <Link href="/eval" style={s.dashboardLink}>
-          View full dashboard →
-        </Link>
-      </div>
-
-      <div style={s.tilesGrid}>
-        <MetricTile
-          label={t("dashboard.metrics.recall")}
-          value={formatPct(latestBatch?.recall)}
-          delta={formatDeltaPts(latestBatch?.recall, previousBatch?.recall)}
-          color="var(--accent-text)"
-        />
-        <MetricTile
-          label={t("dashboard.metrics.precision")}
-          value={formatPct(latestBatch?.precision)}
-          delta={formatDeltaPts(latestBatch?.precision, previousBatch?.precision)}
-          color="var(--ok)"
-        />
-        <MetricTile
-          label={t("dashboard.metrics.citationAccuracy")}
-          value={formatPct(latestBatch?.citation_accuracy)}
-          delta={formatDeltaPts(latestBatch?.citation_accuracy, previousBatch?.citation_accuracy)}
-          color="var(--warn)"
-        />
-        <MetricTile
-          label="TRACES PASSED"
-          value={latestBatch ? `${latestBatch.pass_count}/${latestBatch.total_count}` : "—"}
-          delta={null}
-          color="var(--text-primary)"
-        />
-      </div>
-
       <div style={s.casesHeaderRow}>
         <span style={s.casesTitle}>{t("evalsTab.casesHeading")}</span>
-        <Badge color="var(--ok)" bg="var(--ok-bg)">
+        <Badge color="var(--warn)" bg="var(--warn-bg)">
           {`${passingCount} / ${casesList.length} passing`}
         </Badge>
         <div style={s.casesHeaderRight}>
@@ -218,7 +170,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
 
       {editorState && (
         <EvalCaseEditor
-          owner={{ kind: "agent", id: agent.id, name: agent.name }}
+          owner={{ kind: "skill", id: skill.id, name: skill.name }}
           existingCase={editorState.mode === "edit" ? editorState.evalCase : undefined}
           initialLastRun={editorState.mode === "edit" ? runByCase.get(editorState.evalCase.id) : undefined}
           onClose={() => setEditorState(null)}

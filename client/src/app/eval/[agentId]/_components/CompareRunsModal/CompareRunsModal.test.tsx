@@ -30,8 +30,9 @@ afterEach(() => {
 
 const OLDER: EvalRunBatchRecord = {
   id: "b6",
-  agent_id: "ag1",
-  agent_version: 6,
+  owner_kind: "agent",
+  owner_id: "ag1",
+  owner_version: 6,
   ran_at: "2026-05-27T16:40:00.000Z",
   recall: 0.78,
   precision: 0.93,
@@ -43,8 +44,9 @@ const OLDER: EvalRunBatchRecord = {
 
 const NEWER: EvalRunBatchRecord = {
   id: "b7",
-  agent_id: "ag1",
-  agent_version: 7,
+  owner_kind: "agent",
+  owner_id: "ag1",
+  owner_version: 7,
   ran_at: "2026-05-29T09:14:00.000Z",
   recall: 0.82,
   precision: 0.91,

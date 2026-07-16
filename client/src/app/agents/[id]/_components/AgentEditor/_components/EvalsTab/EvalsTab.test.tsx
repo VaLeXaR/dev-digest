@@ -21,6 +21,7 @@ vi.mock("../../../../../../../lib/hooks/eval", () => ({
   useRunEvalCase: () => ({ mutateAsync: runCaseMutateAsync, isPending: false, variables: undefined }),
   useDeleteEvalCase: () => ({ mutate: deleteCaseMutate, isPending: false }),
   useCreateEvalCase: () => ({ mutateAsync: createMutateAsync, isPending: false }),
+  useCreateSkillEvalCase: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateEvalCase: () => ({ mutateAsync: updateMutateAsync, isPending: false }),
 }));
 
@@ -90,8 +91,9 @@ function makeRun(over: Partial<EvalRunRecord>): EvalRunRecord {
 function makeBatch(over: Partial<EvalRunBatchRecord>): EvalRunBatchRecord {
   return {
     id: "batch1",
-    agent_id: "ag1",
-    agent_version: 3,
+    owner_kind: "agent",
+    owner_id: "ag1",
+    owner_version: 3,
     ran_at: "2026-07-15T00:00:00.000Z",
     recall: 0.82,
     precision: 0.91,

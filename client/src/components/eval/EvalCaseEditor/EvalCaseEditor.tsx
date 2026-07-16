@@ -4,14 +4,15 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
 import { Modal, FormField, TextInput, Button, Badge, Toggle, Tabs, Icon } from "@devdigest/ui";
-import type { Agent, EvalCase, EvalRunRecord } from "@devdigest/shared";
+import type { EvalCase, EvalRunRecord } from "@devdigest/shared";
 import { ExpectedFinding } from "@devdigest/shared";
 import {
   useCreateEvalCase,
+  useCreateSkillEvalCase,
   useUpdateEvalCase,
   useRunEvalCase,
   type CreateEvalCaseInput,
-} from "../../../../../../../lib/hooks/eval";
+} from "../../../lib/hooks/eval";
 import { findingSkeleton, MODAL_WIDTH, type InputTabKey } from "./constants";
 import { s } from "./styles";
 
@@ -56,26 +57,43 @@ function lastRunDisplayFrom(record: EvalRunRecord, expected: ExpectedFinding[]):
 }
 
 /**
- * New/edit eval-case modal (design/05). When editing an existing case the
- * Diff/Files/PR-meta inputs are a READ-ONLY view of the captured fixture — only
- * the Expected output (the assertion) is tuned. In new-case mode they stay
- * editable (G10) so a case can still be hand-authored without a source finding.
- * Save is disabled while the expected-output JSON is invalid (R13/AC-19).
+ * The owning agent or skill this case belongs to — carries the display fields
+ * the editor actually reads (`name` for the subtitle) plus enough to scope
+ * create/update/run through the owner-generic hooks (T-07).
+ */
+export interface EvalCaseEditorOwner {
+  kind: "agent" | "skill";
+  id: string;
+  name: string;
+}
+
+/**
+ * New/edit eval-case modal (design/05), owner-generic (agent or skill — R3,
+ * T-07 generalization of the original agent-only editor). When editing an
+ * existing case the Diff/Files/PR-meta inputs are a READ-ONLY view of the
+ * captured fixture — only the Expected output (the assertion) is tuned. In
+ * new-case mode they stay editable (G10) so a case can still be hand-authored
+ * without a source finding. Save is disabled while the expected-output JSON is
+ * invalid (R13/AC-19).
  */
 export function EvalCaseEditor({
-  agent,
+  owner,
   existingCase,
   initialLastRun,
   onClose,
 }: {
-  agent: Agent;
+  owner: EvalCaseEditorOwner;
   existingCase?: EvalCase;
   /** The case's persisted last run, shown immediately on open (design/05). */
   initialLastRun?: EvalRunRecord;
   onClose: () => void;
 }) {
   const t = useTranslations("eval");
-  const create = useCreateEvalCase(agent.id);
+  // Both create hooks are always instantiated (Rules of Hooks) — only the one
+  // matching `owner.kind` is ever invoked. Reuse the owner-agnostic update/run
+  // hooks unchanged for both owner kinds (mirrors T-06's hooks-file decision).
+  const createAgentCase = useCreateEvalCase(owner.kind === "agent" ? owner.id : "");
+  const createSkillCase = useCreateSkillEvalCase(owner.kind === "skill" ? owner.id : "");
   const update = useUpdateEvalCase();
   const runCase = useRunEvalCase();
 
@@ -107,9 +125,14 @@ export function EvalCaseEditor({
   );
   const isValidJson = parsedExpected !== null;
 
-  const saving = create.isPending || update.isPending;
+  const saving = createAgentCase.isPending || createSkillCase.isPending || update.isPending;
   const running = runCase.isPending;
   const busy = saving || running;
+
+  // The owner-agnostic update/run hooks scope invalidation via an optional
+  // `agentId` — only meaningful for an agent owner; a skill owner passes
+  // `undefined` (T-06 already keeps these hooks agent-scoped-only).
+  const agentScopeId = owner.kind === "agent" ? owner.id : undefined;
 
   function buildPayload(): CreateEvalCaseInput {
     return {
@@ -125,16 +148,19 @@ export function EvalCaseEditor({
   async function ensureSaved(): Promise<string> {
     const payload = buildPayload();
     if (caseId) {
-      const saved = await update.mutateAsync({ id: caseId, patch: payload, agentId: agent.id });
+      const saved = await update.mutateAsync({ id: caseId, patch: payload, agentId: agentScopeId });
       return saved.id;
     }
-    const created = await create.mutateAsync(payload);
+    const created =
+      owner.kind === "skill"
+        ? await createSkillCase.mutateAsync(payload)
+        : await createAgentCase.mutateAsync(payload);
     setCaseId(created.id);
     return created.id;
   }
 
   async function runAndCapture(id: string) {
-    const record = await runCase.mutateAsync({ caseId: id, agentId: agent.id });
+    const record = await runCase.mutateAsync({ caseId: id, agentId: agentScopeId });
     setLastRun(lastRunDisplayFrom(record, parsedExpected ?? []));
   }
 
@@ -166,7 +192,7 @@ export function EvalCaseEditor({
     <Modal
       width={MODAL_WIDTH}
       title={t("caseEditor.caseTitle", { name: name.trim() || "Untitled" })}
-      subtitle={`${agent.name} · simulate a PR and assert the expected output`}
+      subtitle={`${owner.name} · simulate a PR and assert the expected output`}
       onClose={onClose}
       footer={
         <div style={s.footer}>

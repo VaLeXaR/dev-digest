@@ -52,8 +52,9 @@ const OVERVIEW: EvalDashboardOverview = {
       model: "gpt-4.1",
       latest_batch: {
         id: "b1",
-        agent_id: "ag1",
-        agent_version: 7,
+        owner_kind: "agent",
+        owner_id: "ag1",
+        owner_version: 7,
         ran_at: "2026-05-29T09:14:00.000Z",
         recall: 0.82,
         precision: 0.91,
@@ -75,9 +76,10 @@ const OVERVIEW: EvalDashboardOverview = {
   recent_runs: [
     {
       id: "b1",
-      agent_id: "ag1",
+      owner_kind: "agent",
+      owner_id: "ag1",
       agent_name: "Security Reviewer",
-      agent_version: 7,
+      owner_version: 7,
       ran_at: "2026-05-29T09:14:00.000Z",
       recall: 0.82,
       precision: 0.91,

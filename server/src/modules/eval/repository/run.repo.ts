@@ -1,7 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
-import type { EvalRunRecord } from '@devdigest/shared';
+import type { EvalOwnerKind, EvalRunRecord } from '@devdigest/shared';
 
 /**
  * A5 — per-case eval-run data access (`eval_runs` table only). `batchId`
@@ -72,19 +72,21 @@ export async function lastRunForCase(db: Db, caseId: string): Promise<EvalRunRec
 
 /**
  * Bulk "latest run per case" read (G7/R2 AC-4) — for every eval case owned by
- * the given agent, the case's SINGLE latest `eval_runs` row by `ran_at`,
- * batch OR scratch (`batch_id IS NULL`). Powers the Evals-tab per-case
- * pass/fail/never-run state without being limited to the latest BATCH only
- * (unlike `batch.repo.ts:runsForBatch`) — a case run via the single-case ▷ or
- * the editor's "Run case"/"Run on save" (scratch, `batch_id=NULL`) must still
- * surface here. Workspace-scoped via `eval_cases.workspace_id` directly — no
- * join through `agents` needed (unlike `eval_run_batches`, which has no
- * `workspace_id` of its own, server INSIGHTS 2026-07-15).
+ * the given owner (agent OR skill, T-04), the case's SINGLE latest
+ * `eval_runs` row by `ran_at`, batch OR scratch (`batch_id IS NULL`). Powers
+ * the Evals-tab per-case pass/fail/never-run state without being limited to
+ * the latest BATCH only (unlike `batch.repo.ts:runsForBatch`) — a case run
+ * via the single-case ▷ or the editor's "Run case"/"Run on save" (scratch,
+ * `batch_id=NULL`) must still surface here. Workspace-scoped via
+ * `eval_cases.workspace_id` directly — no join through `agents` needed
+ * (unlike `eval_run_batches`, which has no `workspace_id` of its own, server
+ * INSIGHTS 2026-07-15).
  */
-export async function lastRunsForAgentCases(
+export async function lastRunsForOwnerCases(
   db: Db,
   workspaceId: string,
-  agentId: string,
+  ownerKind: EvalOwnerKind,
+  ownerId: string,
 ): Promise<EvalRunRecord[]> {
   const rows = await db
     .selectDistinctOn([t.evalRuns.caseId], { run: t.evalRuns, caseName: t.evalCases.name })
@@ -93,12 +95,21 @@ export async function lastRunsForAgentCases(
     .where(
       and(
         eq(t.evalCases.workspaceId, workspaceId),
-        eq(t.evalCases.ownerKind, 'agent'),
-        eq(t.evalCases.ownerId, agentId),
+        eq(t.evalCases.ownerKind, ownerKind),
+        eq(t.evalCases.ownerId, ownerId),
       ),
     )
     .orderBy(t.evalRuns.caseId, desc(t.evalRuns.ranAt));
   return rows.map((r) => toEvalRunRecord(r.run, r.caseName));
+}
+
+/** Agent-scoped convenience wrapper — keeps `EvalRepository.lastRunsForAgentCases`'s existing call signature (repository.ts is outside this task's owned paths). */
+export async function lastRunsForAgentCases(
+  db: Db,
+  workspaceId: string,
+  agentId: string,
+): Promise<EvalRunRecord[]> {
+  return lastRunsForOwnerCases(db, workspaceId, 'agent', agentId);
 }
 
 export { toEvalRunRecord };

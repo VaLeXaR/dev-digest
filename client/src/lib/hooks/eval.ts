@@ -205,6 +205,57 @@ export function useCreateEvalCaseFromFinding(agentId: string) {
   });
 }
 
+// ===========================================================================
+// Skill-owner hooks (R2/R3/R4) — mirror the agent hooks above, distinct query
+// keys ("skill-eval-cases"/"skill-eval-case-last-runs") so agent and skill
+// caches never collide. Per-case run/edit/delete reuse the owner-agnostic
+// `useRunEvalCase`/`useUpdateEvalCase`/`useDeleteEvalCase` above unchanged.
+// ===========================================================================
+
+/** `GET /skills/:id/eval-cases` (R2/AC-29). */
+export function useSkillEvalCases(skillId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-eval-cases", skillId],
+    queryFn: () => api.get<EvalCase[]>(`/skills/${skillId}/eval-cases`),
+    enabled: !!skillId,
+  });
+}
+
+/** Per-case latest run (batch OR scratch) for a skill's Evals tab — `GET /skills/:id/eval-cases/last-runs` (R2/AC-29). */
+export function useSkillEvalCaseLastRuns(skillId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-eval-case-last-runs", skillId],
+    queryFn: () => api.get<EvalRunRecord[]>(`/skills/${skillId}/eval-cases/last-runs`),
+    enabled: !!skillId,
+  });
+}
+
+/** `POST /skills/:id/eval-runs` (no body) — runs the whole eval set for the skill (R4/AC-33). */
+export function useRunSkillEvalSet(skillId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<EvalRunBatchResult>(`/skills/${skillId}/eval-runs`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["skill-eval-cases", skillId] });
+      qc.invalidateQueries({ queryKey: ["skill-eval-case-last-runs", skillId] });
+    },
+  });
+}
+
+/** `POST /skills/:id/eval-cases` — route does not inject owner fields, so they're set here (R3/AC-30). */
+export function useCreateSkillEvalCase(skillId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateEvalCaseInput) =>
+      api.post<EvalCase>(`/skills/${skillId}/eval-cases`, {
+        ...input,
+        owner_kind: "skill",
+        owner_id: skillId,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["skill-eval-cases", skillId] }),
+  });
+}
+
 /** `POST /agents/:id/versions/:version/promote` — promotes a snapshot to the active config. */
 export function usePromoteAgentVersion(agentId: string) {
   const qc = useQueryClient();

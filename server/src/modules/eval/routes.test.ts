@@ -20,6 +20,7 @@ const CASE_ID = '22222222-2222-4222-8222-222222222222';
 const BATCH_ID = '33333333-3333-4333-8333-333333333333';
 const WORKSPACE_ID = '44444444-4444-4444-8444-444444444444';
 const FINDING_ID = '55555555-5555-4555-8555-555555555555';
+const SKILL_ID = '66666666-6666-4666-8666-666666666666';
 
 async function makeApp() {
   return buildApp({
@@ -36,8 +37,9 @@ async function makeApp() {
 function buildBatchRecord(overrides: Partial<EvalRunBatchRecord> = {}): EvalRunBatchRecord {
   return {
     id: BATCH_ID,
-    agent_id: AGENT_ID,
-    agent_version: 1,
+    owner_kind: 'agent',
+    owner_id: AGENT_ID,
+    owner_version: 1,
     ran_at: '2026-07-15T00:00:00Z',
     recall: 1,
     precision: 1,
@@ -379,6 +381,122 @@ describe('GET /findings/eval-cases (no DB)', () => {
   it('rejects a missing `ids` querystring param (422, zod validation)', async () => {
     const app = await makeApp();
     const res = await app.inject({ method: 'GET', url: '/findings/eval-cases' });
+
+    expect(res.statusCode).toBe(422);
+    await app.close();
+  });
+});
+
+describe('POST /skills/:id/eval-runs (no DB)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('runs the whole skill set and returns a batch with owner_kind "skill"', async () => {
+    const batch = buildBatchRecord({ owner_kind: 'skill', owner_id: SKILL_ID });
+    vi.spyOn(EvalService.prototype, 'runSkillSet').mockResolvedValue(batch);
+
+    const app = await makeApp();
+    const res = await app.inject({ method: 'POST', url: `/skills/${SKILL_ID}/eval-runs` });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(batch);
+    expect(res.json().owner_kind).toBe('skill');
+    await app.close();
+  });
+
+  it('carries the same 10/min rate-limit config as the agent run route (R4/AC-33)', async () => {
+    const batch = buildBatchRecord({ owner_kind: 'skill', owner_id: SKILL_ID });
+    vi.spyOn(EvalService.prototype, 'runSkillSet').mockResolvedValue(batch);
+
+    const app = await makeApp();
+    let capturedConfig: { rateLimit?: { max: number; timeWindow: string } } | undefined;
+    app.addHook('onRequest', async (req) => {
+      if (req.url === `/skills/${SKILL_ID}/eval-runs`) {
+        capturedConfig = req.routeOptions.config as typeof capturedConfig;
+      }
+    });
+
+    const res = await app.inject({ method: 'POST', url: `/skills/${SKILL_ID}/eval-runs` });
+
+    expect(res.statusCode).toBe(200);
+    expect(capturedConfig?.rateLimit).toEqual({ max: 10, timeWindow: '1 minute' });
+    await app.close();
+  });
+});
+
+describe('GET /skills/:id/eval-cases (no DB)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns only that skill\'s eval cases', async () => {
+    const skillCase = buildEvalCase({ owner_kind: 'skill', owner_id: SKILL_ID });
+    vi.spyOn(EvalService.prototype, 'listSkillCases').mockResolvedValue([skillCase]);
+
+    const app = await makeApp();
+    const res = await app.inject({ method: 'GET', url: `/skills/${SKILL_ID}/eval-cases` });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([skillCase]);
+    expect(res.json().every((c: EvalCase) => c.owner_kind === 'skill' && c.owner_id === SKILL_ID)).toBe(
+      true,
+    );
+    await app.close();
+  });
+});
+
+describe('GET /skills/:id/eval-cases/last-runs (no DB)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns the per-case latest-run list for a skill', async () => {
+    const run = buildRunRecord();
+    vi.spyOn(EvalService.prototype, 'lastRunsForSkill').mockResolvedValue([run]);
+
+    const app = await makeApp();
+    const res = await app.inject({ method: 'GET', url: `/skills/${SKILL_ID}/eval-cases/last-runs` });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([run]);
+    await app.close();
+  });
+});
+
+describe('POST /skills/:id/eval-cases (no DB)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('creates and returns an eval case owned by the skill', async () => {
+    const created = buildEvalCase({ owner_kind: 'skill', owner_id: SKILL_ID });
+    vi.spyOn(EvalService.prototype, 'createCase').mockResolvedValue(created);
+
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/skills/${SKILL_ID}/eval-cases`,
+      payload: {
+        owner_kind: 'skill',
+        owner_id: SKILL_ID,
+        name: 'Skill test case',
+        expected_output: [],
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toEqual(created);
+    await app.close();
+  });
+
+  it('rejects a body missing required `expected_output` (422, zod validation)', async () => {
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/skills/${SKILL_ID}/eval-cases`,
+      payload: { owner_kind: 'skill', owner_id: SKILL_ID, name: 'Bad case' },
+    });
 
     expect(res.statusCode).toBe(422);
     await app.close();

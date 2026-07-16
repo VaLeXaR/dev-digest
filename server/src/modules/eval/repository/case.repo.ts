@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
-import { EvalCase, ExpectedFinding, type EvalCaseInput } from '@devdigest/shared';
+import { EvalCase, ExpectedFinding, type EvalCaseInput, type EvalOwnerKind } from '@devdigest/shared';
 
 /**
  * A5 — eval-case data access (`eval_cases` table only). Row -> DTO mapping
@@ -27,10 +27,12 @@ function toEvalCase(row: EvalCaseRow): EvalCase {
   };
 }
 
-export async function listCasesForAgent(
+/** Owner-generic case list — 'agent' or 'skill' owner, scoped by workspace. */
+export async function listCasesForOwner(
   db: Db,
   workspaceId: string,
-  agentId: string,
+  ownerKind: EvalOwnerKind,
+  ownerId: string,
 ): Promise<EvalCase[]> {
   const rows = await db
     .select()
@@ -38,12 +40,20 @@ export async function listCasesForAgent(
     .where(
       and(
         eq(t.evalCases.workspaceId, workspaceId),
-        eq(t.evalCases.ownerKind, 'agent'),
-        eq(t.evalCases.ownerId, agentId),
+        eq(t.evalCases.ownerKind, ownerKind),
+        eq(t.evalCases.ownerId, ownerId),
       ),
     )
     .orderBy(desc(t.evalCases.id));
   return rows.map(toEvalCase);
+}
+
+export async function listCasesForAgent(
+  db: Db,
+  workspaceId: string,
+  agentId: string,
+): Promise<EvalCase[]> {
+  return listCasesForOwner(db, workspaceId, 'agent', agentId);
 }
 
 export async function getCase(

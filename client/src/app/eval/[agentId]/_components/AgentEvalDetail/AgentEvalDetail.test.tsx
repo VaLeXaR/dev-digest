@@ -29,7 +29,7 @@ vi.mock("../CompareRunsModal/CompareRunsModal", () => ({
     compareModalSpy(props);
     return (
       <div role="dialog" aria-label="compare-modal-stub">
-        {`compare v${props.older.agent_version} -> v${props.newer.agent_version}`}
+        {`compare v${props.older.owner_version} -> v${props.newer.owner_version}`}
         <button onClick={props.onClose}>close-stub</button>
       </div>
     );
@@ -86,8 +86,9 @@ const DASHBOARD: EvalDashboard = {
 const BATCHES: EvalRunBatchRecord[] = [
   {
     id: "b7",
-    agent_id: "ag1",
-    agent_version: 7,
+    owner_kind: "agent",
+    owner_id: "ag1",
+    owner_version: 7,
     ran_at: new Date().toISOString(),
     recall: 0.82,
     precision: 0.91,
@@ -98,8 +99,9 @@ const BATCHES: EvalRunBatchRecord[] = [
   },
   {
     id: "b6",
-    agent_id: "ag1",
-    agent_version: 6,
+    owner_kind: "agent",
+    owner_id: "ag1",
+    owner_version: 6,
     ran_at: new Date(Date.now() - 2 * 86_400_000).toISOString(),
     recall: 0.78,
     precision: 0.93,
@@ -110,8 +112,9 @@ const BATCHES: EvalRunBatchRecord[] = [
   },
   {
     id: "b5",
-    agent_id: "ag1",
-    agent_version: 5,
+    owner_kind: "agent",
+    owner_id: "ag1",
+    owner_version: 5,
     // Within the default "30 days" range but OUTSIDE "7 days", so the
     // date-range test below can flip the filter and observe it disappear.
     ran_at: new Date(Date.now() - 10 * 86_400_000).toISOString(),
@@ -231,8 +234,8 @@ describe("AgentEvalDetail", () => {
 
     expect(compareModalSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        older: expect.objectContaining({ agent_version: 6 }),
-        newer: expect.objectContaining({ agent_version: 7 }),
+        older: expect.objectContaining({ owner_version: 6 }),
+        newer: expect.objectContaining({ owner_version: 7 }),
       }),
     );
   });

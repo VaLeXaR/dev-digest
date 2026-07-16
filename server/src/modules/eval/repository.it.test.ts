@@ -210,8 +210,10 @@ describe('EvalRepository — per-case run persistence', () => {
     const created = await repo.createCase(WS_ID, caseInput({ owner_id: agent.id, name: 'mixed-history' }));
 
     const batch = await repo.insertBatch({
-      agentId: agent.id,
-      agentVersion: 1,
+      workspaceId: WS_ID,
+      ownerKind: 'agent',
+      ownerId: agent.id,
+      ownerVersion: 1,
       recall: 0,
       precision: 0,
       citationAccuracy: 0,
@@ -276,8 +278,10 @@ describe('EvalRepository — batch persistence + dashboard reads', () => {
     const created = await repo.createCase(WS_ID, caseInput({ owner_id: agent.id, name: 'batched' }));
 
     const batch = await repo.insertBatch({
-      agentId: agent.id,
-      agentVersion: 1,
+      workspaceId: WS_ID,
+      ownerKind: 'agent',
+      ownerId: agent.id,
+      ownerVersion: 1,
       recall: 0.5,
       precision: 0.75,
       citationAccuracy: 1,
@@ -285,8 +289,9 @@ describe('EvalRepository — batch persistence + dashboard reads', () => {
       totalCount: 2,
       costUsd: 0.02,
     });
-    expect(batch.agent_id).toBe(agent.id);
-    expect(batch.agent_version).toBe(1);
+    expect(batch.owner_kind).toBe('agent');
+    expect(batch.owner_id).toBe(agent.id);
+    expect(batch.owner_version).toBe(1);
 
     const run = await repo.insertEvalRun({
       caseId: created.id,
@@ -318,8 +323,10 @@ describe('EvalRepository — batch persistence + dashboard reads', () => {
     const other = await makeAgent(WS_ID);
 
     const b1 = await repo.insertBatch({
-      agentId: agent.id,
-      agentVersion: 1,
+      workspaceId: WS_ID,
+      ownerKind: 'agent',
+      ownerId: agent.id,
+      ownerVersion: 1,
       recall: 0.4,
       precision: 0.6,
       citationAccuracy: 0.9,
@@ -329,8 +336,10 @@ describe('EvalRepository — batch persistence + dashboard reads', () => {
     });
     await new Promise((r) => setTimeout(r, 5));
     const b2 = await repo.insertBatch({
-      agentId: agent.id,
-      agentVersion: 2,
+      workspaceId: WS_ID,
+      ownerKind: 'agent',
+      ownerId: agent.id,
+      ownerVersion: 2,
       recall: 0.8,
       precision: 0.9,
       citationAccuracy: 0.95,
@@ -339,8 +348,10 @@ describe('EvalRepository — batch persistence + dashboard reads', () => {
       costUsd: 0.02,
     });
     await repo.insertBatch({
-      agentId: other.id,
-      agentVersion: 1,
+      workspaceId: WS_ID,
+      ownerKind: 'agent',
+      ownerId: other.id,
+      ownerVersion: 1,
       recall: null,
       precision: null,
       citationAccuracy: null,

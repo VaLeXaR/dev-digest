@@ -2,11 +2,12 @@
 
 import React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Badge, ErrorState, Icon, Skeleton } from "@devdigest/ui";
+import { Badge, Button, ErrorState, Icon, Skeleton } from "@devdigest/ui";
 import { AppShell } from "../../../components/app-shell";
 import { SkillsListView } from "../_components/SkillsListView/SkillsListView";
 import { SkillEditor } from "./_components/SkillEditor/SkillEditor";
 import { useSkill, useUpdateSkill } from "../../../lib/hooks/skills";
+import { useRunSkillEvalSet } from "../../../lib/hooks/eval";
 import { VALID_TABS } from "./_components/SkillEditor/constants";
 import { ApiError } from "../../../lib/api";
 
@@ -18,6 +19,9 @@ export default function SkillEditorPage() {
 
   const { data: skill, isLoading, isError, error, refetch } = useSkill(id);
   const update = useUpdateSkill();
+  // Same set-run mutation as the Evals tab's own "Run all evals" button (R4/AC-33) —
+  // both entry points trigger the identical action.
+  const runEvalSet = useRunSkillEvalSet(id);
 
   const tab = VALID_TABS.includes(search.get("tab") ?? "") ? search.get("tab")! : "config";
   const setTab = (t: string) => {
@@ -86,9 +90,21 @@ export default function SkillEditorPage() {
                 v{skill.version}
               </Badge>
               <div style={{ marginLeft: "auto" }}>
-                <Badge color={skill.enabled ? "var(--accent)" : "var(--text-muted)"}>
-                  {skill.enabled ? "enabled" : "disabled"}
-                </Badge>
+                {tab === "evals" ? (
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    icon="Play"
+                    loading={runEvalSet.isPending}
+                    onClick={() => runEvalSet.mutate()}
+                  >
+                    Run on evals
+                  </Button>
+                ) : (
+                  <Badge color={skill.enabled ? "var(--accent)" : "var(--text-muted)"}>
+                    {skill.enabled ? "enabled" : "disabled"}
+                  </Badge>
+                )}
               </div>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>

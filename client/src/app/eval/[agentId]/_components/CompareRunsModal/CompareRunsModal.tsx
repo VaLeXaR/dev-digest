@@ -37,8 +37,8 @@ export function CompareRunsModal({
   newer: EvalRunBatchRecord;
   onClose: () => void;
 }) {
-  const oldVersionQuery = useAgentVersion(agentId, older.agent_version);
-  const newVersionQuery = useAgentVersion(agentId, newer.agent_version);
+  const oldVersionQuery = useAgentVersion(agentId, older.owner_version);
+  const newVersionQuery = useAgentVersion(agentId, newer.owner_version);
   const promote = usePromoteAgentVersion(agentId);
 
   const versionsReady = !!oldVersionQuery.data && !!newVersionQuery.data;
@@ -50,7 +50,7 @@ export function CompareRunsModal({
   );
 
   function handlePromote() {
-    promote.mutate(newer.agent_version, { onSuccess: onClose });
+    promote.mutate(newer.owner_version, { onSuccess: onClose });
   }
 
   const footer = (
@@ -59,7 +59,7 @@ export function CompareRunsModal({
         Close
       </Button>
       <Button kind="primary" icon="GitBranch" loading={promote.isPending} onClick={handlePromote}>
-        {`Promote v${newer.agent_version}`}
+        {`Promote v${newer.owner_version}`}
       </Button>
     </div>
   );
@@ -67,7 +67,7 @@ export function CompareRunsModal({
   return (
     <Modal
       width={860}
-      title={`Compare runs · v${older.agent_version} → v${newer.agent_version}`}
+      title={`Compare runs · v${older.owner_version} → v${newer.owner_version}`}
       subtitle="Old prompt vs new — metric deltas and prompt diff on the gold set"
       onClose={onClose}
       footer={footer}
@@ -112,11 +112,11 @@ export function CompareRunsModal({
           <div style={s.diffLegend}>
             <span style={s.legendItem}>
               <span style={{ ...s.legendSwatch, background: "var(--crit)" }} />
-              {`v${older.agent_version} (old)`}
+              {`v${older.owner_version} (old)`}
             </span>
             <span style={s.legendItem}>
               <span style={{ ...s.legendSwatch, background: "var(--ok)" }} />
-              {`v${newer.agent_version} (new)`}
+              {`v${newer.owner_version} (new)`}
             </span>
           </div>
           <div style={s.diffBox}>

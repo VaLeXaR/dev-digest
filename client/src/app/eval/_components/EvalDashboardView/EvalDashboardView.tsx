@@ -130,7 +130,7 @@ function AgentRow({ agent }: { agent: OverviewAgent }) {
         </div>
         <div style={s.agentMeta}>
           {batch
-            ? `Last run v${batch.agent_version} · ${formatRunTimestamp(batch.ran_at)} · ${batch.pass_count}/${batch.total_count} pass`
+            ? `Last run v${batch.owner_version} · ${formatRunTimestamp(batch.ran_at)} · ${batch.pass_count}/${batch.total_count} pass`
             : "Never run"}
         </div>
       </div>
@@ -163,8 +163,8 @@ function RunRow({ run }: { run: RecentRun }) {
       <span className="mono tnum" style={s.runTimestamp}>
         {formatRunTimestamp(run.ran_at)}
       </span>
-      <Link href={`/eval/${run.agent_id}`} className="mono" style={{ ...s.runVersion, color: "var(--accent-text)" }}>
-        {`v${run.agent_version}`}
+      <Link href={`/eval/${run.owner_id}`} className="mono" style={{ ...s.runVersion, color: "var(--accent-text)" }}>
+        {`v${run.owner_version}`}
       </Link>
       <MetricBarCell value={run.recall} color={METRIC_COLORS.recall} />
       <MetricBarCell value={run.precision} color={METRIC_COLORS.precision} />

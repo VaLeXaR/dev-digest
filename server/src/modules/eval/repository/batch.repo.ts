@@ -6,11 +6,13 @@ import { toEvalRunRecord } from './run.repo.js';
 
 /**
  * A5 — set-run batch data access (`eval_run_batches` table + its
- * `eval_runs` drill-down). `eval_run_batches` has no `workspace_id` of its
- * own — every workspace-scoped read here joins through `agents.workspace_id`
- * (same IDOR-avoidance pattern as `onboarding/service.ts:resolveRepo`, server
- * INSIGHTS 2026-07-10 — never trust an id-only lookup across a tenancy
- * boundary when a join can enforce it in the query itself).
+ * `eval_runs` drill-down). `eval_run_batches` carries its own `workspace_id`
+ * column (T-01, mirroring the `eval_cases` precedent — server INSIGHTS
+ * 2026-07-16 architecture note) so a batch owned by either an agent OR a
+ * skill can be tenancy-scoped without a per-owner-kind join. Agent-scoped
+ * reads additionally filter `owner_kind='agent'` so a skill batch (T-04+)
+ * never leaks into the agent dashboard/history — see server INSIGHTS
+ * 2026-07-16.
  */
 
 export type EvalRunBatchRow = typeof t.evalRunBatches.$inferSelect;
@@ -18,8 +20,9 @@ export type EvalRunBatchRow = typeof t.evalRunBatches.$inferSelect;
 function toBatchRecord(row: EvalRunBatchRow): EvalRunBatchRecord {
   return {
     id: row.id,
-    agent_id: row.agentId,
-    agent_version: row.agentVersion,
+    owner_kind: row.ownerKind,
+    owner_id: row.ownerId,
+    owner_version: row.ownerVersion,
     ran_at: row.ranAt.toISOString(),
     recall: row.recall,
     precision: row.precision,
@@ -31,8 +34,10 @@ function toBatchRecord(row: EvalRunBatchRow): EvalRunBatchRecord {
 }
 
 export interface InsertBatchInput {
-  agentId: string;
-  agentVersion: number;
+  workspaceId: string;
+  ownerKind: 'skill' | 'agent';
+  ownerId: string;
+  ownerVersion: number;
   recall: number | null;
   precision: number | null;
   citationAccuracy: number | null;
@@ -45,8 +50,10 @@ export async function insertBatch(db: Db, values: InsertBatchInput): Promise<Eva
   const [row] = await db
     .insert(t.evalRunBatches)
     .values({
-      agentId: values.agentId,
-      agentVersion: values.agentVersion,
+      workspaceId: values.workspaceId,
+      ownerKind: values.ownerKind,
+      ownerId: values.ownerId,
+      ownerVersion: values.ownerVersion,
       recall: values.recall,
       precision: values.precision,
       citationAccuracy: values.citationAccuracy,
@@ -66,8 +73,13 @@ export async function listBatchesForAgent(
   const rows = await db
     .select({ batch: t.evalRunBatches })
     .from(t.evalRunBatches)
-    .innerJoin(t.agents, eq(t.agents.id, t.evalRunBatches.agentId))
-    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.evalRunBatches.agentId, agentId)))
+    .where(
+      and(
+        eq(t.evalRunBatches.workspaceId, workspaceId),
+        eq(t.evalRunBatches.ownerKind, 'agent'),
+        eq(t.evalRunBatches.ownerId, agentId),
+      ),
+    )
     .orderBy(desc(t.evalRunBatches.ranAt));
   return rows.map((r) => toBatchRecord(r.batch));
 }
@@ -80,8 +92,7 @@ export async function getBatch(
   const [row] = await db
     .select({ batch: t.evalRunBatches })
     .from(t.evalRunBatches)
-    .innerJoin(t.agents, eq(t.agents.id, t.evalRunBatches.agentId))
-    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.evalRunBatches.id, batchId)));
+    .where(and(eq(t.evalRunBatches.workspaceId, workspaceId), eq(t.evalRunBatches.id, batchId)));
   return row ? toBatchRecord(row.batch) : undefined;
 }
 
@@ -95,14 +106,13 @@ export async function runsForBatch(
     .select({ run: t.evalRuns, caseName: t.evalCases.name })
     .from(t.evalRuns)
     .innerJoin(t.evalRunBatches, eq(t.evalRunBatches.id, t.evalRuns.batchId))
-    .innerJoin(t.agents, eq(t.agents.id, t.evalRunBatches.agentId))
     .leftJoin(t.evalCases, eq(t.evalCases.id, t.evalRuns.caseId))
-    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.evalRunBatches.id, batchId)))
+    .where(and(eq(t.evalRunBatches.workspaceId, workspaceId), eq(t.evalRunBatches.id, batchId)))
     .orderBy(desc(t.evalRuns.ranAt));
   return rows.map((r) => toEvalRunRecord(r.run, r.caseName));
 }
 
-/** Latest batch per agent in the workspace, keyed by `agent_id` — for the dashboard overview (G8). */
+/** Latest batch per agent in the workspace, keyed by `owner_id` — for the dashboard overview (G8). Agent batches only. */
 export async function latestBatchPerAgent(
   db: Db,
   workspaceId: string,
@@ -110,13 +120,12 @@ export async function latestBatchPerAgent(
   const rows = await db
     .select({ batch: t.evalRunBatches })
     .from(t.evalRunBatches)
-    .innerJoin(t.agents, eq(t.agents.id, t.evalRunBatches.agentId))
-    .where(eq(t.agents.workspaceId, workspaceId))
+    .where(and(eq(t.evalRunBatches.workspaceId, workspaceId), eq(t.evalRunBatches.ownerKind, 'agent')))
     .orderBy(desc(t.evalRunBatches.ranAt));
 
   const byAgent = new Map<string, EvalRunBatchRecord>();
   for (const r of rows) {
-    if (!byAgent.has(r.batch.agentId)) byAgent.set(r.batch.agentId, toBatchRecord(r.batch));
+    if (!byAgent.has(r.batch.ownerId)) byAgent.set(r.batch.ownerId, toBatchRecord(r.batch));
   }
   return byAgent;
 }
@@ -130,13 +139,18 @@ export async function batchTrendForAgent(
   const rows = await db
     .select({ batch: t.evalRunBatches })
     .from(t.evalRunBatches)
-    .innerJoin(t.agents, eq(t.agents.id, t.evalRunBatches.agentId))
-    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.evalRunBatches.agentId, agentId)))
+    .where(
+      and(
+        eq(t.evalRunBatches.workspaceId, workspaceId),
+        eq(t.evalRunBatches.ownerKind, 'agent'),
+        eq(t.evalRunBatches.ownerId, agentId),
+      ),
+    )
     .orderBy(t.evalRunBatches.ranAt);
   return rows.map((r) => toBatchRecord(r.batch));
 }
 
-/** Most recent set-run batches across every agent in the workspace, newest first. */
+/** Most recent set-run batches across every agent in the workspace, newest first. Agent batches only. */
 export async function recentBatches(
   db: Db,
   workspaceId: string,
@@ -145,8 +159,8 @@ export async function recentBatches(
   const rows = await db
     .select({ batch: t.evalRunBatches, agentName: t.agents.name })
     .from(t.evalRunBatches)
-    .innerJoin(t.agents, eq(t.agents.id, t.evalRunBatches.agentId))
-    .where(eq(t.agents.workspaceId, workspaceId))
+    .innerJoin(t.agents, eq(t.agents.id, t.evalRunBatches.ownerId))
+    .where(and(eq(t.evalRunBatches.workspaceId, workspaceId), eq(t.evalRunBatches.ownerKind, 'agent')))
     .orderBy(desc(t.evalRunBatches.ranAt))
     .limit(limit);
   return rows.map((r) => ({ ...toBatchRecord(r.batch), agent_name: r.agentName }));

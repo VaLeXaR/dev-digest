@@ -70,7 +70,7 @@ export function AgentEvalDetail({ agentId }: { agentId: string }) {
   const canCompare = selectedRuns.length === 2;
   const [older, newer] = React.useMemo(() => {
     if (selectedRuns.length !== 2) return [undefined, undefined] as const;
-    const sorted = [...selectedRuns].sort((a, b) => a.agent_version - b.agent_version);
+    const sorted = [...selectedRuns].sort((a, b) => a.owner_version - b.owner_version);
     return [sorted[0], sorted[1]] as const;
   }, [selectedRuns]);
 
@@ -317,7 +317,7 @@ function RunRow({
       <span className="mono tnum" style={s.runTimestamp}>
         {formatRunTimestamp(run.ran_at)}
       </span>
-      <span className="mono" style={s.runVersion}>{`v${run.agent_version}`}</span>
+      <span className="mono" style={s.runVersion}>{`v${run.owner_version}`}</span>
       <MetricBarCell value={run.recall} color={METRIC_COLORS.recall} />
       <MetricBarCell value={run.precision} color={METRIC_COLORS.precision} />
       <MetricBarCell value={run.citation_accuracy} color={METRIC_COLORS.citation} />

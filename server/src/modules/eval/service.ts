@@ -19,7 +19,9 @@ import { diffFromPrFiles } from '../reviews/diff-loader.js';
 import { AppError, NotFoundError, ValidationError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { EvalRepository, type EvalCaseUpdate } from './repository.js';
+import * as runRepo from './repository/run.repo.js';
 import { aggregateBatch, buildRegressionAlert, type CaseRunResult } from './helpers.js';
+import { SKILL_EVAL_MODEL, SKILL_EVAL_PROVIDER } from './skill-run.constants.js';
 
 /**
  * A5 — eval run orchestration, create-from-finding, dashboard assembly.
@@ -63,8 +65,62 @@ export class EvalService {
 
     const aggregate = aggregateBatch(results);
     const batch = await this.repo.insertBatch({
-      agentId: agent.id,
-      agentVersion: agent.version,
+      workspaceId,
+      ownerKind: 'agent',
+      ownerId: agent.id,
+      ownerVersion: agent.version,
+      recall: aggregate.recall,
+      precision: aggregate.precision,
+      citationAccuracy: aggregate.citation_accuracy,
+      passCount: aggregate.passCount,
+      totalCount: results.length,
+      costUsd: aggregate.costUsd,
+    });
+
+    for (const r of results) {
+      await this.repo.insertEvalRun({
+        caseId: r.caseId,
+        batchId: batch.id,
+        pass: r.pass,
+        recall: r.recall,
+        precision: r.precision,
+        citationAccuracy: r.citation_accuracy,
+        actualOutput: r.actualOutput,
+        durationMs: r.durationMs,
+        costUsd: r.costUsd,
+      });
+    }
+
+    return batch;
+  }
+
+  /**
+   * "Run on evals" / "Run all evals" for a SKILL (R4/AC-33) — runs the skill's
+   * `body` as the review's system prompt over every case in its set as ONE
+   * batch. No host agent (AC-38): no `skills[]`, no `strategy`, fixed
+   * provider/model (`SKILL_EVAL_PROVIDER`/`SKILL_EVAL_MODEL`). AC-37: does
+   * NOT gate on `skill.enabled` — a disabled skill is still eval-able.
+   * AC-36 per-case failure isolation is inherited from `executeSkillCase`'s
+   * try/catch (same shape as `executeCase`).
+   */
+  async runSkillSet(workspaceId: string, skillId: string): Promise<EvalRunBatchResult> {
+    const skill = await this.container.skillsRepo.getById(workspaceId, skillId);
+    if (!skill) throw new NotFoundError('Skill not found');
+
+    const cases = await this.repo.listCasesForOwner(workspaceId, 'skill', skillId);
+    const llm = await this.container.llm(SKILL_EVAL_PROVIDER);
+
+    const results: CaseRunResult[] = [];
+    for (const evalCase of cases) {
+      results.push(await this.executeSkillCase(skill.body, llm, evalCase));
+    }
+
+    const aggregate = aggregateBatch(results);
+    const batch = await this.repo.insertBatch({
+      workspaceId,
+      ownerKind: 'skill',
+      ownerId: skill.id,
+      ownerVersion: skill.version,
       recall: aggregate.recall,
       precision: aggregate.precision,
       citationAccuracy: aggregate.citation_accuracy,
@@ -94,25 +150,35 @@ export class EvalService {
    * Single-case run (editor "Run case" / "Run on save", Evals-tab per-case
    * ▷). G7: a scratch run — persists an `eval_runs` row with `batchId = NULL`
    * and creates NO `eval_run_batches` row, so it never affects history /
-   * dashboard / Compare.
+   * dashboard / Compare. Owner-generic (T-04): an agent-owned case runs
+   * through the agent's own provider/model/skills; a skill-owned case runs
+   * through the fixed skill-eval provider/model, no host agent (AC-38).
    */
   async runCase(workspaceId: string, caseId: string): Promise<EvalRunRecord> {
     const evalCase = await this.repo.getCase(workspaceId, caseId);
     if (!evalCase) throw new NotFoundError('Eval case not found');
-    if (evalCase.owner_kind !== 'agent') {
+
+    let result: CaseRunResult;
+    if (evalCase.owner_kind === 'agent') {
+      const agent = await this.container.agentsRepo.getById(workspaceId, evalCase.owner_id);
+      if (!agent) throw new NotFoundError('Owning agent not found');
+
+      const llm = await this.container.llm(agent.provider as Provider);
+      const skills = await this.resolveSkills(agent.id);
+      result = await this.executeCase(agent, llm, skills, evalCase);
+    } else if (evalCase.owner_kind === 'skill') {
+      const skill = await this.container.skillsRepo.getById(workspaceId, evalCase.owner_id);
+      if (!skill) throw new NotFoundError('Owning skill not found');
+
+      const llm = await this.container.llm(SKILL_EVAL_PROVIDER);
+      result = await this.executeSkillCase(skill.body, llm, evalCase);
+    } else {
       throw new AppError(
         'unsupported_case_owner',
-        'Only agent-owned eval cases can be run in this version.',
+        'Unsupported eval-case owner kind.',
         400,
       );
     }
-
-    const agent = await this.container.agentsRepo.getById(workspaceId, evalCase.owner_id);
-    if (!agent) throw new NotFoundError('Owning agent not found');
-
-    const llm = await this.container.llm(agent.provider as Provider);
-    const skills = await this.resolveSkills(agent.id);
-    const result = await this.executeCase(agent, llm, skills, evalCase);
 
     return this.repo.insertEvalRun({
       caseId: result.caseId,
@@ -177,6 +243,53 @@ export class EvalService {
     }
   }
 
+  /**
+   * Execute one case against a skill's `body` as the review's system prompt
+   * (R5/AC-38) — no host agent: fixed provider/model, no `skills[]`, no
+   * `strategy`. Mirrors `executeCase`'s shape exactly (parse diff once,
+   * reconstruct the raw pre-grounding finding set, score, AC-36 try/catch)
+   * so `scoreEvalCase`/`groundFindings` behave identically for both owners.
+   */
+  private async executeSkillCase(
+    skillBody: string,
+    llm: LLMProvider,
+    evalCase: EvalCase,
+  ): Promise<CaseRunResult> {
+    const start = Date.now();
+    try {
+      const diff = parseUnifiedDiff(evalCase.input_diff);
+      const outcome = await reviewPullRequest({
+        systemPrompt: skillBody,
+        model: SKILL_EVAL_MODEL,
+        diff,
+        llm,
+      });
+      const raw = [...outcome.review.findings, ...outcome.dropped.map((d) => d.finding)];
+      const score = scoreEvalCase(evalCase.expected_output, raw, diff);
+      return {
+        caseId: evalCase.id,
+        pass: score.pass,
+        recall: score.recall,
+        precision: score.precision,
+        citation_accuracy: score.citation_accuracy,
+        actualOutput: raw,
+        durationMs: Date.now() - start,
+        costUsd: outcome.costUsd,
+      };
+    } catch (err) {
+      return {
+        caseId: evalCase.id,
+        pass: false,
+        recall: null,
+        precision: null,
+        citation_accuracy: null,
+        actualOutput: { error: (err as Error).message },
+        durationMs: Date.now() - start,
+        costUsd: null,
+      };
+    }
+  }
+
   /** Batch history for an agent (T-07 `GET /agents/:id/eval-batches`) — workspace-scoped via the repo's `agents.workspaceId` join. */
   listBatches(workspaceId: string, agentId: string): Promise<EvalRunBatchRecord[]> {
     return this.repo.listBatchesForAgent(workspaceId, agentId);
@@ -189,6 +302,27 @@ export class EvalService {
    */
   lastRunsForAgent(workspaceId: string, agentId: string): Promise<EvalRunRecord[]> {
     return this.repo.lastRunsForAgentCases(workspaceId, agentId);
+  }
+
+  /**
+   * Owner-generic case list for a skill's Evals tab (R2). `repository.ts` has
+   * no skill-specific passthrough of its own beyond the already-generic
+   * `listCasesForOwner` (T-03) — call it directly with `'skill'`.
+   */
+  listSkillCases(workspaceId: string, skillId: string): Promise<EvalCase[]> {
+    return this.repo.listCasesForOwner(workspaceId, 'skill', skillId);
+  }
+
+  /**
+   * Per-case latest run for every case owned by a skill (batch OR scratch,
+   * mirrors `lastRunsForAgent`). Calls `run.repo.ts`'s generalized
+   * `lastRunsForOwnerCases` directly (not through `EvalRepository`, which is
+   * outside this task's owned paths and only exposes the agent-scoped
+   * `lastRunsForAgentCases` passthrough) — still no `db/schema`/`drizzle-orm`
+   * import here, `run.repo.ts` owns the query.
+   */
+  lastRunsForSkill(workspaceId: string, skillId: string): Promise<EvalRunRecord[]> {
+    return runRepo.lastRunsForOwnerCases(this.container.db, workspaceId, 'skill', skillId);
   }
 
   /**
@@ -396,7 +530,7 @@ export class EvalService {
     const alert = buildRegressionAlert({
       latestPrecision: latest?.precision,
       previousPrecision: previous?.precision,
-      latestVersion: latest?.agent_version ?? 0,
+      latestVersion: latest?.owner_version ?? 0,
       recallDelta: delta.recall,
       citationDelta: delta.citation_accuracy,
     });

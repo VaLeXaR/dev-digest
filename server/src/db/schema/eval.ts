@@ -1,7 +1,6 @@
 import { pgTable, uuid, text, integer, boolean, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
-import { agents } from './agents';
 
 // ============================================================ Eval / Conformance / Compose
 
@@ -29,10 +28,15 @@ export const evalCases = pgTable('eval_cases', {
 // batchId = NULL (scratch runs, not part of history).
 export const evalRunBatches = pgTable('eval_run_batches', {
   id: uuid('id').primaryKey().defaultRandom(),
-  agentId: uuid('agent_id')
+  workspaceId: uuid('workspace_id')
     .notNull()
-    .references(() => agents.id, { onDelete: 'cascade' }),
-  agentVersion: integer('agent_version').notNull(),
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  ownerKind: text('owner_kind', { enum: ['skill', 'agent'] }).notNull(),
+  // No FK — a skill batch's ownerId is a skillId, an agent batch's ownerId is
+  // an agentId; a single column can't reference two tables (same pattern as
+  // eval_cases.ownerId above).
+  ownerId: uuid('owner_id').notNull(),
+  ownerVersion: integer('owner_version').notNull(),
   ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
   recall: doublePrecision('recall'),
   precision: doublePrecision('precision'),

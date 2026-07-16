@@ -117,6 +117,27 @@ async function makeAgent(db: PgFixture['handle']['db'], workspaceId: string) {
   return row!;
 }
 
+/** T-04 — a skill has no provider/model/host agent (`body`/`version`/`enabled` only). */
+async function makeSkill(
+  db: PgFixture['handle']['db'],
+  workspaceId: string,
+  opts: { enabled?: boolean } = {},
+) {
+  const [row] = await db
+    .insert(t.skills)
+    .values({
+      workspaceId,
+      name: 'Eval Test Skill',
+      description: 'A skill rubric used for eval integration tests.',
+      type: 'rubric',
+      source: 'manual',
+      body: 'You are a strict code reviewer. Flag missing null checks.',
+      enabled: opts.enabled ?? true,
+    })
+    .returning();
+  return row!;
+}
+
 d('EvalService (Testcontainers pg)', () => {
   let pg: PgFixture;
 
@@ -153,8 +174,9 @@ d('EvalService (Testcontainers pg)', () => {
 
       const batch = await service.runSet(workspaceId, agent.id);
 
-      expect(batch.agent_id).toBe(agent.id);
-      expect(batch.agent_version).toBe(agent.version);
+      expect(batch.owner_kind).toBe('agent');
+      expect(batch.owner_id).toBe(agent.id);
+      expect(batch.owner_version).toBe(agent.version);
       expect(batch.total_count).toBe(1);
 
       const runs = await repo.runsForBatch(workspaceId, batch.id);
@@ -223,6 +245,91 @@ d('EvalService (Testcontainers pg)', () => {
       expect(okRun).toBeDefined();
       expect(okRun?.pass).toBe(true);
       expect(okRun?.recall).toBe(1);
+    });
+  });
+
+  describe('runSkillSet (T-04)', () => {
+    it('writes ONE batch (owner_kind=skill) + one eval_runs row per case, with 0 LLM calls in the scoring step', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const skill = await makeSkill(pg.handle.db, workspaceId);
+      const repo = new EvalRepository(pg.handle.db);
+
+      const path = 'src/greet.ts';
+      const diffText = sampleDiff(path);
+      const caseInput: EvalCaseInput = {
+        owner_kind: 'skill',
+        owner_id: skill.id,
+        name: 'skill-case-a',
+        input_diff: diffText,
+        expected_output: [{ type: 'must_find', file: path, start_line: 2, end_line: 2 }],
+      };
+      const evalCase = await repo.createCase(workspaceId, caseInput);
+
+      // SKILL_EVAL_PROVIDER is 'openrouter' — MockLLMProvider's constructor
+      // doesn't accept that id (server INSIGHTS 2026-07-15), so register the
+      // mock under the 'openrouter' CONTAINER key regardless of the mock's
+      // own internal `.id` — `container.llm(id)` looks it up by key, not by
+      // the mock's `.id`.
+      const mockLlm = new MockLLMProvider('openai', { structured: fixtureReview(path) });
+      const container = new Container(config(), pg.handle.db, {
+        llm: { openrouter: mockLlm },
+      });
+      const service = new EvalService(container);
+
+      const batch = await service.runSkillSet(workspaceId, skill.id);
+
+      expect(batch.owner_kind).toBe('skill');
+      expect(batch.owner_id).toBe(skill.id);
+      expect(batch.owner_version).toBe(skill.version);
+      expect(batch.total_count).toBe(1);
+
+      const runs = await repo.runsForBatch(workspaceId, batch.id);
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.case_id).toBe(evalCase.id);
+
+      const diff = parseUnifiedDiff(diffText);
+      const raw = fixtureReview(path).findings;
+      const expectedScore = scoreEvalCase(evalCase.expected_output, raw, diff);
+
+      expect(runs[0]?.pass).toBe(expectedScore.pass);
+      expect(runs[0]?.recall).toBe(expectedScore.recall);
+      expect(runs[0]?.precision).toBe(expectedScore.precision);
+      expect(runs[0]?.citation_accuracy).toBe(expectedScore.citation_accuracy);
+
+      // Exactly one review call per case (the per-case `reviewPullRequest`
+      // call) and NOTHING else — `scoreEvalCase`/`groundFindings` issue zero
+      // LLM calls, so the total call count is bounded to the number of cases.
+      expect(mockLlm.calls).toHaveLength(1);
+      expect(mockLlm.calls[0]?.method).toBe('completeStructured');
+    });
+
+    it('AC-37: a disabled skill (enabled=false) still produces a batch', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const skill = await makeSkill(pg.handle.db, workspaceId, { enabled: false });
+      expect(skill.enabled).toBe(false);
+      const repo = new EvalRepository(pg.handle.db);
+
+      const path = 'src/disabled-skill.ts';
+      await repo.createCase(workspaceId, {
+        owner_kind: 'skill',
+        owner_id: skill.id,
+        name: 'skill-case-disabled',
+        input_diff: sampleDiff(path),
+        expected_output: [{ type: 'must_find', file: path, start_line: 2, end_line: 2 }],
+      });
+
+      const mockLlm = new MockLLMProvider('openai', { structured: fixtureReview(path) });
+      const container = new Container(config(), pg.handle.db, {
+        llm: { openrouter: mockLlm },
+      });
+      const service = new EvalService(container);
+
+      const batch = await service.runSkillSet(workspaceId, skill.id);
+
+      expect(batch.owner_kind).toBe('skill');
+      expect(batch.owner_id).toBe(skill.id);
+      expect(batch.total_count).toBe(1);
+      expect(mockLlm.calls.length).toBeGreaterThan(0);
     });
   });
 

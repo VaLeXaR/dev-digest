@@ -1,5 +1,5 @@
 import type { Db } from '../../db/client.js';
-import type { EvalCase, EvalCaseInput, EvalRunBatchRecord, EvalRunRecord } from '@devdigest/shared';
+import type { EvalCase, EvalCaseInput, EvalOwnerKind, EvalRunBatchRecord, EvalRunRecord } from '@devdigest/shared';
 
 /**
  * A5 — eval data-access. The ONLY layer touching the DB for the eval domain
@@ -27,6 +27,15 @@ export class EvalRepository {
 
   listCasesForAgent(workspaceId: string, agentId: string): Promise<EvalCase[]> {
     return caseRepo.listCasesForAgent(this.db, workspaceId, agentId);
+  }
+
+  /** Owner-generic case list — 'agent' or 'skill' owner, scoped by workspace. */
+  listCasesForOwner(
+    workspaceId: string,
+    ownerKind: EvalOwnerKind,
+    ownerId: string,
+  ): Promise<EvalCase[]> {
+    return caseRepo.listCasesForOwner(this.db, workspaceId, ownerKind, ownerId);
   }
 
   getCase(workspaceId: string, caseId: string): Promise<EvalCase | undefined> {

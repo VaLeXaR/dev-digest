@@ -1,42 +1,33 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { Agent, EvalCase } from "@devdigest/shared";
-import messages from "../../../../../../../../messages/en/eval.json";
+import type { EvalCase } from "@devdigest/shared";
+import messages from "../../../../messages/en/eval.json";
 
 const createMutateAsync = vi.fn();
+const createSkillMutateAsync = vi.fn();
 const updateMutateAsync = vi.fn();
 const runMutateAsync = vi.fn();
 
-vi.mock("../../../../../../../lib/hooks/eval", () => ({
+vi.mock("../../../lib/hooks/eval", () => ({
   useCreateEvalCase: () => ({ mutateAsync: createMutateAsync, isPending: false }),
+  useCreateSkillEvalCase: () => ({ mutateAsync: createSkillMutateAsync, isPending: false }),
   useUpdateEvalCase: () => ({ mutateAsync: updateMutateAsync, isPending: false }),
   useRunEvalCase: () => ({ mutateAsync: runMutateAsync, isPending: false }),
 }));
 
-import { EvalCaseEditor } from "./EvalCaseEditor";
+import { EvalCaseEditor, type EvalCaseEditorOwner } from "./EvalCaseEditor";
 
 afterEach(() => {
   cleanup();
   createMutateAsync.mockReset();
+  createSkillMutateAsync.mockReset();
   updateMutateAsync.mockReset();
   runMutateAsync.mockReset();
 });
 
-const AGENT: Agent = {
-  id: "ag1",
-  name: "Security Reviewer",
-  description: "Flags secrets and injection",
-  provider: "openai",
-  model: "gpt-4.1",
-  system_prompt: "You are a security reviewer.",
-  output_schema: null,
-  strategy: "single-pass",
-  ci_fail_on: "critical",
-  repo_intel: true,
-  enabled: true,
-  version: 1,
-};
+const AGENT_OWNER: EvalCaseEditorOwner = { kind: "agent", id: "ag1", name: "Security Reviewer" };
+const SKILL_OWNER: EvalCaseEditorOwner = { kind: "skill", id: "sk1", name: "pr-quality-rubric" };
 
 const EXISTING_CASE: EvalCase = {
   id: "case1",
@@ -55,12 +46,12 @@ const EXISTING_CASE: EvalCase = {
 function renderEditor(props: Partial<React.ComponentProps<typeof EvalCaseEditor>> = {}) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ eval: messages }}>
-      <EvalCaseEditor agent={AGENT} onClose={() => {}} {...props} />
+      <EvalCaseEditor owner={AGENT_OWNER} onClose={() => {}} {...props} />
     </NextIntlClientProvider>,
   );
 }
 
-describe("T-09 EvalCaseEditor", () => {
+describe("T-07 EvalCaseEditor (owner-generic)", () => {
   it("renders title, name field, and the three input tabs", () => {
     renderEditor({ existingCase: EXISTING_CASE });
     expect(screen.getByText("Eval case · stripe-key-leak")).toBeInTheDocument();
@@ -109,7 +100,7 @@ describe("T-09 EvalCaseEditor", () => {
     expect(parsed[0]).toMatchObject({ type: "must_find", file: "", start_line: 1, end_line: 1 });
   });
 
-  it("Save creates a new case with owner-agnostic payload (owner is filled in by the hook)", async () => {
+  it("Save creates a new case via the agent hook when owner.kind is 'agent'", async () => {
     createMutateAsync.mockResolvedValue({ ...EXISTING_CASE, id: "new-case" });
     renderEditor();
 
@@ -118,6 +109,26 @@ describe("T-09 EvalCaseEditor", () => {
       fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
     });
     expect(createMutateAsync.mock.calls[0]?.[0]).toMatchObject({ name: "my-case", expected_output: [] });
+    expect(createSkillMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("Save creates a new case via the skill hook when owner.kind is 'skill'", async () => {
+    createSkillMutateAsync.mockResolvedValue({ ...EXISTING_CASE, id: "new-skill-case", owner_kind: "skill", owner_id: "sk1" });
+    renderEditor({ owner: SKILL_OWNER });
+
+    fireEvent.change(screen.getByPlaceholderText("stripe-key-leak"), { target: { value: "skill-case" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+    expect(createSkillMutateAsync.mock.calls[0]?.[0]).toMatchObject({ name: "skill-case", expected_output: [] });
+    expect(createMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("subtitle reflects the skill owner's name", () => {
+    renderEditor({ owner: SKILL_OWNER });
+    expect(
+      screen.getByText("pr-quality-rubric · simulate a PR and assert the expected output"),
+    ).toBeInTheDocument();
   });
 
   it("Save with Run on save enabled also triggers the run mutation", async () => {
@@ -143,6 +154,29 @@ describe("T-09 EvalCaseEditor", () => {
     });
 
     expect(runMutateAsync).toHaveBeenCalledWith({ caseId: "new-case", agentId: "ag1" });
+  });
+
+  it("Run case for a skill owner calls the run mutation without an agentId scope", async () => {
+    updateMutateAsync.mockResolvedValue(EXISTING_CASE);
+    runMutateAsync.mockResolvedValue({
+      id: "run1",
+      case_id: "case1",
+      case_name: "stripe-key-leak",
+      ran_at: "2026-07-15T00:00:00.000Z",
+      actual_output: [],
+      pass: true,
+      recall: null,
+      precision: null,
+      citation_accuracy: null,
+      duration_ms: 1000,
+      cost_usd: 0.01,
+    });
+    renderEditor({ owner: SKILL_OWNER, existingCase: EXISTING_CASE });
+
+    fireEvent.click(screen.getByRole("button", { name: /run case/i }));
+
+    await screen.findByText(/Last run passed/);
+    expect(runMutateAsync).toHaveBeenCalledWith({ caseId: "case1", agentId: undefined });
   });
 
   it("Run case shows the last-run result line inline without closing", async () => {

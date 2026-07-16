@@ -33,6 +33,10 @@ const FindingsEvalCasesQuery = z.object({ ids: z.string().min(1) });
  *   GET    /agents/:id/eval-batches          → batch history
  *   GET    /eval-batches/:id/runs            → per-case drill-down for a batch
  *   GET    /findings/eval-cases              → which finding ids already back a case (AC-26 hint)
+ *   POST   /skills/:id/eval-runs             → run the skill's whole set (rate-limited, R4/AC-33)
+ *   GET    /skills/:id/eval-cases            → list the skill's eval cases (R2/AC-29)
+ *   GET    /skills/:id/eval-cases/last-runs  → per-case latest run for a skill (R2/AC-29)
+ *   POST   /skills/:id/eval-cases            → create a case for a skill (R3/AC-30)
  */
 export default async function evalRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
@@ -148,6 +152,40 @@ export default async function evalRoutes(appBase: FastifyInstance) {
         .filter((s) => s.length > 0);
       const found = await service.findingsWithCases(ids);
       return { finding_ids: [...found] };
+    },
+  );
+
+  // ---- skill eval routes (R2/R3/R4/AC-29/AC-30/AC-33) ------------------------
+
+  // Same 10/min budget as the agent run route — both "Run all evals" and
+  // "Run on evals" hit this one route (R4/AC-33).
+  app.post(
+    '/skills/:id/eval-runs',
+    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.runSkillSet(workspaceId, req.params.id);
+    },
+  );
+
+  app.get('/skills/:id/eval-cases', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.listSkillCases(workspaceId, req.params.id);
+  });
+
+  app.get('/skills/:id/eval-cases/last-runs', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.lastRunsForSkill(workspaceId, req.params.id);
+  });
+
+  app.post(
+    '/skills/:id/eval-cases',
+    { schema: { params: IdParams, body: EvalCaseInput } },
+    async (req, reply) => {
+      const { workspaceId } = await getContext(container, req);
+      const evalCase = await service.createCase(workspaceId, req.body);
+      reply.status(201);
+      return evalCase;
     },
   );
 }
