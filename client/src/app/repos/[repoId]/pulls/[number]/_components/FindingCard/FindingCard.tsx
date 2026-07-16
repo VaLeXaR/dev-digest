@@ -34,6 +34,11 @@ export function FindingCard({
   onGoToDiff,
   targetId,
   targetNonce,
+  onTurnIntoEvalCase,
+  evalCaseDisabled,
+  evalCaseDisabledReason,
+  evalCasePending,
+  hasEvalCase,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -45,6 +50,16 @@ export function FindingCard({
   onGoToDiff?: (file: string, line: number) => void;
   targetId?: string | null;
   targetNonce?: number;
+  /** Creates a new eval case from this finding — NOT a `FindingActionKind`, so a
+   *  separate handler prop rather than overloading `onAction` (see AC-1/AC-2/AC-26). */
+  onTurnIntoEvalCase?: () => void;
+  /** True when the finding's review has no resolvable agent (`review.agent_id`
+   *  is null) — the button is disabled rather than removed, with a tooltip. */
+  evalCaseDisabled?: boolean;
+  evalCaseDisabledReason?: string;
+  evalCasePending?: boolean;
+  /** Non-blocking hint (R18/AC-26): this finding already backs an eval case. */
+  hasEvalCase?: boolean;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
@@ -129,6 +144,20 @@ export function FindingCard({
             >
               {t("finding.dismiss")}
             </Button>
+            {onTurnIntoEvalCase && (
+              <Button
+                kind="ghost"
+                size="sm"
+                icon="FlaskConical"
+                disabled={evalCaseDisabled || evalCasePending}
+                loading={evalCasePending}
+                title={evalCaseDisabled ? evalCaseDisabledReason : undefined}
+                onClick={onTurnIntoEvalCase}
+              >
+                {t("finding.turnIntoEvalCase")}
+              </Button>
+            )}
+            {hasEvalCase && <span style={s.evalCaseHint}>{t("finding.hasEvalCase")}</span>}
           </div>
         </div>
       )}

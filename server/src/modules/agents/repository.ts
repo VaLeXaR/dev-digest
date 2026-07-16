@@ -2,6 +2,7 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
+import { AgentVersionConfig } from '@devdigest/shared';
 import { DEFAULT_AGENT_DESCRIPTION, INITIAL_AGENT_VERSION } from './constants.js';
 import { isConfigChange } from './helpers.js';
 
@@ -144,6 +145,40 @@ export class AgentsRepository {
 
     if (configChanged && row) await this.snapshotVersion(row, nextVersion);
     return row;
+  }
+
+  /**
+   * Promote a past config snapshot (agent_versions) to be the agent's active
+   * config — the Compare view's "Promote vN" (AC-20). Reads the target
+   * version's configJson and applies it through the existing `update()` path,
+   * so a fresh forward version is snapshotted and history is never mutated
+   * (no raw SQL). Returns undefined when the agent isn't in this workspace or
+   * the target version was never recorded — the route maps that to 404.
+   *
+   * The snapshot's linked-skill set (`config.skills`) is restored via
+   * `setSkills()` BEFORE `update()` runs, so `update()`'s own `snapshotVersion`
+   * call (which reads the agent's *current* skills via `skillIdsForAgent`)
+   * captures the just-restored set in the new forward version, not whatever
+   * was linked prior to the promote.
+   */
+  async promoteVersion(
+    workspaceId: string,
+    id: string,
+    version: number,
+  ): Promise<AgentRow | undefined> {
+    const snapshot = await this.getVersion(id, version);
+    if (!snapshot) return undefined;
+    const config = AgentVersionConfig.parse(snapshot.configJson);
+    await this.setSkills(id, config.skills);
+    return this.update(workspaceId, id, {
+      provider: config.provider,
+      model: config.model,
+      systemPrompt: config.system_prompt,
+      outputSchema: config.output_schema,
+      strategy: config.strategy,
+      ciFailOn: config.ci_fail_on,
+      repoIntel: config.repo_intel,
+    });
   }
 
   private async snapshotVersion(row: AgentRow, version: number): Promise<void> {

@@ -170,6 +170,7 @@ export function ReviewRunAccordion({
             onGoToDiff={onGoToDiff}
             targetFindingId={targetFindingId}
             targetFindingNonce={targetFindingNonce}
+            agentId={review.agent_id}
           />
         </div>
       )}

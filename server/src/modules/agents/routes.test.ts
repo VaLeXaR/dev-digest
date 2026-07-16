@@ -136,3 +136,106 @@ describe('GET/PUT /agents/:id/context-docs (no DB)', () => {
     await app.close();
   });
 });
+
+/**
+ * POST /agents/:id/versions/:version/promote (T-06, AC-20). Hermetic: mocks
+ * `AgentsRepository.prototype.getVersion` + `.update()` (not `.promoteVersion`
+ * itself) so the real repository glue — reading the snapshot's configJson and
+ * mapping it onto an `update()` patch — actually executes and is asserted on,
+ * without touching Postgres (`update()`'s own DB call is what's stubbed).
+ */
+describe('POST /agents/:id/versions/:version/promote', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function buildVersionRow(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      agentId: AGENT_ID,
+      version: 3,
+      configJson: {
+        provider: 'openrouter',
+        model: 'snapshot-model',
+        system_prompt: 'be a snapshot',
+        output_schema: null,
+        strategy: 'auto',
+        ci_fail_on: 'critical',
+        repo_intel: true,
+        skills: ['skill-a', 'skill-b'],
+      },
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      ...overrides,
+    };
+  }
+
+  it('promotes a valid version: returns the updated Agent with the snapshot applied and version incremented', async () => {
+    vi.spyOn(AgentsRepository.prototype, 'getVersion').mockResolvedValue(
+      buildVersionRow() as never,
+    );
+
+    const callOrder: string[] = [];
+    let updatePatch: unknown;
+    const setSkillsSpy = vi
+      .spyOn(AgentsRepository.prototype, 'setSkills')
+      .mockImplementation(async () => {
+        callOrder.push('setSkills');
+      });
+    vi.spyOn(AgentsRepository.prototype, 'update').mockImplementation(
+      async (_workspaceId, _id, patch) => {
+        callOrder.push('update');
+        updatePatch = patch;
+        return buildAgentRow({
+          provider: 'openrouter',
+          model: 'snapshot-model',
+          systemPrompt: 'be a snapshot',
+          outputSchema: null,
+          strategy: 'auto',
+          ciFailOn: 'critical',
+          repoIntel: true,
+          version: 4,
+        });
+      },
+    );
+
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/agents/${AGENT_ID}/versions/3/promote`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.version).toBe(4);
+    expect(body.model).toBe('snapshot-model');
+    expect(body.system_prompt).toBe('be a snapshot');
+    expect(updatePatch).toMatchObject({
+      provider: 'openrouter',
+      model: 'snapshot-model',
+      systemPrompt: 'be a snapshot',
+      outputSchema: null,
+      strategy: 'auto',
+      ciFailOn: 'critical',
+      repoIntel: true,
+    });
+    // AC-20/R14: promote must restore the promoted version's linked-skill set,
+    // and do so BEFORE update()'s own snapshotVersion() call reads current
+    // skills — otherwise the forward version snapshot captures stale skills.
+    expect(setSkillsSpy).toHaveBeenCalledWith(AGENT_ID, ['skill-a', 'skill-b']);
+    expect(callOrder).toEqual(['setSkills', 'update']);
+    await app.close();
+  });
+
+  it('returns 404 when promoting a missing version', async () => {
+    vi.spyOn(AgentsRepository.prototype, 'getVersion').mockResolvedValue(undefined);
+
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/agents/${AGENT_ID}/versions/99/promote`,
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('not_found');
+    await app.close();
+  });
+});

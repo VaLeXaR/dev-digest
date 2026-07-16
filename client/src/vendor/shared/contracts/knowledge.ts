@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Severity, FindingCategory } from './findings.js';
 
 /**
  * Conformance, Onboarding, Eval, Memory, Conventions, Skills,
@@ -70,6 +71,26 @@ export type EvalRun = z.infer<typeof EvalRun>;
 export const EvalOwnerKind = z.enum(['skill', 'agent']);
 export type EvalOwnerKind = z.infer<typeof EvalOwnerKind>;
 
+/**
+ * A single scored expectation inside an eval case's `expected_output`.
+ * `must_find` — the agent's grounded findings must overlap this file/line
+ * range at least once for the case to pass. `must_not_flag` — any grounded
+ * finding overlapping this range is scored as a false positive.
+ * `severity`/`category`/`title` are optional, display-only (copied from the
+ * source finding when created via "Turn into eval case") — never used by the
+ * scoring function itself.
+ */
+export const ExpectedFinding = z.object({
+  type: z.enum(['must_find', 'must_not_flag']),
+  file: z.string(),
+  start_line: z.number().int(),
+  end_line: z.number().int(),
+  severity: Severity.nullish(),
+  category: FindingCategory.nullish(),
+  title: z.string().nullish(),
+});
+export type ExpectedFinding = z.infer<typeof ExpectedFinding>;
+
 export const EvalCase = z.object({
   id: z.string(),
   owner_kind: EvalOwnerKind,
@@ -78,7 +99,7 @@ export const EvalCase = z.object({
   input_diff: z.string(),
   input_files: z.unknown(),
   input_meta: z.unknown(),
-  expected_output: z.unknown(),
+  expected_output: z.array(ExpectedFinding),
   notes: z.string().nullish(),
 });
 export type EvalCase = z.infer<typeof EvalCase>;

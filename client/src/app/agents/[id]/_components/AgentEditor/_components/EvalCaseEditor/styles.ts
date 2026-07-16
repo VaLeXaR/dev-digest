@@ -1,0 +1,95 @@
+import type { CSSProperties } from "react";
+import type { ExpectedFinding } from "@devdigest/shared";
+
+/** Co-located styles for EvalCaseEditor. */
+export const s = {
+  body: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 24,
+    padding: 24,
+  } satisfies CSSProperties,
+  col: { display: "flex", flexDirection: "column", minWidth: 0 } satisfies CSSProperties,
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: "var(--text-secondary)",
+    marginBottom: 8,
+  } satisfies CSSProperties,
+  sectionHeaderRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  } satisfies CSSProperties,
+  tabsWrap: { marginBottom: 10 } satisfies CSSProperties,
+  textarea: {
+    width: "100%",
+    minHeight: 320,
+    resize: "vertical",
+    padding: "12px 14px",
+    borderRadius: 8,
+    border: "1px solid var(--border-strong)",
+    background: "var(--bg-elevated)",
+    color: "var(--text-primary)",
+    fontSize: 13,
+    lineHeight: 1.6,
+    outline: "none",
+    boxSizing: "border-box",
+  } satisfies CSSProperties,
+  entriesWrap: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    marginTop: 10,
+  } satisfies CSSProperties,
+  entryRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 12,
+  } satisfies CSSProperties,
+  entryPath: {
+    color: "var(--text-secondary)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    flex: 1,
+  } satisfies CSSProperties,
+  entryTypeBadge: (type: ExpectedFinding["type"]) =>
+    ({
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "2px 8px",
+      borderRadius: 5,
+      fontSize: 11,
+      fontWeight: 600,
+      border: "1px solid " + (type === "must_find" ? "var(--ok)" : "var(--crit)"),
+      color: type === "must_find" ? "var(--ok)" : "var(--crit)",
+      background: type === "must_find" ? "var(--ok-bg)" : "var(--crit-bg)",
+      cursor: "pointer",
+    }) satisfies CSSProperties,
+  resultLine: (pass: boolean) =>
+    ({
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 12,
+      padding: "10px 14px",
+      borderRadius: 8,
+      fontSize: 13,
+      fontWeight: 600,
+      color: pass ? "var(--ok)" : "var(--crit)",
+      background: pass ? "var(--ok-bg)" : "var(--crit-bg)",
+    }) satisfies CSSProperties,
+  footer: { display: "flex", alignItems: "center", justifyContent: "space-between" } satisfies CSSProperties,
+  footerToggle: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    fontSize: 13,
+    color: "var(--text-secondary)",
+    cursor: "pointer",
+  } satisfies CSSProperties,
+  footerButtons: { display: "flex", gap: 10 } satisfies CSSProperties,
+} as const;

@@ -23,6 +23,9 @@ export {
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
 
+// Pure eval-case scoring (recall/precision/citation_accuracy/pass) — zero LLM calls.
+export { scoreEvalCase, type EvalScore } from './eval/score.js';
+
 // Structured-output helpers (Zod → JSON Schema + parse-with-repair).
 export {
   toJsonSchema,

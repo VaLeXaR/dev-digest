@@ -8,6 +8,10 @@ import { Toggle, EmptyState } from "@devdigest/ui";
 import type { FindingRecord } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
+import {
+  useCreateEvalCaseFromFinding,
+  useFindingsWithEvalCases,
+} from "../../../../../../../lib/hooks/eval";
 import { KEY_TO_ACTION } from "./constants";
 import { visibleFindings } from "./helpers";
 import { s } from "./styles";
@@ -21,6 +25,7 @@ export function FindingsPanel({
   onGoToDiff,
   targetFindingId,
   targetFindingNonce,
+  agentId,
 }: {
   findings: FindingRecord[];
   prId: string;
@@ -30,9 +35,18 @@ export function FindingsPanel({
   onGoToDiff?: (file: string, line: number) => void;
   targetFindingId?: string | null;
   targetFindingNonce?: number;
+  /** The finding's own review's reviewing agent id (`review.agent_id`, G6) —
+   *  required to build the "Turn into eval case" request path. Null/undefined
+   *  when the review has no agent (summary/legacy reviews); the button is then
+   *  disabled rather than hidden. */
+  agentId?: string | null;
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
+  // Rules of Hooks: always call the hook, even with an empty placeholder id —
+  // the mutation never actually fires while `agentId` is falsy because the
+  // button is disabled in that case (see `evalCaseDisabled` below).
+  const createEvalCase = useCreateEvalCaseFromFinding(agentId ?? "");
   const [hideLow, setHideLow] = React.useState(false);
   const [focusIdx, setFocusIdx] = React.useState(0);
 
@@ -40,6 +54,9 @@ export function FindingsPanel({
     () => visibleFindings(findings, hideLow, severityFilter ?? null),
     [findings, hideLow, severityFilter],
   );
+
+  const findingIds = React.useMemo(() => shown.map((f) => f.id), [shown]);
+  const evalCases = useFindingsWithEvalCases(findingIds);
 
   // j/k navigation + a/d shortcuts on the focused finding (keyboard).
   React.useEffect(() => {
@@ -82,6 +99,11 @@ export function FindingsPanel({
               onGoToDiff={onGoToDiff}
               targetId={targetFindingId}
               targetNonce={targetFindingNonce}
+              onTurnIntoEvalCase={() => createEvalCase.mutate({ finding_id: f.id })}
+              evalCaseDisabled={!agentId}
+              evalCaseDisabledReason={t("finding.noAgentForEvalCase")}
+              evalCasePending={createEvalCase.isPending && createEvalCase.variables?.finding_id === f.id}
+              hasEvalCase={evalCases.data?.has(f.id) ?? false}
             />
           ))
         )}

@@ -208,6 +208,22 @@ export class AgentsService {
   }
 
   /**
+   * Promote a past config snapshot to be the agent's active configuration —
+   * the Compare view's "Promote vN" (AC-20). Reuses the repository's
+   * `update()` path so a fresh forward version is snapshotted; history is
+   * never mutated. Returns undefined when the agent isn't in this workspace
+   * or the target version doesn't exist (route → 404).
+   */
+  async promoteVersion(
+    workspaceId: string,
+    agentId: string,
+    version: number,
+  ): Promise<Agent | undefined> {
+    const row = await this.repo.promoteVersion(workspaceId, agentId, version);
+    return row ? toAgentDto(row) : undefined;
+  }
+
+  /**
    * Dynamic model list from the provider adapter's /models. Degrades gracefully
    * to [] if the provider key is not configured (the editor still renders).
    */
