@@ -1,5 +1,17 @@
 # Spec: Eval Pipeline  |  Spec ID: SPEC-2026-07-15-eval-pipeline  |  Status: approved
 
+> **Scope-extension note (2026-07-16).** The agent-eval scope of this spec (AC-1..AC-28, all
+> `## Resolved decisions`) remains **approved and immutable** — do not re-edit it. This revision
+> **adds** a skills-eval extension (`owner_kind='skill'`), threaded through Goals, Non-goals,
+> Assumptions, Dependencies, Architecture, the Design references table (`design/07`), Acceptance
+> criteria (AC-29..AC-38), Edge cases, and Inputs. The extension was clarified on 2026-07-16
+> (`spec-clarification`): the crux — what "running an eval on a skill" *means* — is resolved to the
+> `evals/`-package model (skill `body` as the system prompt via `reviewPullRequest`; AC-38), with the
+> `eval_run_batches` shape, run-entry-point, and disabled-skill questions all resolved and the skill
+> Compare view deferred (see `## Resolved decisions — skills extension` and `## Deferred`). No open
+> `[NEEDS CLARIFICATION]` items remain; the whole spec (AC-1..AC-38) is ready for
+> `implementation-planner`.
+
 ## Problem & why
 DevDigest's reviewer agents (Security Reviewer, Performance Reviewer, Custom Mentor) evolve by
 editing their system prompt, skills, and model. Today there is no way to tell whether a prompt edit
@@ -11,6 +23,19 @@ version B ("old prompt vs new") before promoting the change. The data layer for 
 (`eval_cases` / `eval_runs` tables and their Zod contracts) already exists in the repo but is
 completely unwired — no route, service, or UI consumes it (translated from the requester's Ukrainian
 description).
+
+**Skills extension (2026-07-16).** Reviewer **skills** (rubrics, conventions, security rules) evolve
+the same way an agent's prompt does — a skill's `body` is edited and re-versioned (`skills.version`,
+`skill_versions`, `server/src/db/schema/skills.ts:18,23-34`) — and can silently make the agents that
+pull it better or worse. The `eval_cases` table is *already* owner-generic
+(`owner_kind` enum includes `'skill'`, `server/src/db/schema/eval.ts:13`), and a new
+`design/07-skill-editor-evals-tab.png` mockup shows a **Skill Editor → Evals tab** mirroring the
+agent one. This extension brings the same regression harness to skills. The crux — unlike an agent, a
+**skill is not a runnable reviewer** — it has no system prompt and no `reviewPullRequest`; it only
+rides along an agent's review as a `<skill>…</skill>` prompt slot (`reviewer-core/src/prompt.ts:52-55,156`)
+— was resolved in clarification (2026-07-16): a skill eval runs `reviewPullRequest` with the skill's
+`body` supplied **as the system prompt**, matching the existing `evals/` package model (AC-38; see
+`## Resolved decisions — skills extension`).
 
 ## Goals / Non-goals
 **Goals**
@@ -28,6 +53,17 @@ description).
 - A separate **Eval Dashboard** left-sidebar page showing the latest eval runs across all reviewer
   agents, with a per-agent drill-down (`design/04`, `design/06`).
 
+**Goals — skills extension (draft)**
+- An **Evals** tab in the **Skill Editor**, listing every eval case in a skill's set
+  (`owner_kind='skill'`, `owner_id=<skillId>`), with per-case run/edit/delete, "Run all evals", and a
+  header **"Run on evals"** entry point (`design/07`). Added alongside the skill editor's existing
+  Config/Preview/Context/Stats/Versions tabs (`client/src/app/skills/[id]/_components/SkillEditor/constants.ts:9-15`).
+- Running a skill over **all** cases in its set as one run, recording `recall`/`precision`/`citation_accuracy`
+  with the **same code-only scoring and grounding gate as agents, unchanged** (the scoring function is
+  owner-agnostic — it takes `(expected_output, findings, input_diff)` only).
+- Recording the **skill version** scored on each set-run (from `skills.version`/`skill_versions`), so
+  two runs of different skill versions are comparable — the skill analogue of the agent-version label.
+
 **Non-goals**
 - Changing the **behaviour** of the live PR review pipeline, the grounding gate logic
   (`reviewer-core/src/grounding.ts`), or the `Finding`/`Review` contracts — the eval pipeline
@@ -41,9 +77,25 @@ description).
   shown in `design/02`/`design/04` — those nav items do not exist in code (`nav.ts` has only
   WORKSPACE and SKILLS LAB); only the single **Eval Dashboard** item is in scope.
 - Any LLM-judged or semantic scoring — matching is purely file + line-range overlap.
-- Auto-scheduling eval runs, CI gating on eval results, or eval cases for **skills** (the
-  `eval_cases.owner_kind` enum includes `'skill'`, but this feature targets `owner_kind='agent'`
-  only).
+- Auto-scheduling eval runs or CI gating on eval results. *(The former "eval cases for skills"
+  exclusion is **removed by the 2026-07-16 extension** — skills are now in scope for the Evals tab;
+  see the skill-scoping non-goals below for what within skills-eval stays out.)*
+
+**Non-goals — skills extension (draft)**
+- A **skill Compare-runs / content-diff view**. The agent Compare view diffs the agent *system prompt*
+  (`client/src/app/eval/[agentId]/_components/CompareRunsModal/CompareRunsModal.tsx:45-49`); a skill
+  has no system prompt, only a `body` (versioned in `skill_versions`), and **no skill-content diff
+  capability exists anywhere in the app today** — it would be net-new. `design/07` shows only the
+  Evals tab (no Compare affordance), so a skill Compare view is out of scope for this extension
+  (recorded as an explicit divergence; see `## Deferred` for the follow-up shape if later wanted).
+- **Listing skills on the cross-agent Eval Dashboard** (`design/04`/`design/06`). `design/07` scopes
+  skills-eval to the Skill Editor's Evals tab only; the dashboard's cross-owner overview shape
+  (`EvalDashboardOverview`) stays agent-only for now.
+- **"Turn into eval case" (create-from-finding) for skills.** That one-click path derives its owner
+  agent from the source finding's own review (`EvalCaseFromFindingInput`, no owner field,
+  `server/src/vendor/shared/contracts/eval-ci.ts:80-88`); a finding traces to an *agent* review, not
+  a skill run, so there is no skill equivalent. Skill eval cases are authored via "+ New eval case"
+  only (AC-30).
 
 ## Assumptions
 - **The feature spans server + reviewer-core + client**, so it lives in the repo-root `specs/`
@@ -72,6 +124,29 @@ description).
   the accept/dismiss routes already exist (`POST /findings/:id/accept|dismiss`,
   `server/src/modules/reviews/routes.ts:144`), so decision state is available at click time.
 
+**Assumptions — skills extension (draft)**
+- **A "skill's set" = every `eval_cases` row where `owner_kind='skill'` and `owner_id=<skillId>`** —
+  the table is already owner-generic (`owner_id` is a bare uuid with **no FK**, so it references a
+  skill just as validly as an agent, `server/src/db/schema/eval.ts:13-14`). No schema change is
+  needed for the *case* layer; the case machinery generalizes to skills for free.
+- **The scoring + grounding functions are owner-agnostic and are reused unchanged.** They operate on
+  `(expected_output, findings, input_diff)` and `(findings, diff)` respectively — no agent or skill
+  concept (`reviewer-core/src/grounding.ts:52`, plus the pure scoring function this spec adds). A
+  skill run reuses them verbatim; only the *production of findings* differs (the crux — see clarifications).
+- **A skill has a monotonic version to record on a batch**, analogous to `agents.version`:
+  `skills.version` (integer, `server/src/db/schema/skills.ts:18`) snapshotted per body edit into
+  `skill_versions` (`skills.ts:23-34`), with the `SkillVersion` contract already present
+  (`server/src/vendor/shared/contracts/knowledge.ts:168-173`) and a `GET /skills/:id/versions` route.
+  The UI renders it `v${version}` (the `v5` pill, `design/07`).
+- **The skill editor already has Stats and Versions tabs**, so — unlike the agent editor, where
+  Stats/CI had to be documented as accepted divergences — the *only* tab this extension adds is
+  **Evals**, yielding exactly the 6-tab row in `design/07` (Config · Context · Preview · Evals · Stats
+  · Versions) with **no** accepted tab divergence
+  (`client/src/app/skills/[id]/_components/SkillEditor/constants.ts:9-15`).
+- **The skill-execution model was resolved in clarification** (a skill cannot be run standalone, so it
+  runs `reviewPullRequest` with the skill `body` as the system prompt — the `evals/`-package model,
+  AC-38), documented under `## Resolved decisions — skills extension`.
+
 ## Dependencies
 - **Existing eval data layer** — tables `eval_cases`/`eval_runs` (`server/src/db/schema/eval.ts:7,22`)
   and contracts `EvalCase`/`EvalRun`/`EvalOwnerKind` (`server/src/vendor/shared/contracts/knowledge.ts:50,58,70,73`),
@@ -95,6 +170,36 @@ description).
   + tab registry `constants.ts:10-14`.
 - **Sidebar nav registry** — `client/src/vendor/ui/nav.ts:21` (`NAV`), SKILLS LAB group `nav.ts:30-37`.
 
+**Dependencies — skills extension (draft):**
+- **`skills` + `skill_versions` tables** (`server/src/db/schema/skills.ts:5-21,23-34`) and the `Skill`
+  / `SkillVersion` contracts (`server/src/vendor/shared/contracts/knowledge.ts:142-157,168-173`) — the
+  run records which skill version it scored; the `body` column is the skill's content.
+- **`agent_skills` join table** (`server/src/db/schema/agents.ts:51-64`) — the only mechanism by which
+  a skill reaches a review (there is **no** skills array on `agents`); a skill's live behaviour is as
+  an *enabled link on some agent*. Relevant to the execution-model clarification (which host agent runs
+  the skill).
+- **Skill prompt slot** — `reviewer-core/src/prompt.ts:52-55,119-122,156` (`wrapSkill` → `## Skills /
+  rules` section) and `PromptParts.skills?: string[]` (`prompt.ts:63-64`). A skill enters a review
+  **only** as a pre-resolved body string wrapped in `<skill>…</skill>`; it has no system prompt.
+- **Review engine input shape** — `reviewer-core/src/review/run.ts:44-98` (`ReviewInput`): requires a
+  trusted `systemPrompt: string`; `skills?: string[]` is optional/additive. **There is no entry that
+  runs a skill without an agent system prompt** — the core dependency behind the execution-model
+  clarification.
+- **Existing agent skill-loading at run time** — `server/src/modules/reviews/run-executor.ts:198-208`
+  and the eval mirror `server/src/modules/eval/service.ts:208-214` (`resolveSkills`): loads an agent's
+  enabled linked skills, formats each `### <name>\n<body>`, passes them as `skills` into
+  `reviewPullRequest`. The precedent a skill-eval run would reuse (via a host agent).
+- **Skill editor tab host** — `client/src/app/skills/[id]/_components/SkillEditor/SkillEditor.tsx:14-37`
+  + tab registry `constants.ts:9-15` (Config/Preview/Context/Stats/Versions today; add Evals).
+- **`EvalRunBatchRecord` contract** (`server/src/vendor/shared/contracts/eval-ci.ts:62-74`) — currently
+  **agent-specific** (`agent_id`, `agent_version`). A skill batch needs this generalized or paralleled
+  (schema decision — see Architecture & the clarification).
+- **`evals/` CLI harness (adjacent, NOT reused)** — `evals/src/tasks.ts:21-24` `skillTask()` runs a
+  skill in isolation by injecting an on-disk `SKILL.md` **as the system prompt** through the Claude
+  Code SDK. Architecturally disjoint from the studio engine (no DB, no `reviewPullRequest`, no
+  grounding). Named here only so the clarification can consider whether its "skill body as system
+  prompt" model is (or is not) the intended execution model.
+
 ## User stories
 - As a reviewer, I want to turn a real finding into an eval case in one click, so I can capture a
   regression example without re-typing the diff or the expectation.
@@ -108,6 +213,11 @@ description).
   metric deltas and the prompt diff before promoting a version.
 - As a team lead, I want an Eval Dashboard across all reviewer agents, so I can spot a regression in
   any agent at a glance.
+- As a skill author, I want an Evals tab on the Skill Editor listing that skill's regression cases,
+  so I know what the skill's rubric is expected to catch and not catch (`design/07`).
+- As a skill author, I want to run the skill across all its cases in one click and get
+  recall/precision/citation_accuracy, so I can tell whether editing the skill's `body` (v4 → v5)
+  helped or hurt before I re-version it.
 
 ## Architecture & contracts
 
@@ -239,6 +349,60 @@ flowchart TD
   and returns `{ recall, precision, citation_accuracy, pass }`; no I/O, no LLM (fits reviewer-core's
   purity contract, `reviewer-core/CLAUDE.md`).
 
+### Skills extension (draft)
+
+**What generalizes for free vs. what does not:**
+
+| Layer | Agent-eval today | Skills-eval | Change needed |
+| --- | --- | --- | --- |
+| `eval_cases` table + `EvalCase`/`EvalCaseInput` contracts | owner-generic (`owner_kind`/`owner_id`, no FK) | same rows, `owner_kind='skill'` | **none** |
+| Pure scoring fn + `groundFindings` | owner-agnostic `(expected, findings, diff)` | reused verbatim | **none** |
+| `EvalRunRecord`/`EvalRunResult`/`EvalTrendPoint`/`EvalDashboard` (single-owner) | owner-generic | reused | **none** (`EvalDashboard` already `owner_kind`/`owner_id`, `eval-ci.ts:110-112`) |
+| `eval_run_batches` table + `EvalRunBatchRecord` | **agent-specific** (`agent_id`/`agent_version`, `eval.ts:30-43`, `eval-ci.ts:62-74`) | owner-generic (`owner_kind`/`owner_id`/`owner_version`), migration backfills `agent` | **YES — schema + contract (resolved: owner-generic, no host-agent cols)** |
+| Producing findings from the owner | `reviewPullRequest(agent.systemPrompt, …)` | `reviewPullRequest(systemPrompt = skill.body, …)` — evals-package model | **YES — execution model (resolved: skill body as system prompt, AC-38)** |
+| Compare-runs prompt diff | diffs agent `system_prompt` | skill has `body`, not a prompt; no diff capability exists | out of scope (Non-goals) |
+
+**`eval_run_batches` shape — RESOLVED (owner-generic).** Mirror the `eval_cases` precedent and make
+the batch **owner-generic**: replace `agent_id`/`agent_version` with `owner_kind` (`skill|agent`),
+`owner_id` (bare uuid, no FK — same tradeoff `eval_cases` already accepts, `eval.ts:13-14`), and
+`owner_version` (the agent *or* skill version scored). A new migration backfills existing rows to
+`owner_kind='agent'` (never edit existing migrations, `server/CLAUDE.md`). `EvalRunBatchRecord`
+generalizes the same way. Because the resolved execution model (AC-38) runs the skill directly
+(`systemPrompt = skill.body`) with **no host agent**, the batch needs **no**
+`host_agent_id`/`host_agent_version` columns.
+
+**Run + scoring flow for a skill (open step highlighted):**
+
+```mermaid
+flowchart TD
+    A([Run all evals / Run on evals for skill S]) --> B[Load skill S + its version from skills.version]
+    B --> C[Load all eval_cases where owner_kind=skill, owner_id=S]
+    C --> D{for each case}
+    D --> E[["Produce findings: reviewPullRequest with<br/>systemPrompt = skill.body, diff = case.input_diff<br/>(evals-package model; no host agent; single run)"]]
+    E --> F[Grounding gate: groundFindings kept vs dropped — REUSED unchanged]
+    F --> G[Score in code — REUSED pure scoring fn, NO LLM]
+    G --> H[Persist per-case eval_run: recall/precision/citation_accuracy/pass/cost]
+    H --> D
+    D -->|done| I[Aggregate + write eval_run_batches row recording SKILL version<br/>owner_kind=skill, owner_id=S, owner_version]
+    I --> J([Batch + per-case rows appear in the skill's Evals tab])
+```
+
+**New/changed interface shapes (skills — field-level, no implementation):**
+- **`EvalRunBatchRecord` → owner-generic**: `owner_kind` (`skill|agent`), `owner_id` (string),
+  `owner_version` (int) replacing `agent_id`/`agent_version`; other fields
+  (`recall`/`precision`/`citation_accuracy`/`pass_count`/`total_count`/`cost_usd`/`ran_at`) unchanged.
+  Synced to **both** vendor copies (server + client). No `host_agent_*` fields (AC-38 uses no host
+  agent).
+- **Skill eval-run route** — a skill analogue of `POST /agents/:id/eval-runs`, e.g.
+  `POST /skills/:id/eval-runs`: skill id in path, no body (runs the whole set), returns the batch
+  record. Internally each case runs via `reviewPullRequest({ systemPrompt: skill.body, diff })`
+  (AC-38), then the shared grounding gate + scorer.
+- **Skill eval-case CRUD** — `GET /skills/:id/eval-cases` (list the set) + create/edit/delete/run-one,
+  reusing the owner-generic `EvalCaseInput` with `owner_kind='skill'`, `owner_id=<skillId>`. No
+  create-from-finding variant (Non-goals).
+- **No new scoring contract** — the reviewer-core pure scoring function and `groundFindings` are used
+  unchanged; a skill run differs only in how `findings` are produced upstream of scoring.
+
 ## Design references
 | File | Shows | Grounds |
 | --- | --- | --- |
@@ -248,6 +412,7 @@ flowchart TD
 | `design/04-eval-dashboard.png` | Eval Dashboard sidebar page: header + "Run all agents", per-agent list (Security/Performance/Custom Mentor + sparkline + Recall/Prec/Cite), "RECENT EVAL RUNS · ALL AGENTS" table | User story 6; AC-15 |
 | `design/05-eval-case-editor.png` | New/edit eval case modal: Name + Input tabs Diff/Files/PR meta (diff adds `stripeKey: "sk_live_..."`), Expected output editor with "valid JSON" badge + "+ Finding skeleton", Run on save toggle, Cancel/Run case/Save, "Last run passed · expected 1 finding, got 1 · 1.8s · $0.02" | User story 1; AC-3, AC-19 |
 | `design/06-eval-dashboard-agent-detail.png` | Per-agent drill-down: warning banner "Precision dipped 2pts on v7…", three metric tiles + sparklines, METRIC TREND multi-line chart, RECENT RUNS table with checkboxes to select exactly two runs → Compare (opens `design/02`) | User story 5; AC-12, AC-13, AC-15 |
+| `design/07-skill-editor-evals-tab.png` | Skill Editor with skill `pr-quality-rubric` (badge `rubric`, version pill `v5`) selected; tab row Config · Context · Preview · **Evals** · Stats · Versions (Evals active); top-right **"Run on evals"** button; Evals body "Eval cases 17/20 passing", "Run all evals", "+ New eval case", per-case rows (stripe-key-leak pass, ssrf-webhook pass, missing-retry-after fail "got 0", clean-refactor-no-flags empty[] pass, service-role-in-client "never run") each with run/edit/delete icons; left skill-list cards show pre-existing per-skill metadata (type badge, source, "N agents · X% pull · Y% accept") | Skills user stories; AC-29..AC-38 |
 
 ## Acceptance criteria (EARS)
 - AC-1: WHEN a reviewer activates "Turn into eval case" on an **accepted** finding, the system shall
@@ -318,6 +483,45 @@ flowchart TD
 - AC-28: WHEN a reviewer activates "View full dashboard →" from the Evals tab, the system shall
   navigate to the Eval Dashboard page with no additional backend call.
 
+**Skills extension (AC-29..AC-38).** These cover the skill-parallel behaviour, including the
+resolved execution model (skill `body` as the system prompt — AC-38).
+- AC-29: WHEN a reviewer opens a skill's Evals tab, the system shall list every eval case whose
+  `owner_kind='skill'` and `owner_id` equals that skill, showing each case's last-run pass/fail state
+  or "never run" (the skill analogue of AC-4, `design/07`).
+- AC-30: WHERE a reviewer authors an eval case from a skill's Evals tab ("+ New eval case"), the
+  system shall create it with `owner_kind='skill'` and `owner_id` set to that skill; the system shall
+  not offer a create-from-finding path on skills (a finding traces to an agent review, not a skill).
+- AC-31: WHEN the skill editor renders its tab row, the system shall show an **Evals** tab alongside
+  the existing Config, Preview, Context, Stats, and Versions tabs (`design/07`,
+  `client/src/app/skills/[id]/_components/SkillEditor/constants.ts:9-15`).
+- AC-32: The system shall score a skill's eval run with the **same** owner-agnostic pure scoring
+  function and grounding gate used for agents (AC-7..AC-11, AC-21, AC-24), with zero LLM calls in the
+  scoring step, and shall apply the same "n/a"/empty-set rules (AC-16, AC-25).
+- AC-33: WHEN a reviewer activates **either** "Run all evals" (body) **or** "Run on evals" (header)
+  for a skill, the system shall run every case in the skill's set as a single run — both entry points
+  triggering the same set-run — and record `recall`, `precision`, and `citation_accuracy`.
+- AC-34: WHEN the system completes a skill set-run, the system shall write one `eval_run_batches` row
+  whose owner columns are `owner_kind='skill'`, `owner_id=<skillId>`, and `owner_version` set to the
+  skill version scored (from `skills.version`), so two runs of different skill versions are
+  comparable, and shall link each per-case `eval_runs` row to that batch via `batch_id` (the skill
+  analogue of AC-12).
+- AC-35: WHEN a skill eval case runs, the system shall treat the case's snapshotted diff as untrusted
+  data and wrap it with the same `INJECTION_GUARD` treatment as `reviewer-core/src/prompt.ts` (the
+  skill analogue of AC-17), regardless of the execution model chosen.
+- AC-36: IF the skill run fails for one case during a set run, THEN the system shall record that case
+  as failed with the reason and continue running the remaining cases, instead of aborting the whole
+  run (the skill analogue of AC-18).
+- AC-37: WHERE a skill is disabled (`skills.enabled=false`) or attached to no agent, the system shall
+  still allow running its eval set from the Evals tab — an eval measures the skill's `body` directly
+  and (per the AC-38 execution model) does not route through the live `enabled && skill.enabled`
+  host-agent gate (`run-executor.ts:200`).
+- AC-38: WHEN the system runs a skill eval case, the system shall produce the case's findings by
+  invoking the review engine (`reviewPullRequest`) with the skill's `body` as the system prompt and
+  the case's snapshotted `input_diff` as the `<untrusted>`-wrapped review input, and shall then score
+  those findings with the same `groundFindings` gate and the same owner-agnostic pure scorer used for
+  agents — introducing no host/reference agent and performing a single run per case (not a
+  baseline-vs-candidate lift).
+
 ## Success criteria (measurable)
 - The scoring step issues **0** LLM calls per run (verifiable by call count).
 - A one-line system-prompt change (e.g. adding "Flag unused imports as suggestions.", `design/02`)
@@ -326,6 +530,8 @@ flowchart TD
 - **100%** of eval runs record the agent `version` they scored (no run with a null/unknown version).
 - Creating an eval case from a finding takes exactly **one** user action (one click on "Turn into
   eval case"), with no intermediate form required to capture the diff or expectation.
+- **Skills extension:** **100%** of skill eval-run batches record the skill `version` they scored (no
+  batch with a null/unknown skill version), matching the agent-version guarantee.
 
 ## Edge cases
 - **Case with only `must_not_flag` expectations** — contributes nothing to `recall`'s denominator;
@@ -351,6 +557,25 @@ flowchart TD
 - **Sidebar "GLOBAL" group in `design/02`/`design/04` does not exist** — **resolved:** the Eval
   Dashboard item is inserted after Conventions in the SKILLS LAB group (`nav.ts:35`); the GLOBAL
   group is out of scope (Non-goals), an accepted, documented divergence from the mockup.
+- **Skills — editor tab row (`design/07`)** — the skill editor already ships Config/Preview/Context/
+  Stats/Versions (`SkillEditor/constants.ts:9-15`); adding only **Evals** yields exactly the mockup's
+  6-tab row with **no** accepted divergence (unlike the agent editor, where Stats/CI stayed out).
+- **Skills — "Run on evals" (header) vs "Run all evals" (body)** — `design/07` shows two run entry
+  points on the skill Evals view. **Resolved:** they are the **same action** — with no host-agent
+  selection to make (AC-38), both trigger the same skill set-run (AC-33).
+- **Skills — case `service-role-in-client` "never run" / `clean-refactor-no-flags` empty[] (`design/07`)**
+  — identical states to the agent Evals tab (`design/03`); reuse the same "never run" and
+  empty-expected-set rendering (AC-16, AC-25).
+- **Skills — skill with zero eval cases** — "Run all evals" over an empty set is a no-op with an
+  empty-state message, not an error (mirrors the agent empty-set edge case).
+- **Skills — skill attached to no agent, or disabled** — an eval measures the skill's `body` directly,
+  so a skill with `agent_count=0` or `enabled=false` is still eval-able; the resolved execution model
+  (AC-38) runs `body` as the system prompt and does **not** route through the live `enabled` gate, so
+  no gate is re-applied (AC-37).
+- **Skills — `left skill-list metadata cards` ("N agents · X% pull · Y% accept", `design/07`)** — these
+  are **pre-existing** skill UI (`Skill.agent_count`/`pull_pct`/`accept_pct`,
+  `knowledge.ts:153-155`), context only, **not** part of this eval feature; no requirement derives from
+  them.
 
 ## Non-functional
 - **Security**: an eval case's `input_diff` is a snapshot of externally-authored PR content and is
@@ -363,6 +588,14 @@ flowchart TD
   reads with no LLM.
 - **a11y**: metric deltas must not be conveyed by color alone — the design pairs each delta with a
   ▲/▼ arrow and a signed number (`design/02`, `design/03`); preserve the text/arrow signal.
+- **Security (skills)**: a skill eval run feeds the case's snapshotted (externally-authored) diff to a
+  model, so the same `INJECTION_GUARD`/`<untrusted>` wrapping applies (AC-35). The resolved execution
+  model (AC-38) injects the skill's own `body` **as the system prompt** (the `evals/` `skillTask`
+  style), which forgoes the production `<skill>` `INJECTION_GUARD` classification
+  (`reviewer-core/src/prompt.ts:29-33`). This is **not** a security regression: a skill's `body` is
+  trusted, workspace-authored rule text (the untrusted input is the diff, still wrapped); the
+  `<skill>` classification governs agent-role-vs-skill-rule *precedence* in a live review, which a
+  skill eval does not measure.
 
 ## Inputs (provenance)
 - Eval case persistence (diff/files/meta/expected snapshot): [deterministic:
@@ -384,6 +617,22 @@ flowchart TD
 - Injection wrapping of the snapshot diff: [reused: `reviewer-core/src/prompt.ts:16` `INJECTION_GUARD`,
   `prompt.ts:46-50,167` `wrapUntrusted`/`assemblePrompt`].
 
+**Inputs (provenance) — skills extension (draft):**
+- Skill eval-case persistence: [deterministic: `server/src/db/schema/eval.ts:8-24` `eval_cases` with
+  `owner_kind='skill'`] — same owner-generic table, no schema change.
+- Skill version recorded on a batch: [reused: `server/src/db/schema/skills.ts:18` `skills.version` +
+  `skills.ts:23-34` `skill_versions`; `server/src/vendor/shared/contracts/knowledge.ts:168-173`
+  `SkillVersion`].
+- Skill content (the thing being evaluated): [reused: `server/src/db/schema/skills.ts:16` `skills.body`;
+  its prompt-slot injection at `reviewer-core/src/prompt.ts:52-55,156`].
+- Producing findings from a skill: [new: N LLM calls per run] via `reviewPullRequest` with the skill's
+  `body` supplied as the `systemPrompt` (AC-38) — the studio-engine adaptation of the `evals/`
+  package's skill model [reused-pattern: `evals/src/tasks.ts:21-24` `skillTask`,
+  `evals/src/artifacts/load.ts:19-31` `skillContent`], satisfying `ReviewInput`'s required
+  `systemPrompt` (`reviewer-core/src/review/run.ts:44-98`) without a host agent.
+- Scoring + grounding: [reused unchanged: same owner-agnostic pure scoring fn + `groundFindings`,
+  `reviewer-core/src/grounding.ts:52`].
+
 ## Untrusted inputs
 Yes. An eval case's `input_diff` (and `input_files`/`input_meta`) is a snapshot of real PR content —
 authored by whoever wrote the reviewed code, i.e. externally influenced — and is fed to the reviewer
@@ -391,6 +640,13 @@ agent as the diff to review. It must be treated as **data, not instructions**, w
 `INJECTION_GUARD` treatment as `reviewer-core/src/prompt.ts` (AC-17). This is inherited automatically
 **only** if the eval run routes through `reviewPullRequest` → `assemblePrompt` (which wraps the diff
 in `<untrusted>`); a scoring-only or bespoke run path must not bypass that wrapping.
+
+**Skills extension:** identical — a skill eval case's `input_diff` is the same untrusted PR snapshot
+and must be `<untrusted>`-wrapped when the skill is run over it (AC-35). Separately, the skill's own
+`body` is workspace-supplied **trusted** rule text: the resolved execution model (AC-38) promotes it
+to the system prompt (forgoing the production `<skill>` classification), which is safe because `body`
+is authored by the workspace, not an external party — see the Security (skills) note in
+`## Non-functional` and `## Resolved decisions — skills extension`.
 
 ## Resolved decisions (was [NEEDS CLARIFICATION])
 All open items from authoring were resolved in spec-clarification (see AC-10, AC-21..AC-28, the
@@ -400,3 +656,59 @@ data-model note, and the Edge cases section). No open clarifications remain.
   `POST /agents/:id/eval-runs` over enabled reviewer agents under the 10/min rate limit (AC-27);
   "View full dashboard →" is pure navigation (AC-28). Cost note: a full run is (agents × cases) LLM
   calls — acceptable for the demo, bounded by sequential execution + rate limit.
+
+> The statement above ("No open clarifications remain") applies to the **agent-eval scope
+> (AC-1..AC-28)**. The **skills extension (AC-29..AC-38)** was clarified on 2026-07-16 — its
+> resolutions are in the next section (`## Resolved decisions — skills extension`); no open items
+> remain.
+
+## Resolved decisions — skills extension (was [NEEDS CLARIFICATION])
+
+All open items from the 2026-07-16 skills extension were resolved in spec-clarification
+(2026-07-16). The resolutions are folded into Goals/Non-goals, Architecture, Acceptance criteria
+(AC-33/AC-34/AC-37 rewritten; AC-38 added), Edge cases, Non-functional, and Inputs. No open
+`[NEEDS CLARIFICATION]` items remain for the skills extension.
+
+- **The crux — what "running an eval on a skill" MEANS: model (B), skill `body` as the system
+  prompt, consistent with the `evals/` package.** Verified against the existing `evals/` benchmark
+  harness: `skillTask` (`evals/src/tasks.ts:21-24`) injects the skill's content **as the system
+  prompt** (`skillContent` → `systemPrompt`, `evals/src/artifacts/load.ts:19-31`) to "measure the
+  artifact's CONTENT in isolation". The studio eval adopts the same model, adapted to the studio
+  engine so it still gets `<untrusted>`-diff wrapping + grounding + the code scorer: a skill run
+  calls `reviewPullRequest({ systemPrompt: skill.body, diff: case.input_diff })`, then the same
+  `groundFindings` gate and the same owner-agnostic pure scorer as agents. **No host/reference
+  agent** is introduced (option A rejected), and it is a **single run per case** — not a
+  baseline-vs-candidate lift (option C rejected) — because `design/07` shows absolute per-case
+  pass/fail ("expected 1 finding, got 1"), not a delta. See AC-33, AC-38.
+  - *Security nuance (resolved, not a regression):* a skill's `body` is **trusted,
+    workspace-authored** rule text; the untrusted input is always the `input_diff`, which stays
+    `<untrusted>`-wrapped (AC-35). Promoting `body` to the system prompt therefore does not expose an
+    injection hole — it only measures the skill as a standalone reviewer, exactly as `evals/` already
+    does deliberately. The production `<skill>` `INJECTION_GUARD` classification governs
+    agent-role-vs-skill-rule *precedence* in a live review, which is not what a skill eval measures.
+- **`eval_run_batches` shape: owner-generic, no host-agent columns.** `owner_kind` (`skill|agent`),
+  `owner_id` (bare uuid, no FK — matching the `eval_cases` precedent, `eval.ts:13-14`), and
+  `owner_version` replace `agent_id`/`agent_version`; a new migration backfills existing rows to
+  `owner_kind='agent'` (never edit existing migrations, `server/CLAUDE.md`). Because model (B) uses
+  **no** host agent, **no** `host_agent_id`/`host_agent_version` columns are needed. `EvalRunBatchRecord`
+  generalizes the same way, synced to both vendor copies. See AC-34.
+- **"Run on evals" (header) vs "Run all evals" (body): the same action.** With no host-agent
+  selection to make (model B), both entry points on `design/07` trigger the same skill set-run
+  (AC-33).
+- **Disabled skill (`enabled=false`) is still eval-able.** An eval measures the skill's `body`
+  directly; model (B) does not route through the live `enabled && skill.enabled` host-agent gate
+  (`run-executor.ts:200`), so a disabled or agent-unattached skill can still run its eval set. See
+  AC-37.
+- **Skill Compare-runs view: out of scope (deferred).** See `## Deferred`.
+- **Skills on the cross-agent Eval Dashboard: agent-only this iteration** (already a skills
+  Non-goal). `EvalDashboardOverview` stays agent-keyed (`eval-ci.ts:138-149`); skills surface their
+  metrics on the Skill Editor's Evals tab only (`design/07`).
+
+## Deferred
+
+- **Skill Compare-runs view** (metric deltas + skill-content diff between two skill versions).
+  `design/07` shows no Compare affordance, and no skill-content-diff capability exists in the app
+  today — the agent Compare's `diffLines` runs on `system_prompt` and is not reusable as-is
+  (`client/src/app/eval/[agentId]/_components/CompareRunsModal/CompareRunsModal.tsx:45-49`). If later
+  wanted, a skill Compare would diff two `skill_versions.body` snapshots (net-new). Deferred out of
+  this extension by decision on 2026-07-16.
