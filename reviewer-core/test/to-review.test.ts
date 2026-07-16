@@ -70,6 +70,47 @@ describe('toReviewPayload — deterministic CI gate', () => {
   });
 });
 
+describe('composeBody — summary line', () => {
+  // Mutation-testing gap: existing tests pin the review EVENT and blocker COUNT,
+  // but nothing asserts the rendered summary text. Stryker survivors on
+  // `severityCounts` (`+1` → `-1`, block/object emptied) and on the
+  // `findings.length === 1 ? '' : 's'` pluralization proved the per-severity
+  // tally and the count were untested. These assertions kill that cluster.
+  it('reports the pluralized finding count and the per-severity tally', () => {
+    // failOn 'never' → COMMENT event, so the body carries the summary section.
+    const p = toReviewPayload(
+      review([finding('CRITICAL'), finding('CRITICAL'), finding('WARNING')]),
+      { failOn: 'never' },
+    );
+    expect(p.body).toContain('**3 findings**'); // kills `=== 1` → `true`, and `s` → `""`
+    expect(p.body).toContain('2 critical · 1 warning · 0 suggestion'); // kills `+1` → `-1`, emptied counter
+  });
+
+  it('uses the singular noun for exactly one finding', () => {
+    const p = toReviewPayload(review([finding('WARNING')]), { failOn: 'never' });
+    expect(p.body).toContain('**1 finding**');
+    expect(p.body).not.toContain('**1 findings**'); // kills `=== 1` → `!== 1` and `false ? '' : 's'`
+  });
+
+  // Header survivors: only the REQUEST_CHANGES header was pinned. The APPROVE
+  // header and the plain (COMMENT) header were untested — Stryker survived
+  // `event === 'APPROVE'` → `false`, the `— Approved ✅` string → ``, and the
+  // plain-header branch `: true` / `` ``.
+  it('renders the Approved header (with title) for a no-findings APPROVE', () => {
+    const p = toReviewPayload(review([]), { failOn: 'critical' });
+    expect(p.event).toBe('APPROVE');
+    expect(p.body).toContain('## DevDigest Review — Approved ✅');
+  });
+
+  it('renders the plain title header for a non-blocking COMMENT', () => {
+    const p = toReviewPayload(review([finding('WARNING')]), { failOn: 'critical' });
+    expect(p.event).toBe('COMMENT');
+    expect(p.body).toContain('## DevDigest Review'); // kills plain-header `` — title dropped
+    expect(p.body).not.toContain('Approved'); // kills `event === 'APPROVE'` → always-true paths
+    expect(p.body).not.toContain('Changes requested'); // kills plain-header ternary `: true`
+  });
+});
+
 describe('countBlockers — deterministic blocker count', () => {
   const fs = [finding('CRITICAL'), finding('CRITICAL'), finding('WARNING'), finding('SUGGESTION')];
 
