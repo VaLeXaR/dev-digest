@@ -3,6 +3,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
+import { notify } from "../toast";
 import type {
   Agent,
   EvalCase,
@@ -98,12 +99,20 @@ export function useFindingsWithEvalCases(findingIds: string[]) {
 // Mutations
 // ===========================================================================
 
+/** Toast the aggregate result of a "Run all evals" batch (owner-agnostic). */
+function notifyBatchResult(batch: EvalRunBatchResult): void {
+  const msg = `Evals: ${batch.pass_count}/${batch.total_count} passed`;
+  if (batch.pass_count === batch.total_count) notify.success(msg);
+  else notify.error(msg);
+}
+
 /** `POST /agents/:id/eval-runs` (no body) — runs the whole eval set for the agent. */
 export function useRunEvalSet(agentId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<EvalRunBatchResult>(`/agents/${agentId}/eval-runs`),
-    onSuccess: () => {
+    onSuccess: (batch) => {
+      notifyBatchResult(batch);
       qc.invalidateQueries({ queryKey: ["eval-cases", agentId] });
       qc.invalidateQueries({ queryKey: ["eval-dashboard", agentId] });
       qc.invalidateQueries({ queryKey: ["eval-dashboard-overview"] });
@@ -117,15 +126,22 @@ export interface RunEvalCaseInput {
   caseId: string;
   /** Optional — when known, scopes invalidation to just that agent's cases. */
   agentId?: string;
+  /** Optional — the case name, used for the result toast (the run record's
+   * `case_name` is null for a single-case run, so callers pass it explicitly). */
+  caseName?: string;
 }
 
-/** `POST /eval-cases/:id/run` — runs a single case. */
+/** `POST /eval-cases/:id/run` — runs a single case; toasts the pass/fail result. */
 export function useRunEvalCase() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ caseId }: RunEvalCaseInput) =>
       api.post<EvalRunRecord>(`/eval-cases/${caseId}/run`),
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
+      const name = variables.caseName ?? data.case_name ?? "Eval case";
+      if (data.pass === true) notify.success(`${name} — passed`);
+      else if (data.pass === false) notify.error(`${name} — failed`);
+      else notify.info(`${name} — completed`);
       qc.invalidateQueries({
         queryKey: variables.agentId ? ["eval-cases", variables.agentId] : ["eval-cases"],
       });
@@ -235,7 +251,8 @@ export function useRunSkillEvalSet(skillId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<EvalRunBatchResult>(`/skills/${skillId}/eval-runs`),
-    onSuccess: () => {
+    onSuccess: (batch) => {
+      notifyBatchResult(batch);
       qc.invalidateQueries({ queryKey: ["skill-eval-cases", skillId] });
       qc.invalidateQueries({ queryKey: ["skill-eval-case-last-runs", skillId] });
     },

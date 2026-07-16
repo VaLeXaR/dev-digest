@@ -177,7 +177,7 @@ describe("T-08 skill EvalsTab", () => {
     renderTab();
 
     fireEvent.click(screen.getByRole("button", { name: /new eval case/i }));
-    expect(screen.getByText("Eval case · Untitled")).toBeInTheDocument();
+    // The unique modal subtitle proves the editor opened, scoped to this skill.
     expect(screen.getByText(/pr-quality-rubric · simulate a PR/)).toBeInTheDocument();
   });
 
@@ -198,6 +198,6 @@ describe("T-08 skill EvalsTab", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Run" }));
     });
-    expect(runCaseMutateAsync).toHaveBeenCalledWith({ caseId: "case1" });
+    expect(runCaseMutateAsync).toHaveBeenCalledWith({ caseId: "case1", caseName: "stripe-key-leak" });
   });
 });

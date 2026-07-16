@@ -176,7 +176,7 @@ describe("T-07 EvalCaseEditor (owner-generic)", () => {
     fireEvent.click(screen.getByRole("button", { name: /run case/i }));
 
     await screen.findByText(/Last run passed/);
-    expect(runMutateAsync).toHaveBeenCalledWith({ caseId: "case1", agentId: undefined });
+    expect(runMutateAsync).toHaveBeenCalledWith({ caseId: "case1", agentId: undefined, caseName: "stripe-key-leak" });
   });
 
   it("Run case shows the last-run result line inline without closing", async () => {
@@ -200,9 +200,28 @@ describe("T-07 EvalCaseEditor (owner-generic)", () => {
     fireEvent.click(screen.getByRole("button", { name: /run case/i }));
 
     await screen.findByText(/Last run passed/);
-    expect(screen.getByText(/expected 1 finding, got 1/)).toBeInTheDocument();
+    expect(screen.getByText(/1\/1 passed/)).toBeInTheDocument();
     expect(screen.getByText(/1\.8s/)).toBeInTheDocument();
     expect(screen.getByText(/\$0\.02/)).toBeInTheDocument();
+    // Actual output panel reflects the run's produced findings (design/05).
+    expect(screen.getByLabelText("Actual output")).toHaveTextContent('"file": "src/config.ts"');
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("shows a display-only case-type badge derived from expected_output", () => {
+    // No must_find entry → NEGATIVE case.
+    renderEditor();
+    expect(screen.getByText("Negative case")).toBeInTheDocument();
+    expect(screen.getByText("must not flag")).toBeInTheDocument();
+
+    // Adding a must_find skeleton flips it POSITIVE.
+    fireEvent.click(screen.getByRole("button", { name: /finding skeleton/i }));
+    expect(screen.getByText("Positive case")).toBeInTheDocument();
+    expect(screen.getByText("must find")).toBeInTheDocument();
+  });
+
+  it("new-case mode uses the 'New eval case' title", () => {
+    renderEditor();
+    expect(screen.getByText("New eval case")).toBeInTheDocument();
   });
 });

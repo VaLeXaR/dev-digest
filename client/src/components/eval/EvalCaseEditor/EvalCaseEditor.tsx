@@ -41,19 +41,14 @@ function parseMaybeJson(text: string): unknown {
   }
 }
 
-interface LastRunDisplay {
-  record: EvalRunRecord;
-  expectedCount: number;
-  gotCount: number;
-}
-
-/** Build the inline result-line display from a run record + the case's expected output. */
-function lastRunDisplayFrom(record: EvalRunRecord, expected: ExpectedFinding[]): LastRunDisplay {
-  return {
-    record,
-    expectedCount: expected.filter((e) => e.type === "must_find").length,
-    gotCount: Array.isArray(record.actual_output) ? record.actual_output.length : 0,
-  };
+/** Render a run's produced findings for the read-only "Actual output" panel — "[]" when never run. */
+function formatActualOutput(actual: unknown): string {
+  if (actual == null) return "[]";
+  try {
+    return JSON.stringify(actual, null, 2);
+  } catch {
+    return String(actual);
+  }
 }
 
 /**
@@ -111,9 +106,7 @@ export function EvalCaseEditor({
   );
   const [runOnSave, setRunOnSave] = React.useState(false);
   const [activeInputTab, setActiveInputTab] = React.useState<InputTabKey>("diff");
-  const [lastRun, setLastRun] = React.useState<LastRunDisplay | null>(() =>
-    initialLastRun ? lastRunDisplayFrom(initialLastRun, existingCase?.expected_output ?? []) : null,
-  );
+  const [lastRun, setLastRun] = React.useState<EvalRunRecord | null>(() => initialLastRun ?? null);
 
   // Editing an existing case: the input fixture is immutable (design/05) — only
   // the Expected output assertion is editable. New-case mode keeps inputs open.
@@ -124,6 +117,13 @@ export function EvalCaseEditor({
     [expectedOutputText],
   );
   const isValidJson = parsedExpected !== null;
+
+  // Display-only case-type indicator (design/05): a case is NEGATIVE ("must not
+  // flag") until it carries at least one `must_find` expectation, at which point
+  // it flips POSITIVE ("must find"). Derived, never an editable control — while
+  // the JSON is mid-edit and unparseable we fall back to the persisted output.
+  const effectiveExpected = parsedExpected ?? existingCase?.expected_output ?? [];
+  const isNegativeCase = !effectiveExpected.some((e) => e.type === "must_find");
 
   const saving = createAgentCase.isPending || createSkillCase.isPending || update.isPending;
   const running = runCase.isPending;
@@ -160,8 +160,12 @@ export function EvalCaseEditor({
   }
 
   async function runAndCapture(id: string) {
-    const record = await runCase.mutateAsync({ caseId: id, agentId: agentScopeId });
-    setLastRun(lastRunDisplayFrom(record, parsedExpected ?? []));
+    const record = await runCase.mutateAsync({
+      caseId: id,
+      agentId: agentScopeId,
+      caseName: name.trim() || undefined,
+    });
+    setLastRun(record);
   }
 
   async function handleRunCase() {
@@ -188,34 +192,70 @@ export function EvalCaseEditor({
     { key: "prMeta", label: t("caseEditor.tabs.prMeta") },
   ];
 
+  // Full-width run banner (design/05): a neutral "running" line while a run is
+  // in flight, then the pass/fail result — shown above the footer buttons.
+  const runBanner = running ? (
+    <div style={s.runningLine}>
+      <Icon.RefreshCw size={14} style={s.runningIcon} />
+      <span style={s.resultLabel}>{t("caseEditor.running")}</span>
+    </div>
+  ) : lastRun ? (
+    <div style={s.resultLine(lastRun.pass ?? false)}>
+      {lastRun.pass ? (
+        <Icon.Check size={14} style={s.resultIcon(true)} />
+      ) : (
+        <Icon.XCircle size={14} style={s.resultIcon(false)} />
+      )}
+      <span style={s.resultLabel}>
+        {lastRun.pass ? t("caseEditor.lastRunPassed") : t("caseEditor.lastRunFailed")}
+      </span>
+      <span style={s.resultDetail}>
+        {` · ${t("caseEditor.casesPassed", { passed: lastRun.pass ? 1 : 0, total: 1 })} · ${
+          lastRun.duration_ms != null ? (lastRun.duration_ms / 1000).toFixed(1) : "—"
+        }s · ${lastRun.cost_usd != null ? `$${lastRun.cost_usd.toFixed(2)}` : "—"}`}
+      </span>
+    </div>
+  ) : null;
+
   return (
     <Modal
       width={MODAL_WIDTH}
-      title={t("caseEditor.caseTitle", { name: name.trim() || "Untitled" })}
+      title={existingCase ? t("caseEditor.caseTitle", { name: name.trim() || "Untitled" }) : t("caseEditor.newCase")}
       subtitle={`${owner.name} · simulate a PR and assert the expected output`}
       onClose={onClose}
       footer={
-        <div style={s.footer}>
-          <label style={s.footerToggle}>
-            <Toggle on={runOnSave} onChange={setRunOnSave} size={16} />
-            Run on save
-          </label>
-          <div style={s.footerButtons}>
-            <Button kind="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button kind="secondary" icon="Play" onClick={handleRunCase} disabled={!isValidJson || busy}>
-              {running ? t("caseEditor.running") : t("caseEditor.runCase")}
-            </Button>
-            <Button kind="primary" icon="Check" onClick={handleSave} disabled={!isValidJson || busy}>
-              {saving ? t("caseEditor.saving") : t("caseEditor.save")}
-            </Button>
+        <div style={s.footerCol}>
+          {runBanner}
+          <div style={s.footer}>
+            <label style={s.footerToggle}>
+              <Toggle on={runOnSave} onChange={setRunOnSave} size={16} />
+              Run on save
+            </label>
+            <div style={s.footerButtons}>
+              <Button kind="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button kind="secondary" icon="Play" onClick={handleRunCase} disabled={!isValidJson || busy}>
+                {running ? t("caseEditor.running") : t("caseEditor.runCase")}
+              </Button>
+              <Button kind="primary" icon="Check" onClick={handleSave} disabled={!isValidJson || busy}>
+                {saving ? t("caseEditor.saving") : t("caseEditor.save")}
+              </Button>
+            </div>
           </div>
         </div>
       }
     >
       <div style={s.body}>
         <div style={s.col}>
+          <div style={s.caseTypeBadge(isNegativeCase)} aria-label="Case type">
+            <div style={s.caseTypeLabel(isNegativeCase)}>
+              {isNegativeCase ? t("caseEditor.negativeCase") : t("caseEditor.positiveCase")}
+            </div>
+            <div style={s.caseTypeSub}>
+              {isNegativeCase ? t("caseEditor.mustNotFlag") : t("caseEditor.mustFind")}
+            </div>
+          </div>
           <FormField label={t("caseEditor.nameLabel")} required>
             <TextInput value={name} onChange={setName} placeholder={t("caseEditor.namePlaceholder")} />
           </FormField>
@@ -279,31 +319,13 @@ export function EvalCaseEditor({
             aria-label="Expected output JSON"
             value={expectedOutputText}
             onChange={(e) => setExpectedOutputText(e.target.value)}
-            style={s.textarea}
-            rows={16}
+            style={{ ...s.textarea, ...s.expectedTextarea }}
+            rows={6}
           />
-          {running ? (
-            <div style={s.runningLine}>
-              <Icon.RefreshCw size={14} style={s.runningIcon} />
-              <span style={s.resultLabel}>{t("caseEditor.running")}</span>
-            </div>
-          ) : lastRun ? (
-            <div style={s.resultLine(lastRun.record.pass ?? false)}>
-              {lastRun.record.pass ? (
-                <Icon.Check size={14} style={s.resultIcon(true)} />
-              ) : (
-                <Icon.XCircle size={14} style={s.resultIcon(false)} />
-              )}
-              <span style={s.resultLabel}>
-                {lastRun.record.pass ? t("caseEditor.lastRunPassed") : t("caseEditor.lastRunFailed")}
-              </span>
-              <span style={s.resultDetail}>
-                {` · expected ${lastRun.expectedCount} finding${lastRun.expectedCount === 1 ? "" : "s"}, got ${lastRun.gotCount} · ${
-                  lastRun.record.duration_ms != null ? (lastRun.record.duration_ms / 1000).toFixed(1) : "—"
-                }s · ${lastRun.record.cost_usd != null ? `$${lastRun.record.cost_usd.toFixed(2)}` : "—"}`}
-              </span>
-            </div>
-          ) : null}
+          <div style={{ ...s.sectionTitle, marginTop: 16 }}>{t("caseEditor.actualOutput")}</div>
+          <pre className="mono" aria-label="Actual output" aria-readonly="true" style={s.actualOutputBox}>
+            {formatActualOutput(lastRun?.actual_output)}
+          </pre>
         </div>
       </div>
     </Modal>
@@ -346,7 +368,7 @@ function InputField({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       style={s.textarea}
-      rows={16}
+      rows={6}
     />
   );
 }

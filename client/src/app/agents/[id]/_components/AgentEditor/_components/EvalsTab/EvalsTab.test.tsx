@@ -269,7 +269,7 @@ describe("T-10 EvalsTab", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Run" }));
     });
-    expect(runCaseMutateAsync).toHaveBeenCalledWith({ caseId: "case1", agentId: "ag1" });
+    expect(runCaseMutateAsync).toHaveBeenCalledWith({ caseId: "case1", agentId: "ag1", caseName: "stripe-key-leak" });
   });
 
   it("'+ New eval case' opens the EvalCaseEditor modal", () => {
@@ -277,7 +277,8 @@ describe("T-10 EvalsTab", () => {
     renderTab();
 
     fireEvent.click(screen.getByRole("button", { name: /new eval case/i }));
-    expect(screen.getByText("Eval case · Untitled")).toBeInTheDocument();
+    // The Expected-output editor only exists inside the modal → proves it opened.
+    expect(screen.getByLabelText("Expected output JSON")).toBeInTheDocument();
   });
 
   it("shows the empty-cases message when there are no eval cases", () => {

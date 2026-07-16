@@ -62,9 +62,14 @@ function CaseRow({
         {status === "never-run" && <span style={s.neverRunDot} />}
       </div>
       <div style={s.caseInfo}>
-        <span className="mono" style={s.caseName}>
-          {evalCase.name}
-        </span>
+        <div style={s.caseNameRow}>
+          <span className="mono" style={s.caseName}>
+            {evalCase.name}
+          </span>
+          <span style={s.typeLabel(expectedCount > 0)}>
+            {expectedCount > 0 ? "must find" : "must not flag"}
+          </span>
+        </div>
         <span style={s.caseSubtitle}>
           {status === "never-run"
             ? t("evalsTab.neverRun")
@@ -117,7 +122,7 @@ export function EvalsTab({ skill }: { skill: Skill }) {
   // limitation) — invalidate the skill-scoped last-runs/cases queries here so
   // a per-case run/delete from this tab still refreshes the passing count.
   async function handleRunCase(c: EvalCase) {
-    await runCase.mutateAsync({ caseId: c.id });
+    await runCase.mutateAsync({ caseId: c.id, caseName: c.name });
     qc.invalidateQueries({ queryKey: ["skill-eval-case-last-runs", skill.id] });
   }
 
@@ -162,7 +167,7 @@ export function EvalsTab({ skill }: { skill: Skill }) {
             onRun={() => handleRunCase(c)}
             onEdit={() => setEditorState({ mode: "edit", evalCase: c })}
             onDelete={() => handleDeleteCase(c)}
-            running={runCase.isPending && runCase.variables?.caseId === c.id}
+            running={runSet.isPending || (runCase.isPending && runCase.variables?.caseId === c.id)}
             t={t}
           />
         ))}

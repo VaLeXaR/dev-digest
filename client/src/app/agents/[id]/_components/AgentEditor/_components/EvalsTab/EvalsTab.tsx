@@ -85,9 +85,14 @@ function CaseRow({
         {status === "never-run" && <span style={s.neverRunDot} />}
       </div>
       <div style={s.caseInfo}>
-        <span className="mono" style={s.caseName}>
-          {evalCase.name}
-        </span>
+        <div style={s.caseNameRow}>
+          <span className="mono" style={s.caseName}>
+            {evalCase.name}
+          </span>
+          <span style={s.typeLabel(expectedCount > 0)}>
+            {expectedCount > 0 ? "must find" : "must not flag"}
+          </span>
+        </div>
         <span style={s.caseSubtitle}>
           {status === "never-run"
             ? t("evalsTab.neverRun")
@@ -137,7 +142,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
   const passingCount = casesList.filter((c) => runByCase.get(c.id)?.pass === true).length;
 
   async function handleRunCase(c: EvalCase) {
-    await runCase.mutateAsync({ caseId: c.id, agentId: agent.id });
+    await runCase.mutateAsync({ caseId: c.id, agentId: agent.id, caseName: c.name });
   }
 
   function handleDeleteCase(c: EvalCase) {
@@ -162,7 +167,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
           label={t("dashboard.metrics.recall")}
           value={formatPct(latestBatch?.recall)}
           delta={formatDeltaPts(latestBatch?.recall, previousBatch?.recall)}
-          color="var(--accent-text)"
+          color="var(--accent)"
         />
         <MetricTile
           label={t("dashboard.metrics.precision")}
@@ -210,7 +215,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
             onRun={() => handleRunCase(c)}
             onEdit={() => setEditorState({ mode: "edit", evalCase: c })}
             onDelete={() => handleDeleteCase(c)}
-            running={runCase.isPending && runCase.variables?.caseId === c.id}
+            running={runSet.isPending || (runCase.isPending && runCase.variables?.caseId === c.id)}
             t={t}
           />
         ))}

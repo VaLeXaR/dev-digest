@@ -24,7 +24,7 @@ export function SkillEditor({
   return (
     <div style={s.wrap}>
       <div style={s.tabsBar}>
-        <Tabs tabs={[...TABS]} value={tab} onChange={onTab} pad="0 24px" />
+        <Tabs tabs={TABS.map((tb) => ({ key: tb.key, label: tb.label }))} value={tab} onChange={onTab} pad="0 24px" />
       </div>
       <div style={s.body}>
         {tab === "config" && <ConfigTab key={skill.id} skill={skill} />}

@@ -8,7 +8,27 @@ export const s = {
     gap: 24,
     padding: 24,
   } satisfies CSSProperties,
-  col: { display: "flex", flexDirection: "column", minWidth: 0 } satisfies CSSProperties,
+  // minHeight:0 lets the right column's flex-fill boxes shrink below their
+  // content (scroll internally) instead of blowing up the grid row height.
+  col: { display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } satisfies CSSProperties,
+  // Display-only case-type badge (design/05): derived from expected_output —
+  // NEGATIVE (warn/orange) when the case carries no `must_find` expectation,
+  // POSITIVE (ok/green) once at least one `must_find` is present. Not editable.
+  caseTypeBadge: (negative: boolean): CSSProperties => ({
+    border: "1px solid " + (negative ? "var(--warn)" : "var(--ok)"),
+    borderRadius: 8,
+    padding: "10px 14px",
+    marginBottom: 16,
+    background: negative ? "var(--warn-bg)" : "var(--ok-bg)",
+  }),
+  caseTypeLabel: (negative: boolean): CSSProperties => ({
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: negative ? "var(--warn)" : "var(--ok)",
+  }),
+  caseTypeSub: { fontSize: 12, color: "var(--text-secondary)", marginTop: 2 } satisfies CSSProperties,
   sectionTitle: {
     fontSize: 13,
     fontWeight: 600,
@@ -24,7 +44,7 @@ export const s = {
   tabsWrap: { marginBottom: 10 } satisfies CSSProperties,
   textarea: {
     width: "100%",
-    minHeight: 320,
+    minHeight: 150,
     resize: "vertical",
     padding: "12px 14px",
     borderRadius: 8,
@@ -40,8 +60,8 @@ export const s = {
   // monospace text, not an editable box — borderless, sits on the modal panel.
   readonlyView: {
     width: "100%",
-    minHeight: 320,
-    maxHeight: 480,
+    minHeight: 150,
+    maxHeight: 200,
     overflow: "auto",
     margin: 0,
     padding: "2px 0",
@@ -52,12 +72,39 @@ export const s = {
     boxSizing: "border-box",
   } satisfies CSSProperties,
   readonlyEmpty: { color: "var(--text-muted)" } satisfies CSSProperties,
+  // Read-only "Actual output" panel (design/05): the last run's produced
+  // findings, JSON-formatted; "[]" before the case has ever run.
+  // The right column's Expected + Actual boxes both flex-fill the column, whose
+  // height is driven by the left column's Input box (grid stretch). Both grow
+  // equally → Expected == Actual, and Actual (last child) reaches the same
+  // bottom baseline as the Input box. minHeight:0 keeps long output scrolling
+  // inside rather than expanding the modal.
+  expectedTextarea: {
+    flex: 1,
+    minHeight: 0,
+  } satisfies CSSProperties,
+  actualOutputBox: {
+    width: "100%",
+    flex: 1,
+    minHeight: 0,
+    overflow: "auto",
+    marginTop: 8,
+    padding: "12px 14px",
+    borderRadius: 8,
+    border: "1px solid var(--border-strong)",
+    background: "var(--bg-elevated)",
+    color: "var(--text-primary)",
+    fontSize: 13,
+    lineHeight: 1.6,
+    whiteSpace: "pre",
+    boxSizing: "border-box",
+  } satisfies CSSProperties,
   // Syntax-highlighted read-only diff (design/05): per-line coloring — hunk
   // headers blue, added lines green band, removed red band, file headers muted.
   diffContainer: {
     width: "100%",
-    minHeight: 320,
-    maxHeight: 480,
+    minHeight: 150,
+    maxHeight: 200,
     overflow: "auto",
     margin: 0,
     padding: "10px 0",
@@ -85,7 +132,6 @@ export const s = {
       display: "flex",
       alignItems: "center",
       gap: 9,
-      marginTop: 12,
       padding: "11px 14px",
       borderRadius: 8,
       fontSize: 13,
@@ -100,7 +146,6 @@ export const s = {
     display: "flex",
     alignItems: "center",
     gap: 9,
-    marginTop: 12,
     padding: "11px 14px",
     borderRadius: 8,
     fontSize: 13,
@@ -108,6 +153,9 @@ export const s = {
     background: "var(--bg-elevated)",
   } satisfies CSSProperties,
   runningIcon: { color: "var(--text-secondary)", flexShrink: 0, animation: "ddspin 1s linear infinite" } satisfies CSSProperties,
+  // Footer becomes a column: the full-width run banner (design/05) sits above
+  // the toggle + action-button row.
+  footerCol: { display: "flex", flexDirection: "column", gap: 12 } satisfies CSSProperties,
   footer: { display: "flex", alignItems: "center", justifyContent: "space-between" } satisfies CSSProperties,
   footerToggle: {
     display: "flex",

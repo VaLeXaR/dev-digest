@@ -55,6 +55,12 @@ export const s = {
     minWidth: 0,
     flex: 1,
   } satisfies CSSProperties,
+  caseNameRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  } satisfies CSSProperties,
   caseName: {
     fontSize: 13,
     fontWeight: 700,
@@ -63,6 +69,22 @@ export const s = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   } satisfies CSSProperties,
+  // Case-type label (design/07): MUST FIND (accent) when the case carries a
+  // `must_find` expectation, MUST NOT FLAG (ok/green) otherwise.
+  typeLabel: (mustFind: boolean): CSSProperties => ({
+    display: "inline-flex",
+    alignItems: "center",
+    flexShrink: 0,
+    padding: "1px 7px",
+    borderRadius: 4,
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.05em",
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+    color: mustFind ? "var(--accent-text)" : "var(--ok)",
+    background: mustFind ? "var(--accent-bg)" : "var(--ok-bg)",
+  }),
   caseSubtitle: {
     fontSize: 12,
     color: "var(--text-muted)",
