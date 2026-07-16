@@ -54,7 +54,7 @@ export class OpenAIProvider implements LLMProvider {
 
   async listModels(): Promise<ModelInfo[]> {
     return withRetry(async () => {
-      const res = await this.client.models.list();
+      const res = await withTimeout(this.client.models.list(), DEFAULT_TIMEOUT);
       return res.data
         .filter((m) => m.id.startsWith('gpt') || m.id.includes('o1') || m.id.includes('o3'))
         .map((m) => ({ id: m.id, provider: 'openai' as const, created: m.created }));
