@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Verdict, Finding } from './findings.js';
-import { EvalRun, EvalOwnerKind, Conformance, Provider, CiFailOn } from './knowledge.js';
+import { EvalRun, EvalOwnerKind, ExpectedFinding, Conformance, Provider, CiFailOn } from './knowledge.js';
 
 /**
  * A4 — Eval / CI / Compose / Conformance API contracts (L06).
@@ -24,7 +24,7 @@ export const EvalCaseInput = z.object({
   input_diff: z.string().default(''),
   input_files: z.unknown().nullish(),
   input_meta: z.unknown().nullish(),
-  expected_output: z.unknown(),
+  expected_output: z.array(ExpectedFinding),
   notes: z.string().nullish(),
 });
 export type EvalCaseInput = z.infer<typeof EvalCaseInput>;
@@ -53,6 +53,40 @@ export const EvalRunResult = z.object({
 });
 export type EvalRunResult = z.infer<typeof EvalRunResult>;
 
+/**
+ * A persisted set-run batch row (`eval_run_batches`) — one row per "Run all
+ * evals" execution, recording the agent version + aggregate metrics.
+ * `recall`/`precision`/`citation_accuracy` are `null` ("n/a") whenever their
+ * denominator across the whole set is 0 (G2/G3) — never coerced to 0.
+ */
+export const EvalRunBatchRecord = z.object({
+  id: z.string(),
+  agent_id: z.string(),
+  agent_version: z.number().int(),
+  ran_at: z.string(),
+  recall: z.number().nullable(),
+  precision: z.number().nullable(),
+  citation_accuracy: z.number().nullable(),
+  pass_count: z.number().int(),
+  total_count: z.number().int(),
+  cost_usd: z.number().nullable(),
+});
+export type EvalRunBatchRecord = z.infer<typeof EvalRunBatchRecord>;
+
+/** Response of `POST /agents/:id/eval-runs` — the newly created batch record. */
+export const EvalRunBatchResult = EvalRunBatchRecord;
+export type EvalRunBatchResult = z.infer<typeof EvalRunBatchResult>;
+
+/**
+ * Request body for `POST /agents/:id/eval-cases/from-finding` — the owner
+ * agent is derived server-side from the finding's own review (G6), never
+ * supplied by the caller.
+ */
+export const EvalCaseFromFindingInput = z.object({
+  finding_id: z.string(),
+});
+export type EvalCaseFromFindingInput = z.infer<typeof EvalCaseFromFindingInput>;
+
 /** One point on the dashboard trend (per run, chronological). */
 export const EvalTrendPoint = z.object({
   ran_at: z.string(),
@@ -64,29 +98,56 @@ export const EvalTrendPoint = z.object({
 });
 export type EvalTrendPoint = z.infer<typeof EvalTrendPoint>;
 
-/** Aggregate dashboard for an owner (agent/skill) or the whole workspace. */
+/**
+ * Aggregate dashboard for an owner (agent/skill) or the whole workspace.
+ * `current.recall`/`delta.recall` are nullable (AC-25) so a set with zero
+ * `must_find` expectations across every case is representable as "n/a"
+ * rather than a misleading `0`. `precision`/`citation_accuracy` on both
+ * `current` and `delta` are ALSO nullable (G2/G3) for the same reason — a 0/0
+ * covered-set (no batch yet, or every case's expectations empty) must render
+ * "n/a", never a misleading `0`.
+ */
 export const EvalDashboard = z.object({
   owner_kind: EvalOwnerKind.nullable(),
   owner_id: z.string().nullable(),
   cases_total: z.number().int(),
   current: z.object({
-    recall: z.number(),
-    precision: z.number(),
-    citation_accuracy: z.number(),
+    recall: z.number().nullable(),
+    precision: z.number().nullable(),
+    citation_accuracy: z.number().nullable(),
     traces_passed: z.number().int(),
     traces_total: z.number().int(),
     cost_usd: z.number().nullable(),
   }),
   delta: z.object({
-    recall: z.number(),
-    precision: z.number(),
-    citation_accuracy: z.number(),
+    recall: z.number().nullable(),
+    precision: z.number().nullable(),
+    citation_accuracy: z.number().nullable(),
   }),
   trend: z.array(EvalTrendPoint),
   recent_runs: z.array(EvalRunRecord),
   alert: z.string().nullable(),
 });
 export type EvalDashboard = z.infer<typeof EvalDashboard>;
+
+/**
+ * Cross-agent landing-page overview (G8) — `GET /eval/dashboard`. Distinct
+ * from `EvalDashboard`, which is the single-owner per-agent detail shape
+ * (`GET /agents/:id/eval/dashboard`).
+ */
+export const EvalDashboardOverview = z.object({
+  agents: z.array(
+    z.object({
+      agent_id: z.string(),
+      agent_name: z.string(),
+      model: z.string(),
+      latest_batch: EvalRunBatchRecord.nullable(),
+      sparkline: z.array(z.number()),
+    }),
+  ),
+  recent_runs: z.array(EvalRunBatchRecord.extend({ agent_name: z.string() })),
+});
+export type EvalDashboardOverview = z.infer<typeof EvalDashboardOverview>;
 
 // ===========================================================================
 // Compose Review

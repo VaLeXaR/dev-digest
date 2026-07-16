@@ -78,6 +78,12 @@ export const s = {
     gap: 8,
     marginTop: 14,
     flexWrap: "wrap",
+    alignItems: "center",
+  } satisfies CSSProperties,
+  evalCaseHint: {
+    fontSize: 12,
+    color: "var(--text-muted)",
+    fontStyle: "italic",
   } satisfies CSSProperties,
   composer: {
     marginTop: 12,

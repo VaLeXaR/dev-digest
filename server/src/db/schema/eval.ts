@@ -1,6 +1,7 @@
 import { pgTable, uuid, text, integer, boolean, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
+import { agents } from './agents';
 
 // ============================================================ Eval / Conformance / Compose
 
@@ -17,6 +18,28 @@ export const evalCases = pgTable('eval_cases', {
   inputMeta: jsonb('input_meta'),
   expectedOutput: jsonb('expected_output'),
   notes: text('notes'),
+  // Set only by "Turn into eval case" (create-from-finding); no FK since
+  // findings can be deleted independently of the eval case they backed.
+  sourceFindingId: uuid('source_finding_id'),
+});
+
+// One row per "Run all evals" set-run: aggregate recall/precision/citation
+// accuracy + the agent version that produced them. Per-case eval_runs rows
+// link back via batchId for drill-down; single-case "Run case" runs stay
+// batchId = NULL (scratch runs, not part of history).
+export const evalRunBatches = pgTable('eval_run_batches', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  agentId: uuid('agent_id')
+    .notNull()
+    .references(() => agents.id, { onDelete: 'cascade' }),
+  agentVersion: integer('agent_version').notNull(),
+  ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
+  recall: doublePrecision('recall'),
+  precision: doublePrecision('precision'),
+  citationAccuracy: doublePrecision('citation_accuracy'),
+  passCount: integer('pass_count'),
+  totalCount: integer('total_count'),
+  costUsd: doublePrecision('cost_usd'),
 });
 
 export const evalRuns = pgTable('eval_runs', {
@@ -24,6 +47,7 @@ export const evalRuns = pgTable('eval_runs', {
   caseId: uuid('case_id')
     .notNull()
     .references(() => evalCases.id, { onDelete: 'cascade' }),
+  batchId: uuid('batch_id').references(() => evalRunBatches.id, { onDelete: 'cascade' }),
   ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
   actualOutput: jsonb('actual_output'),
   pass: boolean('pass'),
