@@ -109,15 +109,6 @@ describe("T-09 EvalCaseEditor", () => {
     expect(parsed[0]).toMatchObject({ type: "must_find", file: "", start_line: 1, end_line: 1 });
   });
 
-  it("toggling the per-entry badge flips must_find to must_not_flag", () => {
-    renderEditor({ existingCase: EXISTING_CASE });
-    fireEvent.click(screen.getByRole("button", { name: /toggle expectation 1 type/i }));
-
-    const jsonBox = screen.getByLabelText("Expected output JSON") as HTMLTextAreaElement;
-    const parsed = JSON.parse(jsonBox.value);
-    expect(parsed[0].type).toBe("must_not_flag");
-  });
-
   it("Save creates a new case with owner-agnostic payload (owner is filled in by the hook)", async () => {
     createMutateAsync.mockResolvedValue({ ...EXISTING_CASE, id: "new-case" });
     renderEditor();

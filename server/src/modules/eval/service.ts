@@ -19,7 +19,7 @@ import { diffFromPrFiles } from '../reviews/diff-loader.js';
 import { AppError, NotFoundError, ValidationError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { EvalRepository, type EvalCaseUpdate } from './repository.js';
-import { aggregateBatch, type CaseRunResult } from './helpers.js';
+import { aggregateBatch, buildRegressionAlert, type CaseRunResult } from './helpers.js';
 
 /**
  * A5 — eval run orchestration, create-from-finding, dashboard assembly.
@@ -393,13 +393,13 @@ export class EvalService {
 
     const recentRuns = latest ? await this.repo.runsForBatch(workspaceId, latest.id) : [];
 
-    let alert: string | null = null;
-    if (latest?.precision != null && previous?.precision != null) {
-      const dipPts = Math.round((previous.precision - latest.precision) * 100);
-      if (dipPts >= 5) {
-        alert = `Precision dipped ${dipPts}pts on v${latest.agent_version}`;
-      }
-    }
+    const alert = buildRegressionAlert({
+      latestPrecision: latest?.precision,
+      previousPrecision: previous?.precision,
+      latestVersion: latest?.agent_version ?? 0,
+      recallDelta: delta.recall,
+      citationDelta: delta.citation_accuracy,
+    });
 
     return {
       owner_kind: 'agent',

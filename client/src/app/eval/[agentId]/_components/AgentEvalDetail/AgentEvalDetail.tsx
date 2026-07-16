@@ -111,14 +111,18 @@ export function AgentEvalDetail({ agentId }: { agentId: string }) {
                 value={agentId}
                 onChange={(v) => router.push(`/eval/${v}`)}
                 options={agentOptions}
-                width={190}
+                width={215}
+                icon="Cpu"
+                size="sm"
               />
             )}
             <Select<DateRangeValue>
               value={dateRange}
               onChange={(v) => setDateRange(v)}
               options={DATE_RANGE_OPTIONS}
-              width={110}
+              width={124}
+              icon="Calendar"
+              size="sm"
             />
             <Button
               kind="primary"
@@ -178,17 +182,23 @@ export function AgentEvalDetail({ agentId }: { agentId: string }) {
               />
             </div>
 
-            <div style={s.section}>
-              <SectionLabel icon="TrendingUp">METRIC TREND</SectionLabel>
-              {trend.length === 0 ? (
-                <p style={s.emptyText}>No runs in this range yet.</p>
-              ) : (
-                <>
+            <div style={s.chartCard}>
+              <SectionLabel
+                icon="TrendingUp"
+                right={
                   <div style={s.legend}>
                     <LegendDot color={METRIC_COLORS.recall} label="Recall" />
                     <LegendDot color={METRIC_COLORS.precision} label="Precision" />
                     <LegendDot color={METRIC_COLORS.citation} label="Citation" />
                   </div>
+                }
+              >
+                METRIC TREND
+              </SectionLabel>
+              {trend.length === 0 ? (
+                <p style={s.emptyText}>No runs in this range yet.</p>
+              ) : (
+                <>
                   <LineChart
                     series={[
                       { name: "Recall", color: METRIC_COLORS.recall, data: trend.map((p) => p.recall) },
@@ -204,15 +214,13 @@ export function AgentEvalDetail({ agentId }: { agentId: string }) {
               <SectionLabel
                 icon="History"
                 right={
-                  <div style={s.runsHeaderRight}>
-                    <span style={s.selectedCount}>{`${selected.size} selected`}</span>
-                    <Button kind="primary" icon="GitBranch" disabled={!canCompare} onClick={() => setCompareOpen(true)}>
-                      Compare
-                    </Button>
-                  </div>
+                  <Button kind="primary" icon="GitCompare" disabled={!canCompare} onClick={() => setCompareOpen(true)}>
+                    Compare
+                  </Button>
                 }
               >
                 RECENT RUNS
+                <span style={s.selectedCount}>{`${selected.size} selected`}</span>
               </SectionLabel>
 
               {runs.length === 0 ? (

@@ -16,7 +16,7 @@ export const s = {
 
   headerRow: {
     display: "flex",
-    alignItems: "flex-start",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 18,
     flexWrap: "wrap",
@@ -38,6 +38,13 @@ export const s = {
   headerControls: { display: "flex", alignItems: "center", gap: 10, flexShrink: 0 } satisfies CSSProperties,
 
   section: { marginTop: 26 } satisfies CSSProperties,
+  chartCard: {
+    marginTop: 26,
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
+    borderRadius: 9,
+    padding: 20,
+  } satisfies CSSProperties,
   emptyText: { fontSize: 13.5, color: "var(--text-secondary)", padding: "12px 4px" } satisfies CSSProperties,
 
   banner: {
@@ -75,12 +82,18 @@ export const s = {
   tileSuffix: { fontSize: 18, color: "var(--text-muted)", marginLeft: 1 } satisfies CSSProperties,
   tileDelta: { fontSize: 13, fontWeight: 600 } satisfies CSSProperties,
 
-  legend: { display: "flex", alignItems: "center", gap: 16, marginBottom: 10, marginLeft: "auto" } satisfies CSSProperties,
+  legend: { display: "flex", alignItems: "center", gap: 16 } satisfies CSSProperties,
   legendItem: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-secondary)" } satisfies CSSProperties,
   legendSwatch: { width: 10, height: 2, borderRadius: 1, display: "inline-block" } satisfies CSSProperties,
 
-  runsHeaderRight: { display: "flex", alignItems: "center", gap: 12 } satisfies CSSProperties,
-  selectedCount: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
+  selectedCount: {
+    marginLeft: 10,
+    fontSize: 12.5,
+    fontWeight: 400,
+    letterSpacing: "normal",
+    textTransform: "none",
+    color: "var(--text-secondary)",
+  } satisfies CSSProperties,
 
   table: { display: "flex", flexDirection: "column" } satisfies CSSProperties,
   runRowHeader: {

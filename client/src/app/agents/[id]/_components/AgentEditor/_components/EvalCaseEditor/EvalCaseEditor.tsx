@@ -46,18 +46,32 @@ interface LastRunDisplay {
   gotCount: number;
 }
 
+/** Build the inline result-line display from a run record + the case's expected output. */
+function lastRunDisplayFrom(record: EvalRunRecord, expected: ExpectedFinding[]): LastRunDisplay {
+  return {
+    record,
+    expectedCount: expected.filter((e) => e.type === "must_find").length,
+    gotCount: Array.isArray(record.actual_output) ? record.actual_output.length : 0,
+  };
+}
+
 /**
- * New/edit eval-case modal (design/05). Diff/Files/PR-meta inputs are editable in
- * both modes (G10) so a case can be hand-authored without a source finding. Save
- * is disabled while the expected-output JSON is invalid (R13/AC-19).
+ * New/edit eval-case modal (design/05). When editing an existing case the
+ * Diff/Files/PR-meta inputs are a READ-ONLY view of the captured fixture — only
+ * the Expected output (the assertion) is tuned. In new-case mode they stay
+ * editable (G10) so a case can still be hand-authored without a source finding.
+ * Save is disabled while the expected-output JSON is invalid (R13/AC-19).
  */
 export function EvalCaseEditor({
   agent,
   existingCase,
+  initialLastRun,
   onClose,
 }: {
   agent: Agent;
   existingCase?: EvalCase;
+  /** The case's persisted last run, shown immediately on open (design/05). */
+  initialLastRun?: EvalRunRecord;
   onClose: () => void;
 }) {
   const t = useTranslations("eval");
@@ -79,7 +93,13 @@ export function EvalCaseEditor({
   );
   const [runOnSave, setRunOnSave] = React.useState(false);
   const [activeInputTab, setActiveInputTab] = React.useState<InputTabKey>("diff");
-  const [lastRun, setLastRun] = React.useState<LastRunDisplay | null>(null);
+  const [lastRun, setLastRun] = React.useState<LastRunDisplay | null>(() =>
+    initialLastRun ? lastRunDisplayFrom(initialLastRun, existingCase?.expected_output ?? []) : null,
+  );
+
+  // Editing an existing case: the input fixture is immutable (design/05) — only
+  // the Expected output assertion is editable. New-case mode keeps inputs open.
+  const readOnlyInput = existingCase != null;
 
   const parsedExpected = React.useMemo(
     () => parseExpectedOutput(expectedOutputText),
@@ -114,10 +134,8 @@ export function EvalCaseEditor({
   }
 
   async function runAndCapture(id: string) {
-    const expectedCount = (parsedExpected ?? []).filter((e) => e.type === "must_find").length;
     const record = await runCase.mutateAsync({ caseId: id, agentId: agent.id });
-    const gotCount = Array.isArray(record.actual_output) ? record.actual_output.length : 0;
-    setLastRun({ record, expectedCount, gotCount });
+    setLastRun(lastRunDisplayFrom(record, parsedExpected ?? []));
   }
 
   async function handleRunCase() {
@@ -136,16 +154,6 @@ export function EvalCaseEditor({
   function addSkeleton() {
     const current = parsedExpected ?? [];
     setExpectedOutputText(JSON.stringify([...current, findingSkeleton()], null, 2));
-  }
-
-  function toggleEntryType(index: number) {
-    if (!parsedExpected) return;
-    const next = parsedExpected.map((entry, i) =>
-      i === index
-        ? { ...entry, type: entry.type === "must_find" ? ("must_not_flag" as const) : ("must_find" as const) }
-        : entry,
-    );
-    setExpectedOutputText(JSON.stringify(next, null, 2));
   }
 
   const inputTabs = [
@@ -195,43 +203,38 @@ export function EvalCaseEditor({
             />
           </div>
           {activeInputTab === "diff" && (
-            <textarea
-              className="mono"
-              aria-label="Diff input"
+            <InputField
+              ariaLabel="Diff input"
               value={inputDiff}
-              onChange={(e) => setInputDiff(e.target.value)}
+              onChange={setInputDiff}
               placeholder={t("caseEditor.diffPlaceholder")}
-              style={s.textarea}
-              rows={16}
+              readOnly={readOnlyInput}
+              highlightDiff
             />
           )}
           {activeInputTab === "files" && (
-            <textarea
-              className="mono"
-              aria-label="Files input"
+            <InputField
+              ariaLabel="Files input"
               value={inputFilesText}
-              onChange={(e) => setInputFilesText(e.target.value)}
+              onChange={setInputFilesText}
               placeholder="[]"
-              style={s.textarea}
-              rows={16}
+              readOnly={readOnlyInput}
             />
           )}
           {activeInputTab === "prMeta" && (
-            <textarea
-              className="mono"
-              aria-label="PR meta input"
+            <InputField
+              ariaLabel="PR meta input"
               value={inputMetaText}
-              onChange={(e) => setInputMetaText(e.target.value)}
+              onChange={setInputMetaText}
               placeholder="{}"
-              style={s.textarea}
-              rows={16}
+              readOnly={readOnlyInput}
             />
           )}
         </div>
 
         <div style={s.col}>
           <div style={s.sectionHeaderRow}>
-            <span style={s.sectionTitle}>{t("caseEditor.expectedOutput")}</span>
+            <span style={{ ...s.sectionTitle, marginBottom: 0 }}>{t("caseEditor.expectedOutput")}</span>
             <Badge
               icon={isValidJson ? "Check" : "XCircle"}
               color={isValidJson ? "var(--ok)" : "var(--crit)"}
@@ -253,38 +256,100 @@ export function EvalCaseEditor({
             style={s.textarea}
             rows={16}
           />
-          {parsedExpected && parsedExpected.length > 0 && (
-            <div style={s.entriesWrap}>
-              {parsedExpected.map((entry, i) => (
-                <div key={i} style={s.entryRow}>
-                  <span className="mono" style={s.entryPath}>
-                    {entry.file || "(no file)"}:{entry.start_line}-{entry.end_line}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Toggle expectation ${i + 1} type`}
-                    onClick={() => toggleEntryType(i)}
-                    style={s.entryTypeBadge(entry.type)}
-                  >
-                    {entry.type}
-                  </button>
-                </div>
-              ))}
+          {running ? (
+            <div style={s.runningLine}>
+              <Icon.RefreshCw size={14} style={s.runningIcon} />
+              <span style={s.resultLabel}>{t("caseEditor.running")}</span>
             </div>
-          )}
-          {lastRun && (
+          ) : lastRun ? (
             <div style={s.resultLine(lastRun.record.pass ?? false)}>
-              {lastRun.record.pass ? <Icon.Check size={14} /> : <Icon.XCircle size={14} />}
-              <span>
-                {lastRun.record.pass ? t("caseEditor.lastRunPassed") : t("caseEditor.lastRunFailed")} · expected{" "}
-                {lastRun.expectedCount} finding{lastRun.expectedCount === 1 ? "" : "s"}, got {lastRun.gotCount} ·{" "}
-                {lastRun.record.duration_ms != null ? (lastRun.record.duration_ms / 1000).toFixed(1) : "—"}s ·{" "}
-                {lastRun.record.cost_usd != null ? `$${lastRun.record.cost_usd.toFixed(2)}` : "—"}
+              {lastRun.record.pass ? (
+                <Icon.Check size={14} style={s.resultIcon(true)} />
+              ) : (
+                <Icon.XCircle size={14} style={s.resultIcon(false)} />
+              )}
+              <span style={s.resultLabel}>
+                {lastRun.record.pass ? t("caseEditor.lastRunPassed") : t("caseEditor.lastRunFailed")}
+              </span>
+              <span style={s.resultDetail}>
+                {` · expected ${lastRun.expectedCount} finding${lastRun.expectedCount === 1 ? "" : "s"}, got ${lastRun.gotCount} · ${
+                  lastRun.record.duration_ms != null ? (lastRun.record.duration_ms / 1000).toFixed(1) : "—"
+                }s · ${lastRun.record.cost_usd != null ? `$${lastRun.record.cost_usd.toFixed(2)}` : "—"}`}
               </span>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * One Input tab's content. Editable `<textarea>` in new-case mode; a read-only
+ * view of the captured fixture when editing an existing case (design/05). The
+ * diff tab renders syntax-highlighted (`highlightDiff`); Files/PR-meta stay plain.
+ */
+function InputField({
+  ariaLabel,
+  value,
+  onChange,
+  placeholder,
+  readOnly,
+  highlightDiff,
+}: {
+  ariaLabel: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  readOnly: boolean;
+  highlightDiff?: boolean;
+}) {
+  if (readOnly) {
+    if (highlightDiff) return <DiffView diff={value} ariaLabel={ariaLabel} />;
+    return (
+      <pre className="mono" aria-label={ariaLabel} aria-readonly="true" style={s.readonlyView}>
+        {value.trim() ? value : <span style={s.readonlyEmpty}>—</span>}
+      </pre>
+    );
+  }
+  return (
+    <textarea
+      className="mono"
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      style={s.textarea}
+      rows={16}
+    />
+  );
+}
+
+type DiffLineKind = "add" | "del" | "hunk" | "meta" | "ctx";
+
+/** Classify one unified-diff line for coloring (order matters: headers before +/-). */
+function classifyDiffLine(line: string): DiffLineKind {
+  if (line.startsWith("@@")) return "hunk";
+  if (line.startsWith("+++") || line.startsWith("---")) return "meta";
+  if (line.startsWith("+")) return "add";
+  if (line.startsWith("-")) return "del";
+  return "ctx";
+}
+
+/** Read-only, per-line syntax-highlighted unified diff (design/05). */
+function DiffView({ diff, ariaLabel }: { diff: string; ariaLabel: string }) {
+  const lines = diff.length > 0 ? diff.split("\n") : [];
+  return (
+    <div className="mono" aria-label={ariaLabel} aria-readonly="true" style={s.diffContainer}>
+      {lines.length === 0 ? (
+        <div style={{ ...s.diffLine("ctx"), color: "var(--text-muted)" }}>—</div>
+      ) : (
+        lines.map((line, i) => (
+          <div key={i} style={s.diffLine(classifyDiffLine(line))}>
+            {line === "" ? " " : line}
+          </div>
+        ))
+      )}
+    </div>
   );
 }

@@ -96,7 +96,7 @@ function CaseRow({
       </div>
       <span style={s.caseBadge}>{caseBadgeText(evalCase)}</span>
       <div style={s.caseActions}>
-        <IconBtn icon="Play" label={running ? t("evalsTab.running") : t("evalsTab.run")} onClick={onRun} />
+        <IconBtn icon="Play" label={running ? t("evalsTab.running") : t("evalsTab.run")} onClick={onRun} loading={running} />
         <IconBtn icon="Edit" label={t("evalsTab.edit")} onClick={onEdit} />
         <IconBtn icon="Trash" label={t("evalsTab.delete")} onClick={onDelete} danger />
       </div>
@@ -149,7 +149,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
     <div style={s.wrap}>
       <div style={s.metricsHeaderRow}>
         <div style={s.metricsTitleGroup}>
-          <Icon.Target size={13} />
+          <Icon.Gauge size={13} />
           <span style={s.metricsTitle}>EVAL METRICS</span>
         </div>
         <Link href="/eval" style={s.dashboardLink}>
@@ -220,6 +220,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
         <EvalCaseEditor
           agent={agent}
           existingCase={editorState.mode === "edit" ? editorState.evalCase : undefined}
+          initialLastRun={editorState.mode === "edit" ? runByCase.get(editorState.evalCase.id) : undefined}
           onClose={() => setEditorState(null)}
         />
       )}
