@@ -23,12 +23,8 @@
           {
             "type": "command",
             "shell": "bash",
-            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/collect-insights-changes.sh\"",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/insights-stop-gate.sh\"",
             "timeout": 15
-          },
-          {
-            "type": "agent",
-            "prompt": "Before ending this session, invoke the engineering-insights skill. The set of files changed this session was written by the preceding command hook to `.claude/tmp/insights-changes.txt` (relative to the project root — one path per line, already filtered to files touched since the last insights run, so paths covered by an earlier run are absent by design). Read that file with the Read tool and map each changed path to its top-level module (client/, server/, reviewer-core/, e2e/, mcp-server/) — do NOT run git, bash, PowerShell, or any shell command, and do NOT parse the session transcript. Rank candidates by signal strength: user corrections first, then failed approaches, repeated patterns, non-obvious solutions, workflow discoveries. Apply the quality filter (discard anything obvious from 5 minutes of reading the code). Use the Read and Grep tools (not bash) to re-read the target module's INSIGHTS.md and dedup before writing. For each surviving insight, append with an anchored Edit to {module}/INSIGHTS.md (e.g. server/INSIGHTS.md, reviewer-core/INSIGHTS.md) under the matching '## Section' header, format: 'YYYY-MM-DD — actionable fact. ref: file:line' — if the file does not exist, create it with the 7-section template using Write. If the session was trivial (typo fix, rename, formatting), the change-list file is empty, or no insights passed the filter, skip silently. Do not ask for confirmation."
           }
         ]
       }

@@ -52,14 +52,21 @@ Skip Step 4 entirely for purely mechanical sessions — trivial config edits, fo
 
 ## Which File
 
-| Module | File |
+| Work happened in | File |
 |---|---|
 | `client/` | `client/INSIGHTS.md` |
 | `server/` | `server/INSIGHTS.md` |
 | `reviewer-core/` | `reviewer-core/INSIGHTS.md` |
 | `e2e/` | `e2e/INSIGHTS.md` |
+| `mcp-server/` | `mcp-server/INSIGHTS.md` |
+| `evals/` | `evals/INSIGHTS.md` |
+| `.claude/` — the harness itself: hooks, `settings.json`, skills, agents | `.claude/INSIGHTS.md` |
 
 If work touches multiple modules, write to each relevant one.
+
+`.claude/` is not a product module, but harness work produces exactly the kind of finding this skill exists for — hook semantics, permission-rule globs, shell quirks — and it used to have nowhere to go. Route it there rather than dropping it or forcing it into whichever product module the session happened to touch.
+
+**Not write targets:** `INSIGHTS.md` copies under `.claude/worktrees/**` and `server/clones/**` are throwaway checkouts of this repo — a plain glob for `INSIGHTS.md` surfaces them. Always write to the path at the repo root.
 
 ---
 
