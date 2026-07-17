@@ -117,6 +117,20 @@ before analysing — do not silently pick.
      (Σ agent spans ÷ wall-clock), and the **critical-path agent** (the single longest
      span). Nested sub-agents (`spawnDepth > 1`) are indented under their parent and
      **included in every total** (`nested_agents=` / `max_depth=` in the summary line).
+   - **Sanity-check the tree against agent types.** The indentation is built from each
+     journal's `parentAgentId` (fixed 2026-07-17 — it previously followed start order, so
+     a nested row landed under whichever root happened to precede it, and four
+     `researcher` children of `plan-verifier` rendered under `architecture-reviewer`, an
+     agent that cannot spawn anything). If you ever see a child indented under an agent
+     whose definition grants no `Agent` tool, the tree is lying — read `parentAgentId`
+     from the sibling `agent-*.meta.json` and report the defect rather than the reading.
+   - **The headline `parallelism` is diluted by everything that is not agent compute.**
+     Its denominator is total session wall-clock, which includes coordinator time and user
+     round-trips (interviews, waiting on a design file). Observed 2026-07-17: the summary
+     read 0.92x — implying fully serial work — while the run's 5-way concurrent implementer
+     batch actually hit 3.83x (1706.3s of span inside a 445s window, all five started
+     within 26 seconds of each other). Before concluding that dispatching was serial,
+     recompute per-phase from each journal's `started` + `spanS`.
    - For a cost estimate pass `--prices prices.json` (map of
      `{model_substring: {in, out, cache_read, cache_write}}` in $/Mtok) — **do not
      hard-code prices, confirm current per-model rates via the `claude-api` skill

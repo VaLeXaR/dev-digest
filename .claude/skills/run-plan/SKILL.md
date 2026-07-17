@@ -64,6 +64,26 @@ Example: `/run-plan docs/plans/add-conventions-badge.md max-fix:2`.
 - **Report progress between stages.** After each stage, post a short status line (stage name,
   verdict, what's next) before moving on — this is a long-running flow and the user should be able
   to follow it or interrupt without reading full subagent transcripts.
+- **Check a long-running dispatch with `TaskOutput` before assuming it is stuck.** A subagent
+  speaks exactly once — when its turn ends — so it has no channel to report a blocker mid-task.
+  Silence is not evidence of a hang, and a user watching an idle-looking UI has strictly less
+  information than `TaskOutput` does. When a dispatch runs long, or the user asks whether an agent
+  is stuck, read its output *before* re-dispatching or taking the work over; treat "is it stuck?"
+  as a prompt to check, never as a diagnosis. Confirmed costly in practice: on the
+  `skill-eval-code-input` build the user flagged a suspected hang twice; the coordinator
+  re-dispatched the same task once and then took it over, never once reading the running agent's
+  output. Both agents were working — the second had already hit the blocker (an orphaned browser
+  profile lock), had diagnosed it, and was probing for the process to kill. Re-dispatching into the
+  same unexamined environment bought an identical second failure: 1732s and $5.33 across two dead
+  dispatches, for a fix that took one `Stop-Process` once someone finally looked.
+- **On a `failed` task-notification, attempt one `SendMessage` resume before re-dispatching.**
+  A `failed` status is often a stall or an account/API-level error, not a task-level failure — the
+  agent's work up to that point is still intact and resumable. Re-dispatching from scratch throws
+  it away. Confirmed in practice: one `implementation-planner` resume recovered ~35 minutes and
+  ~$10 of work that would otherwise have been lost with the plan file never written, and all 4
+  infra-failed `implementer` dispatches on the `project-context` build recovered cleanly on a
+  single resume each, with zero wasted re-dispatches. Only re-dispatch if the resume itself fails
+  or the cause is genuinely task-level.
 - **Bring your own judgment for fix dispatches.** `architecture-reviewer` and `plan-verifier`
   findings are advisory input (their own docs say so) — you decide how to turn a finding into an
   `implementer` fix task; don't just forward raw findings unstructured.
@@ -103,6 +123,18 @@ For each phase, in order:
   task whose only dependency was a 7-minute sibling sat undispatched for ~3.8 hours because two
   *other*, unrelated siblings in the same phase batch stalled on an infra-level API error — nothing
   about the delayed task actually needed those two to finish first.
+- **Verify the environment yourself before dispatching a task that drives the app or the browser.**
+  A design-fidelity or live-verification task depends on state the agent cannot fix and cannot
+  report: one `list_pages` (is the `chrome-devtools-mcp` profile lock free?) and one `curl` on the
+  app port (is the stack already up?) cost seconds from the coordinator. Two rules follow. **Never
+  put `./scripts/dev.sh` — or any long-lived foreground process — in a subagent's task steps**;
+  confirm the stack yourself and hand the agent a finished URL. And when a browser-driving dispatch
+  goes wrong, clear the blocker before re-dispatching: an orphaned automation Chrome survives an
+  interrupted agent and holds the profile lock against every later attempt
+  (`Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like
+  '*chrome-devtools-mcp*' }` → `Stop-Process` the root; `rtk ps` will not show it). Confirmed
+  costly in practice: skipping both checks on the `skill-eval-code-input` build cost two dead
+  dispatches, 1732s and $5.33.
 
 Handle each return per status:
 

@@ -73,6 +73,35 @@ function escapeRegExp(s) {
   return s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// The renderer indents purely by `depth`, so a row's apparent parent is whatever
+// row precedes it. Sorted by start time alone that is routinely the wrong agent:
+// on 2026-07-17 four researchers spawned by `plan-verifier` rendered under
+// `architecture-reviewer`, which cannot spawn anything (no `Agent` tool) — the
+// tree read as fact, and credited one agent's cost to another. Emit each parent
+// immediately followed by its own descendants so the indentation means what it
+// looks like. Roots keep start order; a row whose parent is outside this journal
+// set counts as a root.
+function orderAsTree(rows) {
+  const childrenOf = new Map();
+  for (const r of rows) {
+    const key = r.parent || '';
+    if (!childrenOf.has(key)) childrenOf.set(key, []);
+    childrenOf.get(key).push(r);
+  }
+  const present = new Set(rows.map((r) => r.agent));
+  const out = [];
+  const emitted = new Set();
+  const emit = (r) => {
+    if (emitted.has(r.agent)) return; // a parent cycle would otherwise recurse forever
+    emitted.add(r.agent);
+    out.push(r);
+    for (const child of childrenOf.get(r.agent) || []) emit(child);
+  };
+  for (const r of rows) if (!r.parent || !present.has(r.parent)) emit(r);
+  for (const r of rows) emit(r); // safety net: never drop a row on unexpected meta
+  return out;
+}
+
 function agentLabel(filePath) {
   const base = path.basename(filePath);
   if (base.startsWith('agent-') && base.endsWith('.jsonl')) {
@@ -99,6 +128,7 @@ function accumulate(filePath) {
     type: meta.agentType || null,
     desc: meta.description || null,
     depth: meta.spawnDepth || 1,
+    parent: meta.parentAgentId || null,
     input: 0,
     output: 0,
     cacheRead: 0,
@@ -253,6 +283,7 @@ function main() {
       type: a.type,
       desc: a.desc,
       depth: a.depth,
+      parent: a.parent,
       model: a.models.size ? [...a.models].sort()[0] : null,
       input: a.input,
       output: a.output,
@@ -267,6 +298,10 @@ function main() {
       costUsd: c !== null ? Math.round(c * 10000) / 10000 : null,
     });
   }
+
+  const orderedRows = orderAsTree(outRows);
+  outRows.length = 0;
+  outRows.push(...orderedRows);
 
   const wall = wallFirst && wallLast ? (wallLast - wallFirst) / 1000 : null;
   const parallelism = wall && wall > 0 ? Math.round((sumSpan / wall) * 100) / 100 : null;
