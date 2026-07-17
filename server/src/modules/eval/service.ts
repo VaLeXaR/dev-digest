@@ -17,7 +17,9 @@ import { reviewPullRequest, scoreEvalCase } from '@devdigest/reviewer-core';
 import type { LLMProvider } from '@devdigest/shared';
 import { parseUnifiedDiff } from '../../adapters/git/diff-parser.js';
 import { diffFromPrFiles } from '../reviews/diff-loader.js';
+import { sliceDiff } from '../reviews/helpers.js';
 import { AppError, NotFoundError, ValidationError } from '../../platform/errors.js';
+import { REVIEW_STRATEGY } from '../reviews/constants.js';
 import type { AgentRow } from '../../db/rows.js';
 import { EvalRepository, type EvalCaseUpdate } from './repository.js';
 import * as runRepo from './repository/run.repo.js';
@@ -35,6 +37,19 @@ import { SKILL_EVAL_MODEL, SKILL_EVAL_PROVIDER } from './skill-run.constants.js'
  * block to the assembled prompt. Deliberately NOT used by `executeCase` (the
  * agent path) — see R9 in `docs/plans/skill-eval-code-input/plan.md`.
  */
+/**
+ * R5 (grilling G-2): mirrors the (non-exported) `overlaps` helper in
+ * `reviewer-core/src/eval/score.ts:34-40` — true when the inclusive
+ * [start,end] ranges overlap at at least one line.
+ */
+function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  const aLo = Math.min(aStart, aEnd);
+  const aHi = Math.max(aStart, aEnd);
+  const bLo = Math.min(bStart, bEnd);
+  const bHi = Math.max(bStart, bEnd);
+  return aLo <= bHi && bLo <= aHi;
+}
+
 function prDescriptionFrom(meta: unknown): string | undefined {
   if (typeof meta !== 'object' || meta === null) return undefined;
 
@@ -238,7 +253,10 @@ export class EvalService {
         model: agent.model,
         diff,
         llm,
-        strategy: agent.strategy ?? undefined,
+        // R6: mirror production's default (`run-executor.ts:264`) rather than
+        // the engine's own `'auto'` default, so an agent with a null strategy
+        // is evaluated under the same mode it's actually reviewed under.
+        strategy: agent.strategy ?? REVIEW_STRATEGY,
         ...(skills.length > 0 ? { skills } : {}),
       });
       const raw = [...outcome.review.findings, ...outcome.dropped.map((d) => d.finding)];
@@ -403,10 +421,12 @@ export class EvalService {
 
   /**
    * Build the pre-filled eval-case fixture for a decided finding WITHOUT
-   * persisting. G4: snapshots the WHOLE PR unified diff (pure-DB reconstruction
-   * from `pr_files` patches, no live git) so the case replays deterministically
-   * forever. AC-1/AC-2: the expectation type is derived from the finding's
-   * persisted decision (accepted → `must_find`, dismissed → `must_not_flag`).
+   * persisting. Restores spec AC-3 (docs/plans/eval-case-diff-fragment.md,
+   * superseding G4 in eval-pipeline.md): the snapshot is a diff FRAGMENT — the
+   * finding's own file only, sliced out of the PR's persisted `pr_files`
+   * patches (no live git) — not the whole PR. AC-1/AC-2: the expectation type
+   * is derived from the finding's persisted decision (accepted → `must_find`,
+   * dismissed → `must_not_flag`).
    */
   private async buildSeedFromFinding(
     ctx: NonNullable<Awaited<ReturnType<Container['reviewRepo']['findingContext']>>>,
@@ -420,6 +440,32 @@ export class EvalService {
     const files = await this.container.reviewRepo.getPrFiles(review.prId);
     const repo = await this.container.reviewRepo.getRepo(pull.repoId);
     const agent = await this.container.agentsRepo.getById(pull.workspaceId, agentId);
+
+    // R3 before-guard: the finding's file must actually be snapshotted with a
+    // patch. A truncated/incomplete `pr_files` import (see T-01) would
+    // otherwise make the fragment unbuildable — never fall back to a
+    // whole-PR or empty fixture; fail loudly instead.
+    const snapshottedFile = files.find((f) => f.path === finding.file && f.patch != null);
+    if (!snapshottedFile) {
+      throw new AppError(
+        'finding_file_not_snapshotted',
+        `This PR's imported file list has no patch for "${finding.file}" — the PR's file list may be truncated, or the file has no diff. Re-import the PR so its files are fully fetched, then try again.`,
+      );
+    }
+
+    // R2: slice the PR diff down to the finding's own file — a fragment, not
+    // the whole PR. `sliceDiff` silently returns the ENTIRE raw diff when the
+    // path isn't found (reviewer-core INSIGHTS 2026-07-17) — the before-guard
+    // above and the re-parse after-guard below are both mandatory; a
+    // "successful" slice alone is never proof the file was actually found.
+    const fragmentRaw = sliceDiff(diff, finding.file);
+    const fragmentParsed = parseUnifiedDiff(fragmentRaw);
+    if (fragmentParsed.files.length !== 1 || fragmentParsed.files[0]?.path !== finding.file) {
+      throw new AppError(
+        'finding_file_not_snapshotted',
+        `Slicing the PR diff down to "${finding.file}" did not yield a single-file fragment — the PR's file list may be truncated. Re-import the PR so its files are fully fetched, then try again.`,
+      );
+    }
 
     const expected: ExpectedFinding = {
       type,
@@ -435,13 +481,15 @@ export class EvalService {
       owner_kind: 'agent',
       owner_id: agentId,
       name: `From finding: ${finding.title}`,
-      input_diff: diff.raw,
-      input_files: files.map((f) => ({
-        path: f.path,
-        additions: f.additions,
-        deletions: f.deletions,
-        patch: f.patch,
-      })),
+      input_diff: fragmentRaw,
+      input_files: files
+        .filter((f) => f.path === finding.file)
+        .map((f) => ({
+          path: f.path,
+          additions: f.additions,
+          deletions: f.deletions,
+          patch: f.patch,
+        })),
       input_meta: {
         repo: repo ? repo.fullName : null,
         number: pull.number,
@@ -493,6 +541,36 @@ export class EvalService {
       name: input.name ?? seed.name,
       expected_output: input.expected_output ?? seed.expected_output,
     };
+
+    // R5 (grilling G-2): hard-reject a case that CONTRADICTS an existing case
+    // for the same owner — same file, overlapping range, opposite type. Left
+    // unguarded, the eval set can hold e.g. a `must_find` and a `must_not_flag`
+    // on the same file+range, which no agent output can ever satisfy both of
+    // (server INSIGHTS 2026-07-17). This guards the CREATE path only — the
+    // read-only seed/preview paths are untouched.
+    const existingCases = await this.repo.listCasesForOwner(workspaceId, 'agent', seed.owner_id);
+    for (const newExpectation of caseInput.expected_output) {
+      for (const existingCase of existingCases) {
+        const conflict = existingCase.expected_output.find(
+          (existingExpectation) =>
+            existingExpectation.file === newExpectation.file &&
+            existingExpectation.type !== newExpectation.type &&
+            rangesOverlap(
+              existingExpectation.start_line,
+              existingExpectation.end_line,
+              newExpectation.start_line,
+              newExpectation.end_line,
+            ),
+        );
+        if (conflict) {
+          throw new AppError(
+            'contradictory_case',
+            `A ${conflict.type} eval case already exists for ${conflict.file}:${conflict.start_line}-${conflict.end_line} (case ${existingCase.id}); resolve it before adding this one.`,
+            409,
+          );
+        }
+      }
+    }
 
     return this.repo.createCase(workspaceId, caseInput, input.finding_id);
   }

@@ -35,6 +35,40 @@ export async function getPrFiles(
 }
 
 /**
+ * Transactional full-replace of a PR's file snapshot. A force-push can drop a
+ * file entirely — delete-then-insert (NOT `onConflictDoUpdate`) is required so
+ * a removed file's row doesn't leak stale — wrapped in a transaction so a
+ * crash between delete and insert can never leave the PR with zero files.
+ */
+export async function replacePrFiles(
+  db: Db,
+  prId: string,
+  files: { path: string; additions: number; deletions: number; patch: string | null }[],
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.delete(t.prFiles).where(eq(t.prFiles.prId, prId));
+    if (files.length > 0) {
+      await tx.insert(t.prFiles).values(files.map((f) => ({ prId, ...f })));
+    }
+  });
+}
+
+/** Transactional full-replace of a PR's commit snapshot — same rationale as
+ *  `replacePrFiles` above (force-push can drop a commit; upsert would leak it). */
+export async function replacePrCommits(
+  db: Db,
+  prId: string,
+  commits: { sha: string; message: string; author: string; committedAt: Date | null }[],
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.delete(t.prCommits).where(eq(t.prCommits.prId, prId));
+    if (commits.length > 0) {
+      await tx.insert(t.prCommits).values(commits.map((c) => ({ prId, ...c })));
+    }
+  });
+}
+
+/**
  * Record the commit a review just ran against, so the PR list can derive
  * `reviewed` vs `needs_review` (head moved since the last review) vs `stale`.
  */

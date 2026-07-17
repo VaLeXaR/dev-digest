@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { CompletionResult, CompletionRequest, StructuredRequest, StructuredResult } from '@devdigest/shared';
 import { Review, type EvalCaseInput } from '@devdigest/shared';
 import { scoreEvalCase } from '@devdigest/reviewer-core';
@@ -7,6 +7,9 @@ import { loadConfig } from '../../platform/config.js';
 import { Container } from '../../platform/container.js';
 import { MockLLMProvider } from '../../adapters/mocks.js';
 import { parseUnifiedDiff } from '../../adapters/git/diff-parser.js';
+import { AppError } from '../../platform/errors.js';
+import { AgentsRepository } from '../agents/repository.js';
+import type { AgentRow } from '../../db/rows.js';
 import * as t from '../../db/schema.js';
 import { EvalService } from './service.js';
 import { EvalRepository } from './repository.js';
@@ -39,6 +42,27 @@ function sampleDiff(path: string): string {
     '   return name;',
     ' }',
   ].join('\n');
+}
+
+/**
+ * T-04: a multi-file diff LARGE enough that `selectMode`'s 'auto' branch
+ * (reviewer-core/src/review/run.ts:120-126) would pick map-reduce — total
+ * changed lines > DEFAULT_MAP_THRESHOLD_LINES (400) AND files.length > 1 —
+ * i.e. ONE `completeStructured` call PER FILE (2 calls) under 'auto', vs.
+ * exactly ONE call under single-pass.
+ */
+function bigMultiFileDiff(pathA: string, pathB: string, linesEach = 210): string {
+  const fileDiff = (path: string) => {
+    const added = Array.from({ length: linesEach }, (_, i) => `+line ${i} of ${path}`).join('\n');
+    return [
+      `diff --git a/${path} b/${path}`,
+      `--- a/${path}`,
+      `+++ b/${path}`,
+      `@@ -1,0 +1,${linesEach} @@`,
+      added,
+    ].join('\n');
+  };
+  return [fileDiff(pathA), fileDiff(pathB)].join('\n');
 }
 
 function fixtureReview(path: string): Review {
@@ -245,6 +269,50 @@ d('EvalService (Testcontainers pg)', () => {
       expect(okRun).toBeDefined();
       expect(okRun?.pass).toBe(true);
       expect(okRun?.recall).toBe(1);
+    });
+  });
+
+  describe('T-04: default review strategy alignment', () => {
+    it("an agent seeded with strategy = null runs a case under single-pass (1 LLM call), not 'auto'/map-reduce", async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const agent = await makeAgent(pg.handle.db, workspaceId);
+      const repo = new EvalRepository(pg.handle.db);
+
+      const pathA = 'src/big-a.ts';
+      const pathB = 'src/big-b.ts';
+      const diffText = bigMultiFileDiff(pathA, pathB);
+      const evalCase = await repo.createCase(workspaceId, {
+        owner_kind: 'agent',
+        owner_id: agent.id,
+        name: 'strategy-null-case',
+        input_diff: diffText,
+        expected_output: [],
+      });
+
+      const mockLlm = new MockLLMProvider('openai', { structured: fixtureReview(pathA) });
+      const container = new Container(config(), pg.handle.db, { llm: { openai: mockLlm } });
+
+      // The `agents.strategy` column is NOT NULL with a default (`schema/agents.ts`),
+      // so a real row can never actually be null — patch the prototype for this
+      // one lookup to simulate the defensive null case (same pattern as server
+      // INSIGHTS 2026-07-02's `ReviewRepository.prototype` spies).
+      const spy = vi
+        .spyOn(AgentsRepository.prototype, 'getById')
+        .mockResolvedValue({ ...agent, strategy: null as unknown as AgentRow['strategy'] });
+
+      try {
+        const service = new EvalService(container);
+        await service.runCase(workspaceId, evalCase.id);
+      } finally {
+        spy.mockRestore();
+      }
+
+      const structuredCalls = mockLlm.calls.filter((c) => c.method === 'completeStructured');
+      // Single-pass = exactly ONE call regardless of file count. Under the old
+      // `agent.strategy ?? undefined` -> engine default 'auto', this diff
+      // (2 files, 420 changed lines > the 400-line threshold) would have
+      // triggered map-reduce = 2 calls (one per file).
+      expect(structuredCalls).toHaveLength(1);
     });
   });
 
@@ -457,15 +525,27 @@ d('EvalService (Testcontainers pg)', () => {
   });
 
   describe('createCaseFromFinding', () => {
+    let repoSeq = 0;
     async function seedReviewWithFinding(
       db: PgFixture['handle']['db'],
       workspaceId: string,
       agentId: string,
-      opts: { accepted?: boolean; dismissed?: boolean },
+      opts: {
+        accepted?: boolean;
+        dismissed?: boolean;
+        /** T-02: extra `pr_files` rows on OTHER paths, to prove the seed is a fragment, not the whole PR. */
+        extraFiles?: string[];
+        /** T-02: when false, the finding's own file is imported WITHOUT a patch (truncated-import simulation). */
+        findingFileHasPatch?: boolean;
+        /** T-03: override the finding's line range (default 2-2) to test overlap vs. non-overlap. */
+        startLine?: number;
+        endLine?: number;
+      },
     ) {
+      const repoName = ['widgets', repoSeq++].join('-');
       const [repoRow] = await db
         .insert(t.repos)
-        .values({ workspaceId, owner: 'acme', name: 'widgets', fullName: 'acme/widgets' })
+        .values({ workspaceId, owner: 'acme', name: repoName, fullName: `acme/${repoName}` })
         .returning();
       const [pull] = await db
         .insert(t.pullRequests)
@@ -485,8 +565,20 @@ d('EvalService (Testcontainers pg)', () => {
         path: 'src/greet.ts',
         additions: 1,
         deletions: 0,
-        patch: '@@ -1,3 +1,4 @@\n export function greet(name) {\n+  if (!name) throw new Error();\n   return name;\n }',
+        patch:
+          opts.findingFileHasPatch === false
+            ? null
+            : '@@ -1,3 +1,4 @@\n export function greet(name) {\n+  if (!name) throw new Error();\n   return name;\n }',
       });
+      for (const extraPath of opts.extraFiles ?? []) {
+        await db.insert(t.prFiles).values({
+          prId: pull!.id,
+          path: extraPath,
+          additions: 1,
+          deletions: 0,
+          patch: `@@ -1,2 +1,3 @@\n context line\n+added in ${extraPath}\n context line`,
+        });
+      }
       const [review] = await db
         .insert(t.reviews)
         .values({ workspaceId, prId: pull!.id, agentId, kind: 'review' })
@@ -496,8 +588,8 @@ d('EvalService (Testcontainers pg)', () => {
         .values({
           reviewId: review!.id,
           file: 'src/greet.ts',
-          startLine: 2,
-          endLine: 2,
+          startLine: opts.startLine ?? 2,
+          endLine: opts.endLine ?? 2,
           severity: 'SUGGESTION',
           category: 'style',
           title: 'Guard against empty name',
@@ -563,6 +655,149 @@ d('EvalService (Testcontainers pg)', () => {
       const repo = new EvalRepository(pg.handle.db);
       const backed = await repo.casesBackedByFindings([finding.id]);
       expect(backed.has(finding.id)).toBe(true);
+    });
+
+    it('T-02: a finding on a multi-file PR yields a fragment seed — input_diff parses to exactly one file === finding.file, input_files.length === 1', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const agent = await makeAgent(pg.handle.db, workspaceId);
+      const { finding } = await seedReviewWithFinding(pg.handle.db, workspaceId, agent.id, {
+        accepted: true,
+        extraFiles: ['src/other.ts', 'src/third.ts'],
+      });
+
+      const container = new Container(config(), pg.handle.db, {});
+      const service = new EvalService(container);
+
+      const created = await service.createCaseFromFinding(workspaceId, { finding_id: finding.id });
+
+      const parsed = parseUnifiedDiff(created.input_diff);
+      expect(parsed.files).toHaveLength(1);
+      expect(parsed.files[0]?.path).toBe('src/greet.ts');
+      expect(created.input_diff).not.toContain('src/other.ts');
+      expect(created.input_diff).not.toContain('src/third.ts');
+      const inputFiles = created.input_files as { path: string }[] | null;
+      expect(inputFiles).toHaveLength(1);
+      expect(inputFiles?.[0]?.path).toBe('src/greet.ts');
+    });
+
+    it('T-02: a finding whose file has no patch in pr_files throws finding_file_not_snapshotted (not a whole-PR fallback)', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const agent = await makeAgent(pg.handle.db, workspaceId);
+      const { finding } = await seedReviewWithFinding(pg.handle.db, workspaceId, agent.id, {
+        accepted: true,
+        findingFileHasPatch: false,
+      });
+
+      const container = new Container(config(), pg.handle.db, {});
+      const service = new EvalService(container);
+
+      let createErr: unknown;
+      try {
+        await service.createCaseFromFinding(workspaceId, { finding_id: finding.id });
+      } catch (e) {
+        createErr = e;
+      }
+      expect(createErr).toBeInstanceOf(AppError);
+      expect((createErr as AppError).code).toBe('finding_file_not_snapshotted');
+
+      // The read-only seed preview shares the exact same guard.
+      let seedErr: unknown;
+      try {
+        await service.evalCaseSeed(workspaceId, finding.id);
+      } catch (e) {
+        seedErr = e;
+      }
+      expect(seedErr).toBeInstanceOf(AppError);
+      expect((seedErr as AppError).code).toBe('finding_file_not_snapshotted');
+    });
+
+    it('T-03: hard-rejects a create that contradicts an existing case for the same owner+file+overlapping range (409)', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const agent = await makeAgent(pg.handle.db, workspaceId);
+      const container = new Container(config(), pg.handle.db, {});
+      const service = new EvalService(container);
+
+      // First: a dismissed finding on src/greet.ts:2-2 -> must_not_flag case.
+      const { finding: dismissedFinding } = await seedReviewWithFinding(
+        pg.handle.db,
+        workspaceId,
+        agent.id,
+        { dismissed: true },
+      );
+      await service.createCaseFromFinding(workspaceId, { finding_id: dismissedFinding.id });
+
+      // Second: an ACCEPTED finding on the SAME file+range -> must_find,
+      // opposite type, overlapping range -> hard-reject.
+      const { finding: acceptedFinding } = await seedReviewWithFinding(
+        pg.handle.db,
+        workspaceId,
+        agent.id,
+        { accepted: true },
+      );
+
+      let err: unknown;
+      try {
+        await service.createCaseFromFinding(workspaceId, { finding_id: acceptedFinding.id });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(AppError);
+      expect((err as AppError).code).toBe('contradictory_case');
+      expect((err as AppError).statusCode).toBe(409);
+    });
+
+    it('T-03: a non-overlapping range create still succeeds (no false-positive contradiction)', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const agent = await makeAgent(pg.handle.db, workspaceId);
+      const container = new Container(config(), pg.handle.db, {});
+      const service = new EvalService(container);
+
+      const { finding: dismissedFinding } = await seedReviewWithFinding(
+        pg.handle.db,
+        workspaceId,
+        agent.id,
+        { dismissed: true, startLine: 2, endLine: 2 },
+      );
+      await service.createCaseFromFinding(workspaceId, { finding_id: dismissedFinding.id });
+
+      // Same file, but a NON-overlapping range -> no contradiction.
+      const { finding: nonOverlappingFinding } = await seedReviewWithFinding(
+        pg.handle.db,
+        workspaceId,
+        agent.id,
+        { accepted: true, startLine: 50, endLine: 50 },
+      );
+      const created = await service.createCaseFromFinding(workspaceId, {
+        finding_id: nonOverlappingFinding.id,
+      });
+      expect(created.expected_output[0]?.type).toBe('must_find');
+    });
+
+    it('T-03: a same-type create on an overlapping range still succeeds (only opposite type is a contradiction)', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const agent = await makeAgent(pg.handle.db, workspaceId);
+      const container = new Container(config(), pg.handle.db, {});
+      const service = new EvalService(container);
+
+      const { finding: firstDismissed } = await seedReviewWithFinding(
+        pg.handle.db,
+        workspaceId,
+        agent.id,
+        { dismissed: true, startLine: 2, endLine: 2 },
+      );
+      await service.createCaseFromFinding(workspaceId, { finding_id: firstDismissed.id });
+
+      // Same file, overlapping range, SAME type (both must_not_flag) -> no contradiction.
+      const { finding: secondDismissed } = await seedReviewWithFinding(
+        pg.handle.db,
+        workspaceId,
+        agent.id,
+        { dismissed: true, startLine: 2, endLine: 2 },
+      );
+      const created = await service.createCaseFromFinding(workspaceId, {
+        finding_id: secondDismissed.id,
+      });
+      expect(created.expected_output[0]?.type).toBe('must_not_flag');
     });
 
     it('rejects when the finding is neither accepted nor dismissed', async () => {

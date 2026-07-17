@@ -148,6 +148,13 @@
       "when": 1784281249904,
       "tag": "0020_right_bloodaxe",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784302099547,
+      "tag": "0021_closed_mantis",
+      "breakpoints": true
     }
   ]
 }

@@ -118,6 +118,14 @@ dispatch.
 - **G4 (REC-4) — snapshot the WHOLE PR unified diff** (all `pr_files` patches) + files + PR meta via
   `diffFromPrFiles(prId)` (pure-DB snapshot path, no live git). Findings on un-annotated files are
   excluded from precision by the covered-only rule, so a whole-PR snapshot is a safe superset.
+  > **SUPERSEDED (2026-07-17)** — reverted to a diff **FRAGMENT** (the finding's whole file, sliced
+  > out of the whole-PR diff) to restore the original assignment's wording and spec AC-3
+  > (`SPEC-2026-07-15-eval-pipeline.md:422-424`), which this G4 decision had silently overridden.
+  > "Safe superset" was correct about the recall/precision scoring arithmetic but wrong about model
+  > behaviour on a ~145k-token whole-PR fixture (non-deterministic output, 40-57s/run, $0.016-$0.023
+  > per case — see `server/INSIGHTS.md` 2026-07-17). See `docs/plans/eval-case-diff-fragment.md` for
+  > the full rationale and the restoring implementation (T-02). This note is additive; the G4 text
+  > above is kept for history, not deleted.
 - **G5 (REC-5) — add nullable `source_finding_id uuid` (NO FK) to `eval_cases`** in the T-02
   migration; populated only by create-from-finding, powers the AC-26 "already has an eval case" hint
   (`GET /findings/eval-cases?ids=…` selects distinct `source_finding_id`).

@@ -39,6 +39,22 @@ export class ReviewRepository {
     return pullRepo.getPrFiles(this.db, prId);
   }
 
+  /** Transactional full-replace of a PR's file snapshot (grilling G-7). */
+  replacePrFiles(
+    prId: string,
+    files: { path: string; additions: number; deletions: number; patch: string | null }[],
+  ): Promise<void> {
+    return pullRepo.replacePrFiles(this.db, prId, files);
+  }
+
+  /** Transactional full-replace of a PR's commit snapshot (grilling G-7). */
+  replacePrCommits(
+    prId: string,
+    commits: { sha: string; message: string; author: string; committedAt: Date | null }[],
+  ): Promise<void> {
+    return pullRepo.replacePrCommits(this.db, prId, commits);
+  }
+
   // ---- reviews + findings -------------------------------------------------
 
   insertReview(values: {

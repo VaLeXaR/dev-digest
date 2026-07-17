@@ -16,6 +16,16 @@ import { withRetry, withTimeout } from '../../platform/resilience.js';
 
 const TIMEOUT = 30_000;
 
+// GitHub's own documented ceilings for these three list endpoints. A page
+// loop (NOT `octokit.paginate`, which is harder to stub hermetically) fetches
+// pages until either a short page is seen or the cap is reached; hitting the
+// cap while the last page was still full logs a truncation warning since more
+// items may exist beyond it.
+export const MAX_PR_FILES = 3000;
+export const MAX_PR_COMMITS = 250;
+export const MAX_PR_REVIEW_COMMENTS = 500;
+const PER_PAGE = 100;
+
 function mapStatus(state: string, merged: boolean | undefined): PrStatus {
   if (merged) return 'merged';
   if (state === 'closed') return 'closed';
@@ -28,9 +38,45 @@ function mapStatus(state: string, merged: boolean | undefined): PrStatus {
  */
 export class OctokitGitHubClient implements GitHubClient {
   private octokit: Octokit;
+  private logger: Pick<Console, 'warn'>;
 
-  constructor(token: string) {
-    this.octokit = new Octokit({ auth: token });
+  constructor(token: string, opts?: { octokit?: Octokit; logger?: Pick<Console, 'warn'> }) {
+    this.octokit = opts?.octokit ?? new Octokit({ auth: token });
+    this.logger = opts?.logger ?? console;
+  }
+
+  /**
+   * Fetches every page of a GitHub list endpoint (`per_page: 100`), stopping
+   * when a page returns fewer than `PER_PAGE` items (no more pages) or the
+   * running total reaches `cap`. Logs one truncation warning only when the
+   * loop stops BECAUSE it hit the cap while the last page was still full
+   * (more items may exist beyond the cap) — a short final page never warns,
+   * since that page was genuinely the last one.
+   */
+  private async paginateAll<T>(
+    fetchPage: (page: number) => Promise<T[]>,
+    cap: number,
+    resource: string,
+    prNumber: number,
+  ): Promise<T[]> {
+    const items: T[] = [];
+    let page = 1;
+    for (;;) {
+      const batch = await fetchPage(page);
+      items.push(...batch);
+      const lastPageFull = batch.length === PER_PAGE;
+      if (items.length >= cap) {
+        if (lastPageFull) {
+          this.logger.warn(
+            { pr: prNumber, cap, fetched: items.length },
+            `GitHub ${resource} list truncated at cap`,
+          );
+        }
+        return items.slice(0, cap);
+      }
+      if (!lastPageFull) return items;
+      page += 1;
+    }
   }
 
   async listPullRequests(repo: RepoRef): Promise<PrMeta[]> {
@@ -76,18 +122,24 @@ export class OctokitGitHubClient implements GitHubClient {
             repo: repo.name,
             pull_number: n,
           });
-          const { data: files } = await this.octokit.rest.pulls.listFiles({
-            owner: repo.owner,
-            repo: repo.name,
-            pull_number: n,
-            per_page: 100,
-          });
-          const { data: commits } = await this.octokit.rest.pulls.listCommits({
-            owner: repo.owner,
-            repo: repo.name,
-            pull_number: n,
-            per_page: 100,
-          });
+          const files = await this.paginateAll(
+            (page) =>
+              this.octokit.rest.pulls
+                .listFiles({ owner: repo.owner, repo: repo.name, pull_number: n, per_page: PER_PAGE, page })
+                .then((r) => r.data),
+            MAX_PR_FILES,
+            'file',
+            n,
+          );
+          const commits = await this.paginateAll(
+            (page) =>
+              this.octokit.rest.pulls
+                .listCommits({ owner: repo.owner, repo: repo.name, pull_number: n, per_page: PER_PAGE, page })
+                .then((r) => r.data),
+            MAX_PR_COMMITS,
+            'commit',
+            n,
+          );
           const linkedIssue = await this.resolveLinkedIssue(repo, pr.body ?? '');
           return {
             number: pr.number,
@@ -194,13 +246,22 @@ export class OctokitGitHubClient implements GitHubClient {
     return withRetry(() =>
       withTimeout(
         (async () => {
-          const res = await this.octokit.rest.pulls.listReviewComments({
-            owner: repo.owner,
-            repo: repo.name,
-            pull_number: n,
-            per_page: 100,
-          });
-          return res.data.map((c) => this.mapReviewComment(c));
+          const comments = await this.paginateAll(
+            (page) =>
+              this.octokit.rest.pulls
+                .listReviewComments({
+                  owner: repo.owner,
+                  repo: repo.name,
+                  pull_number: n,
+                  per_page: PER_PAGE,
+                  page,
+                })
+                .then((r) => r.data),
+            MAX_PR_REVIEW_COMMENTS,
+            'review comment',
+            n,
+          );
+          return comments.map((c) => this.mapReviewComment(c));
         })(),
         TIMEOUT,
       ),
