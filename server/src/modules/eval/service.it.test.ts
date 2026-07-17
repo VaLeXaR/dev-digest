@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
 import type { CompletionResult, CompletionRequest, StructuredRequest, StructuredResult } from '@devdigest/shared';
 import { Review, type EvalCaseInput } from '@devdigest/shared';
 import { scoreEvalCase } from '@devdigest/reviewer-core';
@@ -623,7 +624,7 @@ d('EvalService (Testcontainers pg)', () => {
       expect(created.input_diff.length).toBeGreaterThan(0);
     });
 
-    it('create-from-dismissed finding -> must_not_flag', async () => {
+    it('create-from-dismissed finding -> empty expected_output ([]), not a must_not_flag entry (G-A/G-D)', async () => {
       const workspaceId = await makeWorkspace(pg.handle.db);
       const agent = await makeAgent(pg.handle.db, workspaceId);
       const { finding } = await seedReviewWithFinding(pg.handle.db, workspaceId, agent.id, {
@@ -635,7 +636,7 @@ d('EvalService (Testcontainers pg)', () => {
 
       const created = await service.createCaseFromFinding(workspaceId, { finding_id: finding.id });
 
-      expect(created.expected_output[0]?.type).toBe('must_not_flag');
+      expect(created.expected_output).toEqual([]);
     });
 
     it('always creates a NEW case even when the finding already backs one (AC-26)', async () => {
@@ -711,33 +712,63 @@ d('EvalService (Testcontainers pg)', () => {
       expect((seedErr as AppError).code).toBe('finding_file_not_snapshotted');
     });
 
-    it('T-03: hard-rejects a create that contradicts an existing case for the same owner+file+overlapping range (409)', async () => {
+    it('T-02: same finding, dismissed then flipped to accepted -> creating the second (positive) case throws contradictory_case (409)', async () => {
       const workspaceId = await makeWorkspace(pg.handle.db);
       const agent = await makeAgent(pg.handle.db, workspaceId);
       const container = new Container(config(), pg.handle.db, {});
       const service = new EvalService(container);
 
-      // First: a dismissed finding on src/greet.ts:2-2 -> must_not_flag case.
-      const { finding: dismissedFinding } = await seedReviewWithFinding(
-        pg.handle.db,
-        workspaceId,
-        agent.id,
-        { dismissed: true },
-      );
-      await service.createCaseFromFinding(workspaceId, { finding_id: dismissedFinding.id });
+      // First: the finding is dismissed -> negative (empty expected_output) case.
+      const { finding } = await seedReviewWithFinding(pg.handle.db, workspaceId, agent.id, {
+        dismissed: true,
+      });
+      const firstCase = await service.createCaseFromFinding(workspaceId, { finding_id: finding.id });
+      expect(firstCase.expected_output).toEqual([]);
 
-      // Second: an ACCEPTED finding on the SAME file+range -> must_find,
-      // opposite type, overlapping range -> hard-reject.
-      const { finding: acceptedFinding } = await seedReviewWithFinding(
-        pg.handle.db,
-        workspaceId,
-        agent.id,
-        { accepted: true },
-      );
+      // Flip the SAME finding's decision (dismissed -> accepted), exactly the
+      // real-world scenario that produced the live contradictory pairs.
+      await pg.handle.db
+        .update(t.findings)
+        .set({ dismissedAt: null, acceptedAt: new Date() })
+        .where(eq(t.findings.id, finding.id));
 
+      // Second: creating another case from the SAME finding_id, now positive,
+      // contradicts the existing negative case -> hard-reject.
       let err: unknown;
       try {
-        await service.createCaseFromFinding(workspaceId, { finding_id: acceptedFinding.id });
+        await service.createCaseFromFinding(workspaceId, { finding_id: finding.id });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(AppError);
+      expect((err as AppError).code).toBe('contradictory_case');
+      expect((err as AppError).statusCode).toBe(409);
+    });
+
+    it('T-02: same finding, accepted then flipped to dismissed -> creating the second (negative) case throws contradictory_case (409)', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const agent = await makeAgent(pg.handle.db, workspaceId);
+      const container = new Container(config(), pg.handle.db, {});
+      const service = new EvalService(container);
+
+      // First: the finding is accepted -> positive (must_find) case.
+      const { finding } = await seedReviewWithFinding(pg.handle.db, workspaceId, agent.id, {
+        accepted: true,
+      });
+      const firstCase = await service.createCaseFromFinding(workspaceId, { finding_id: finding.id });
+      expect(firstCase.expected_output[0]?.type).toBe('must_find');
+
+      // Flip the SAME finding's decision (accepted -> dismissed).
+      await pg.handle.db
+        .update(t.findings)
+        .set({ acceptedAt: null, dismissedAt: new Date() })
+        .where(eq(t.findings.id, finding.id));
+
+      // Second: creating another case from the SAME finding_id, now negative,
+      // contradicts the existing positive case -> hard-reject.
+      let err: unknown;
+      try {
+        await service.createCaseFromFinding(workspaceId, { finding_id: finding.id });
       } catch (e) {
         err = e;
       }
@@ -773,31 +804,37 @@ d('EvalService (Testcontainers pg)', () => {
       expect(created.expected_output[0]?.type).toBe('must_find');
     });
 
-    it('T-03: a same-type create on an overlapping range still succeeds (only opposite type is a contradiction)', async () => {
+    it('T-03: a DIFFERENT finding_id on the same file (even the same range, opposite polarity) does NOT throw — guard is narrowed to same-finding only', async () => {
       const workspaceId = await makeWorkspace(pg.handle.db);
       const agent = await makeAgent(pg.handle.db, workspaceId);
       const container = new Container(config(), pg.handle.db, {});
       const service = new EvalService(container);
 
-      const { finding: firstDismissed } = await seedReviewWithFinding(
+      const { finding: dismissedFinding } = await seedReviewWithFinding(
         pg.handle.db,
         workspaceId,
         agent.id,
         { dismissed: true, startLine: 2, endLine: 2 },
       );
-      await service.createCaseFromFinding(workspaceId, { finding_id: firstDismissed.id });
+      const firstCase = await service.createCaseFromFinding(workspaceId, {
+        finding_id: dismissedFinding.id,
+      });
+      expect(firstCase.expected_output).toEqual([]);
 
-      // Same file, overlapping range, SAME type (both must_not_flag) -> no contradiction.
-      const { finding: secondDismissed } = await seedReviewWithFinding(
+      // A DIFFERENT finding, same file, same overlapping range, OPPOSITE
+      // polarity (accepted). Under the old file+range guard this would have
+      // conflicted; the finding-identity guard only ever looks at cases
+      // backing THIS finding_id, so it must succeed.
+      const { finding: acceptedFinding } = await seedReviewWithFinding(
         pg.handle.db,
         workspaceId,
         agent.id,
-        { dismissed: true, startLine: 2, endLine: 2 },
+        { accepted: true, startLine: 2, endLine: 2 },
       );
       const created = await service.createCaseFromFinding(workspaceId, {
-        finding_id: secondDismissed.id,
+        finding_id: acceptedFinding.id,
       });
-      expect(created.expected_output[0]?.type).toBe('must_not_flag');
+      expect(created.expected_output[0]?.type).toBe('must_find');
     });
 
     it('rejects when the finding is neither accepted nor dismissed', async () => {
@@ -811,6 +848,54 @@ d('EvalService (Testcontainers pg)', () => {
       await expect(
         service.createCaseFromFinding(workspaceId, { finding_id: finding.id }),
       ).rejects.toThrow();
+    });
+  });
+
+  describe('T-04: empty-array negative case scoring (north star)', () => {
+    it('passes when the agent emits zero grounded findings', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const agent = await makeAgent(pg.handle.db, workspaceId);
+      const repo = new EvalRepository(pg.handle.db);
+
+      const path = 'src/clean.ts';
+      const evalCase = await repo.createCase(workspaceId, {
+        owner_kind: 'agent',
+        owner_id: agent.id,
+        name: 'negative-clean-case',
+        input_diff: sampleDiff(path),
+        expected_output: [],
+      });
+
+      const mockLlm = new MockLLMProvider('openai', {
+        structured: { ...fixtureReview(path), findings: [] },
+      });
+      const container = new Container(config(), pg.handle.db, { llm: { openai: mockLlm } });
+      const service = new EvalService(container);
+
+      const run = await service.runCase(workspaceId, evalCase.id);
+      expect(run.pass).toBe(true);
+    });
+
+    it('fails when the agent emits at least one grounded finding (G-D: "silence on the whole file")', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const agent = await makeAgent(pg.handle.db, workspaceId);
+      const repo = new EvalRepository(pg.handle.db);
+
+      const path = 'src/clean.ts';
+      const evalCase = await repo.createCase(workspaceId, {
+        owner_kind: 'agent',
+        owner_id: agent.id,
+        name: 'negative-flagged-case',
+        input_diff: sampleDiff(path),
+        expected_output: [],
+      });
+
+      const mockLlm = new MockLLMProvider('openai', { structured: fixtureReview(path) });
+      const container = new Container(config(), pg.handle.db, { llm: { openai: mockLlm } });
+      const service = new EvalService(container);
+
+      const run = await service.runCase(workspaceId, evalCase.id);
+      expect(run.pass).toBe(false);
     });
   });
 });

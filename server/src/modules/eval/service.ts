@@ -37,19 +37,6 @@ import { SKILL_EVAL_MODEL, SKILL_EVAL_PROVIDER } from './skill-run.constants.js'
  * block to the assembled prompt. Deliberately NOT used by `executeCase` (the
  * agent path) — see R9 in `docs/plans/skill-eval-code-input/plan.md`.
  */
-/**
- * R5 (grilling G-2): mirrors the (non-exported) `overlaps` helper in
- * `reviewer-core/src/eval/score.ts:34-40` — true when the inclusive
- * [start,end] ranges overlap at at least one line.
- */
-function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
-  const aLo = Math.min(aStart, aEnd);
-  const aHi = Math.max(aStart, aEnd);
-  const bLo = Math.min(bStart, bEnd);
-  const bHi = Math.max(bStart, bEnd);
-  return aLo <= bHi && bLo <= aHi;
-}
-
 function prDescriptionFrom(meta: unknown): string | undefined {
   if (typeof meta !== 'object' || meta === null) return undefined;
 
@@ -424,17 +411,17 @@ export class EvalService {
    * persisting. Restores spec AC-3 (docs/plans/eval-case-diff-fragment.md,
    * superseding G4 in eval-pipeline.md): the snapshot is a diff FRAGMENT — the
    * finding's own file only, sliced out of the PR's persisted `pr_files`
-   * patches (no live git) — not the whole PR. AC-1/AC-2: the expectation type
-   * is derived from the finding's persisted decision (accepted → `must_find`,
-   * dismissed → `must_not_flag`).
+   * patches (no live git) — not the whole PR. AC-1/AC-2: the expectation is
+   * derived from the finding's persisted decision — accepted → a single
+   * `must_find` entry; dismissed → an empty `expected_output` (`[]`), the
+   * "this change is clean, flag nothing" negative (scored by score.ts's
+   * empty-expected branch: pass iff zero grounded findings).
    */
   private async buildSeedFromFinding(
     ctx: NonNullable<Awaited<ReturnType<Container['reviewRepo']['findingContext']>>>,
   ): Promise<{ owner: EvalCaseSeed['owner']; seed: EvalCaseInput }> {
     const { finding, review, pull } = ctx;
     const agentId = review.agentId!;
-
-    const type: ExpectedFinding['type'] = finding.acceptedAt ? 'must_find' : 'must_not_flag';
 
     const diff = await diffFromPrFiles(this.container.reviewRepo, review.prId);
     const files = await this.container.reviewRepo.getPrFiles(review.prId);
@@ -467,15 +454,25 @@ export class EvalService {
       );
     }
 
-    const expected: ExpectedFinding = {
-      type,
-      file: finding.file,
-      start_line: finding.startLine,
-      end_line: finding.endLine,
-      severity: finding.severity as ExpectedFinding['severity'],
-      category: finding.category as ExpectedFinding['category'],
-      title: finding.title,
-    };
+    // R1/R2 (grilling G-A/G-D): a dismissed finding seeds an EMPTY
+    // `expected_output` — "flag nothing in this fragment" — not a
+    // `must_not_flag` entry, so the scorer's empty-expected branch gives the
+    // correct verdict. An accepted finding still seeds a single `must_find`
+    // entry, unchanged. The `expected` object is only built on the accepted
+    // branch — never constructed for a dismissed finding.
+    const expectedOutput: ExpectedFinding[] = finding.acceptedAt
+      ? [
+          {
+            type: 'must_find',
+            file: finding.file,
+            start_line: finding.startLine,
+            end_line: finding.endLine,
+            severity: finding.severity as ExpectedFinding['severity'],
+            category: finding.category as ExpectedFinding['category'],
+            title: finding.title,
+          },
+        ]
+      : [];
 
     const seed: EvalCaseInput = {
       owner_kind: 'agent',
@@ -498,7 +495,7 @@ export class EvalService {
         base: pull.base,
         head_sha: pull.headSha,
       },
-      expected_output: [expected],
+      expected_output: expectedOutput,
     };
 
     return { owner: { kind: 'agent', id: agentId, name: agent?.name ?? 'Agent' }, seed };
@@ -542,34 +539,26 @@ export class EvalService {
       expected_output: input.expected_output ?? seed.expected_output,
     };
 
-    // R5 (grilling G-2): hard-reject a case that CONTRADICTS an existing case
-    // for the same owner — same file, overlapping range, opposite type. Left
-    // unguarded, the eval set can hold e.g. a `must_find` and a `must_not_flag`
-    // on the same file+range, which no agent output can ever satisfy both of
-    // (server INSIGHTS 2026-07-17). This guards the CREATE path only — the
-    // read-only seed/preview paths are untouched.
-    const existingCases = await this.repo.listCasesForOwner(workspaceId, 'agent', seed.owner_id);
-    for (const newExpectation of caseInput.expected_output) {
-      for (const existingCase of existingCases) {
-        const conflict = existingCase.expected_output.find(
-          (existingExpectation) =>
-            existingExpectation.file === newExpectation.file &&
-            existingExpectation.type !== newExpectation.type &&
-            rangesOverlap(
-              existingExpectation.start_line,
-              existingExpectation.end_line,
-              newExpectation.start_line,
-              newExpectation.end_line,
-            ),
-        );
-        if (conflict) {
-          throw new AppError(
-            'contradictory_case',
-            `A ${conflict.type} eval case already exists for ${conflict.file}:${conflict.start_line}-${conflict.end_line} (case ${existingCase.id}); resolve it before adding this one.`,
-            409,
-          );
-        }
-      }
+    // R3 (grilling G-A): hard-reject a case that contradicts an EXISTING case
+    // backing the SAME finding with the OPPOSITE polarity. Keys on finding
+    // identity, not file/range — under G-D's "silence on the whole file"
+    // negative semantics, a range-precise guard would under-catch (a positive
+    // anywhere in the file contradicts an empty-array negative), and a
+    // file-level guard would false-positive across different PRs sharing a
+    // path. This guards the CREATE path only — the read-only seed/preview
+    // paths are untouched.
+    const newIsPositive = !!ctx.finding.acceptedAt;
+    const sameFinding = await this.repo.casesBySourceFinding(workspaceId, input.finding_id);
+    const conflict = sameFinding.find(
+      (c) => c.expected_output.some((e) => e.type === 'must_find') !== newIsPositive,
+    );
+    if (conflict) {
+      const conflictIsPositive = conflict.expected_output.some((e) => e.type === 'must_find');
+      throw new AppError(
+        'contradictory_case',
+        `An existing case (${conflict.id}) already backs this finding as ${conflictIsPositive ? 'positive (must_find)' : 'negative'}; resolve it before adding a case with the opposite polarity.`,
+        409,
+      );
     }
 
     return this.repo.createCase(workspaceId, caseInput, input.finding_id);

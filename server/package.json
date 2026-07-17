@@ -13,6 +13,7 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
     "db:backfill-eval-fragments": "tsx src/db/backfill-eval-fragments.ts",
+    "db:backfill-eval-negative-empty": "tsx src/db/backfill-eval-negative-empty.ts",
     "verify:l03": "vitest run src/modules/pulls/classifier.test.ts",
     "verify:l06": "tsc --noEmit -p tsconfig.json && vitest run src/modules/eval/scoring.test.ts"
   },
