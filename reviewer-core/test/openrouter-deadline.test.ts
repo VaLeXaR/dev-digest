@@ -10,24 +10,35 @@ import { OpenRouterProvider } from '../src/llm/openrouter.js';
  * iteration, so a legit slow-but-responding call (incl. a repair round) is never cut.
  */
 describe('OpenRouterProvider per-request deadline', () => {
-  const realFetch = globalThis.fetch;
   afterEach(() => {
-    globalThis.fetch = realFetch;
     vi.restoreAllMocks();
   });
 
-  /** A fetch that never resolves until the caller's AbortSignal fires. */
-  function hangingFetchHonoringAbort() {
-    globalThis.fetch = ((_url: string, init?: { signal?: AbortSignal }) =>
-      new Promise((_resolve, reject) => {
-        const sig = init?.signal;
-        if (sig?.aborted) return reject(new DOMException('Aborted', 'AbortError'));
-        sig?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
-      })) as typeof fetch;
+  /**
+   * Make the SDK's `chat.completions.create` hang until the caller's deadline
+   * AbortSignal fires, then reject with an AbortError — the deterministic seam.
+   * Mocking `globalThis.fetch` does NOT reliably intercept the OpenAI SDK's HTTP
+   * layer across environments (it slipped through in CI, so the real endpoint
+   * returned a fast 401 BEFORE the 120ms deadline could fire — a "green locally,
+   * red in CI" trap that never touches a real network here).
+   */
+  function hangUntilAbort(provider: OpenRouterProvider) {
+    vi.spyOn(
+      (provider as unknown as { client: { chat: { completions: { create: unknown } } } }).client.chat
+        .completions,
+      'create',
+    ).mockImplementation(
+      (_body: unknown, opts?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          const sig = opts?.signal;
+          const fail = () => reject(new DOMException('Aborted', 'AbortError'));
+          if (sig?.aborted) return fail();
+          sig?.addEventListener('abort', fail);
+        }),
+    );
   }
 
   it('completeStructured rejects at the deadline instead of hanging', async () => {
-    hangingFetchHonoringAbort();
     // Tiny overall cap; SDK per-request timeout larger + no SDK retries so the
     // ONLY thing that ends the call is our AbortController deadline.
     const provider = new OpenRouterProvider('test-key', {
@@ -35,6 +46,7 @@ describe('OpenRouterProvider per-request deadline', () => {
       timeoutMs: 10_000,
       maxRetries: 0,
     });
+    hangUntilAbort(provider);
 
     const start = Date.now();
     await expect(
@@ -51,12 +63,12 @@ describe('OpenRouterProvider per-request deadline', () => {
   });
 
   it('complete rejects at the deadline instead of hanging', async () => {
-    hangingFetchHonoringAbort();
     const provider = new OpenRouterProvider('test-key', {
       requestDeadlineMs: 120,
       timeoutMs: 10_000,
       maxRetries: 0,
     });
+    hangUntilAbort(provider);
 
     await expect(
       provider.complete({ model: 'test/model', messages: [{ role: 'user', content: 'hi' }] }),
