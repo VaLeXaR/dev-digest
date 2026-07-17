@@ -126,13 +126,21 @@ export const EvalRunPreviewInput = z.object({
 });
 export type EvalRunPreviewInput = z.infer<typeof EvalRunPreviewInput>;
 
-/** One point on the dashboard trend (per run, chronological). */
+/**
+ * One point on the dashboard trend (per run, chronological). `owner_version`
+ * is the agent/skill version that produced this batch — the "what did I
+ * change" axis a trend-chart reader needs alongside the metric movement.
+ * `recall`/`precision`/`citation_accuracy`/`pass_rate` are `null` ("n/a")
+ * whenever their denominator across the set is 0 (G2/G3) — never coerced to
+ * 0, which would render as a false-regression cliff to the floor.
+ */
 export const EvalTrendPoint = z.object({
   ran_at: z.string(),
-  recall: z.number(),
-  precision: z.number(),
-  citation_accuracy: z.number(),
-  pass_rate: z.number(),
+  owner_version: z.number().int(),
+  recall: z.number().nullable(),
+  precision: z.number().nullable(),
+  citation_accuracy: z.number().nullable(),
+  pass_rate: z.number().nullable(),
   cost_usd: z.number().nullable(),
 });
 export type EvalTrendPoint = z.infer<typeof EvalTrendPoint>;

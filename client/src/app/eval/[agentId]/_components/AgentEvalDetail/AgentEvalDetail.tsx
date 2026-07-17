@@ -30,6 +30,7 @@ import { METRIC_COLORS, formatMetricPct, formatRunTimestamp, metricBarWidth } fr
 import { CompareRunsModal } from "../CompareRunsModal/CompareRunsModal";
 import { DATE_RANGE_OPTIONS, type DateRangeValue, filterByDateRange, formatCost, formatDeltaPt, splitAlert } from "./constants";
 import { s } from "./styles";
+import { TrendTooltip } from "./TrendTooltip";
 
 export function AgentEvalDetail({ agentId }: { agentId: string }) {
   const router = useRouter();
@@ -163,21 +164,21 @@ export function AgentEvalDetail({ agentId }: { agentId: string }) {
                 label="RECALL"
                 value={dashboard.current.recall}
                 delta={dashboard.delta.recall}
-                trend={trend.map((p) => p.recall)}
+                trend={trend.map((p) => p.recall).filter((v): v is number => v != null)}
                 color={METRIC_COLORS.recall}
               />
               <MetricTile
                 label="PRECISION"
                 value={dashboard.current.precision}
                 delta={dashboard.delta.precision}
-                trend={trend.map((p) => p.precision)}
+                trend={trend.map((p) => p.precision).filter((v): v is number => v != null)}
                 color={METRIC_COLORS.precision}
               />
               <MetricTile
                 label="CITATION ACCURACY"
                 value={dashboard.current.citation_accuracy}
                 delta={dashboard.delta.citation_accuracy}
-                trend={trend.map((p) => p.citation_accuracy)}
+                trend={trend.map((p) => p.citation_accuracy).filter((v): v is number => v != null)}
                 color={METRIC_COLORS.citation}
               />
             </div>
@@ -205,6 +206,10 @@ export function AgentEvalDetail({ agentId }: { agentId: string }) {
                       { name: "Precision", color: METRIC_COLORS.precision, data: trend.map((p) => p.precision) },
                       { name: "Citation", color: METRIC_COLORS.citation, data: trend.map((p) => p.citation_accuracy) },
                     ]}
+                    tooltip={(index) => {
+                      const point = trend[index];
+                      return point ? <TrendTooltip point={point} /> : null;
+                    }}
                   />
                 </>
               )}

@@ -1,3 +1,5 @@
+import type { EvalRunBatchRecord, EvalTrendPoint } from '@devdigest/shared';
+
 /**
  * A5 — pure helpers for eval run orchestration (no I/O). Kept separate from
  * `service.ts` so the aggregation math (G1-G3 uniform "0/0 -> null, excluded
@@ -101,6 +103,25 @@ export function buildRegressionAlert(input: {
 
   const collateral = describeCollateral(recallDelta, citationDelta);
   return `Precision dipped ${dipPts}pts on v${latestVersion} — more false positives slipped in.${collateral}`;
+}
+
+/**
+ * Maps persisted batch rows onto the dashboard's `EvalTrendPoint` shape.
+ * Metrics pass through verbatim (never `?? 0`) so a `null` ("n/a" — zero
+ * denominator across the set, G2/G3) never renders as a false-regression
+ * cliff to the floor. `pass_rate` follows the same rule: `null` when
+ * `total_count` is 0, not `0` ("0% pass").
+ */
+export function buildTrendPoints(batches: EvalRunBatchRecord[]): EvalTrendPoint[] {
+  return batches.map((b) => ({
+    ran_at: b.ran_at,
+    owner_version: b.owner_version,
+    recall: b.recall,
+    precision: b.precision,
+    citation_accuracy: b.citation_accuracy,
+    pass_rate: b.total_count > 0 ? b.pass_count / b.total_count : null,
+    cost_usd: b.cost_usd,
+  }));
 }
 
 export function aggregateBatch(results: CaseRunResult[]): BatchAggregate {

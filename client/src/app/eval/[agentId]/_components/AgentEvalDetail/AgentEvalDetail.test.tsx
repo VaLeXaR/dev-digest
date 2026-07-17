@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { Agent, EvalDashboard, EvalDashboardOverview, EvalRunBatchRecord } from "@devdigest/shared";
+import type { Agent, EvalDashboard, EvalDashboardOverview, EvalRunBatchRecord, EvalTrendPoint } from "@devdigest/shared";
 
 vi.mock("../../../../../components/app-shell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -39,6 +39,7 @@ vi.mock("../CompareRunsModal/CompareRunsModal", () => ({
 import { useAgent } from "../../../../../lib/hooks/agents";
 import { useAgentEvalDashboard, useEvalBatches, useEvalDashboard, useRunEvalSet } from "../../../../../lib/hooks/eval";
 import { AgentEvalDetail } from "./AgentEvalDetail";
+import { TrendTooltip } from "./TrendTooltip";
 
 afterEach(() => {
   cleanup();
@@ -76,8 +77,8 @@ const DASHBOARD: EvalDashboard = {
   current: { recall: 0.82, precision: 0.91, citation_accuracy: 0.95, traces_passed: 17, traces_total: 20, cost_usd: 0.23 },
   delta: { recall: 0.04, precision: -0.02, citation_accuracy: 0.01 },
   trend: [
-    { ran_at: "2020-01-01T10:08:00.000Z", recall: 0.78, precision: 0.92, citation_accuracy: 0.89, pass_rate: 0.75, cost_usd: 0.2 },
-    { ran_at: new Date().toISOString(), recall: 0.82, precision: 0.91, citation_accuracy: 0.95, pass_rate: 0.85, cost_usd: 0.23 },
+    { ran_at: "2020-01-01T10:08:00.000Z", owner_version: 6, recall: 0.78, precision: 0.92, citation_accuracy: 0.89, pass_rate: 0.75, cost_usd: 0.2 },
+    { ran_at: new Date().toISOString(), owner_version: 7, recall: 0.82, precision: 0.91, citation_accuracy: 0.95, pass_rate: 0.85, cost_usd: 0.23 },
   ],
   recent_runs: [],
   alert: "Precision dipped 2pts on v7 — a new false positive slipped in. Recall and citation both up.",
@@ -270,5 +271,51 @@ describe("AgentEvalDetail", () => {
     expect(screen.getByText("v7")).toBeInTheDocument();
     expect(screen.getByText("v6")).toBeInTheDocument();
     expect(screen.queryByText("v5")).not.toBeInTheDocument();
+  });
+});
+
+// R1/R9: extracted so it's testable directly with props, without rendering
+// recharts — `ResponsiveContainer` measures offsetWidth=0 under jsdom, so no
+// chart (and no tooltip) ever mounts there (see the existing "METRIC TREND
+// legend" test above, which only asserts label/legend text for this reason).
+describe("TrendTooltip", () => {
+  const TREND_POINT: EvalTrendPoint = {
+    ran_at: "2026-05-29T09:14:00.000Z",
+    owner_version: 7,
+    recall: 0.82,
+    precision: 0.91,
+    citation_accuracy: 0.95,
+    pass_rate: 0.85,
+    cost_usd: 0.23,
+  };
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders the version, cost, and all three metric rows (R9)", () => {
+    render(<TrendTooltip point={TREND_POINT} />);
+    expect(screen.getByText("v7")).toBeInTheDocument();
+    expect(screen.getByText("$0.23")).toBeInTheDocument();
+    expect(screen.getByText("Recall")).toBeInTheDocument();
+    expect(screen.getByText("82%")).toBeInTheDocument();
+    expect(screen.getByText("Precision")).toBeInTheDocument();
+    expect(screen.getByText("91%")).toBeInTheDocument();
+    expect(screen.getByText("Citation")).toBeInTheDocument();
+    expect(screen.getByText("95%")).toBeInTheDocument();
+  });
+
+  it("renders '—' for a null metric, never '0%' (G2/G3 n/a invariant)", () => {
+    render(<TrendTooltip point={{ ...TREND_POINT, recall: null }} />);
+    expect(screen.queryByText("0%")).not.toBeInTheDocument();
+    // Recall's row is the "—" one; Precision/Citation stay numeric.
+    const recallRow = screen.getByText("Recall").closest("div");
+    expect(recallRow).toHaveTextContent("—");
+  });
+
+  it("renders '—' for a null cost, never '$0.00' (unknown != free)", () => {
+    render(<TrendTooltip point={{ ...TREND_POINT, cost_usd: null }} />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
   });
 });

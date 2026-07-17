@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { PRECISION_DIP_ALERT_PTS, buildRegressionAlert } from './helpers.js';
+import type { EvalRunBatchRecord } from '@devdigest/shared';
+import { PRECISION_DIP_ALERT_PTS, buildRegressionAlert, buildTrendPoints } from './helpers.js';
+
+function makeBatch(overrides: Partial<EvalRunBatchRecord> = {}): EvalRunBatchRecord {
+  return {
+    id: 'batch-1',
+    owner_kind: 'agent',
+    owner_id: 'agent-1',
+    owner_version: 7,
+    ran_at: '2026-05-29T09:14:00.000Z',
+    recall: 0.82,
+    precision: 0.91,
+    citation_accuracy: 0.95,
+    pass_count: 8,
+    total_count: 10,
+    cost_usd: 0.23,
+    ...overrides,
+  };
+}
 
 describe('buildRegressionAlert', () => {
   it('matches design/06: bold lead-in + cause + collateral movement', () => {
@@ -99,5 +117,47 @@ describe('buildRegressionAlert', () => {
         citationDelta: null,
       }),
     ).toBeNull();
+  });
+});
+
+describe('buildTrendPoints', () => {
+  it('carries owner_version onto the trend point', () => {
+    const [point] = buildTrendPoints([makeBatch({ owner_version: 7 })]);
+    expect(point?.owner_version).toBe(7);
+  });
+
+  it('passes a null metric through as null, never 0 (G2/G3)', () => {
+    const [point] = buildTrendPoints([
+      makeBatch({ recall: null, precision: null, citation_accuracy: null }),
+    ]);
+    expect(point?.recall).toBeNull();
+    expect(point?.precision).toBeNull();
+    expect(point?.citation_accuracy).toBeNull();
+  });
+
+  it('maps a total_count: 0 batch to pass_rate: null, never 0 (R10)', () => {
+    const [point] = buildTrendPoints([makeBatch({ pass_count: 0, total_count: 0 })]);
+    expect(point?.pass_rate).toBeNull();
+  });
+
+  it('computes pass_rate as pass_count / total_count when total_count > 0', () => {
+    const [point] = buildTrendPoints([makeBatch({ pass_count: 3, total_count: 4 })]);
+    expect(point?.pass_rate).toBe(0.75);
+  });
+
+  it('passes ran_at and cost_usd through verbatim', () => {
+    const [point] = buildTrendPoints([
+      makeBatch({ ran_at: '2026-05-29T09:14:00.000Z', cost_usd: 0.23 }),
+    ]);
+    expect(point?.ran_at).toBe('2026-05-29T09:14:00.000Z');
+    expect(point?.cost_usd).toBe(0.23);
+  });
+
+  it('maps multiple batches in order', () => {
+    const points = buildTrendPoints([
+      makeBatch({ owner_version: 6 }),
+      makeBatch({ owner_version: 7 }),
+    ]);
+    expect(points.map((p) => p.owner_version)).toEqual([6, 7]);
   });
 });

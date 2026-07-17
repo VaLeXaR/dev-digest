@@ -21,7 +21,7 @@ import { AppError, NotFoundError, ValidationError } from '../../platform/errors.
 import type { AgentRow } from '../../db/rows.js';
 import { EvalRepository, type EvalCaseUpdate } from './repository.js';
 import * as runRepo from './repository/run.repo.js';
-import { aggregateBatch, buildRegressionAlert, type CaseRunResult } from './helpers.js';
+import { aggregateBatch, buildRegressionAlert, buildTrendPoints, type CaseRunResult } from './helpers.js';
 import { SKILL_EVAL_MODEL, SKILL_EVAL_PROVIDER } from './skill-run.constants.js';
 
 /**
@@ -644,14 +644,7 @@ export class EvalService {
           : null,
     };
 
-    const trendPoints: EvalTrendPoint[] = trend.map((b) => ({
-      ran_at: b.ran_at,
-      recall: b.recall ?? 0,
-      precision: b.precision ?? 0,
-      citation_accuracy: b.citation_accuracy ?? 0,
-      pass_rate: b.total_count > 0 ? b.pass_count / b.total_count : 0,
-      cost_usd: b.cost_usd,
-    }));
+    const trendPoints: EvalTrendPoint[] = buildTrendPoints(trend);
 
     const recentRuns = latest ? await this.repo.runsForBatch(workspaceId, latest.id) : [];
 

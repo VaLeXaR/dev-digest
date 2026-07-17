@@ -142,4 +142,35 @@ export const s = {
     textAlign: "right",
     flexShrink: 0,
   } satisfies CSSProperties,
+
+  // METRIC TREND chart hover tooltip (T-03, R1/R9) — reuses the chart card's
+  // own surface treatment (`chartCard` above): var(--bg-elevated), 1px solid
+  // var(--border), borderRadius 9.
+  tooltipCard: {
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
+    borderRadius: 9,
+    padding: "10px 12px",
+    minWidth: 168,
+  } satisfies CSSProperties,
+  tooltipTimestamp: { fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 } satisfies CSSProperties,
+  tooltipVersionRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  } satisfies CSSProperties,
+  tooltipVersion: { fontSize: 13, fontWeight: 600, color: "var(--accent-text)" } satisfies CSSProperties,
+  tooltipCost: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
+  tooltipDivider: { height: 1, background: "var(--border)", margin: "8px 0" } satisfies CSSProperties,
+  tooltipMetricRow: { display: "flex", alignItems: "center", gap: 6, padding: "2px 0" } satisfies CSSProperties,
+  tooltipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    display: "inline-block",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  tooltipMetricLabel: { fontSize: 12.5, color: "var(--text-secondary)", flex: 1 } satisfies CSSProperties,
+  tooltipMetricValue: { fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)" } satisfies CSSProperties,
 } as const;
