@@ -69,6 +69,20 @@ export async function replacePrCommits(
 }
 
 /**
+ * Update a PR row's mutable metadata backfilled from the GitHub detail fetch —
+ * diff stats (not on the PR-list payload) and, on the detail refresh, the body.
+ * `body` is only set when the key is present, so the list-handler backfill can
+ * update just the stats without clobbering the body.
+ */
+export async function updatePullMeta(
+  db: Db,
+  prId: string,
+  fields: { additions: number; deletions: number; filesCount: number; body?: string | null },
+): Promise<void> {
+  await db.update(t.pullRequests).set(fields).where(eq(t.pullRequests.id, prId));
+}
+
+/**
  * Record the commit a review just ran against, so the PR list can derive
  * `reviewed` vs `needs_review` (head moved since the last review) vs `stale`.
  */

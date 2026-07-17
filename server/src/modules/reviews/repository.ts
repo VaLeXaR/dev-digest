@@ -55,6 +55,14 @@ export class ReviewRepository {
     return pullRepo.replacePrCommits(this.db, prId, commits);
   }
 
+  /** Backfill a PR row's diff stats (+ optionally body) from the GitHub detail fetch. */
+  updatePullMeta(
+    prId: string,
+    fields: { additions: number; deletions: number; filesCount: number; body?: string | null },
+  ): Promise<void> {
+    return pullRepo.updatePullMeta(this.db, prId, fields);
+  }
+
   // ---- reviews + findings -------------------------------------------------
 
   insertReview(values: {

@@ -186,14 +186,11 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       for (const r of needStats) {
         try {
           const detail = await gh.getPullRequest({ owner: repo.owner, name: repo.name }, r.number);
-          await container.db
-            .update(t.pullRequests)
-            .set({
-              additions: detail.additions,
-              deletions: detail.deletions,
-              filesCount: detail.files_count,
-            })
-            .where(eq(t.pullRequests.id, r.id));
+          await container.reviewRepo.updatePullMeta(r.id, {
+            additions: detail.additions,
+            deletions: detail.deletions,
+            filesCount: detail.files_count,
+          });
           r.additions = detail.additions;
           r.deletions = detail.deletions;
           r.filesCount = detail.files_count;
@@ -289,17 +286,14 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
           committedAt: c.committed_at ? new Date(c.committed_at) : null,
         })),
       );
-      await container.db
-        .update(t.pullRequests)
-        .set({
-          body: detail.body ?? null,
-          // Diff stats aren't on GitHub's PR-list payload — backfill them from
-          // the detail fetch so the Pull Requests list shows real size/files.
-          additions: detail.additions,
-          deletions: detail.deletions,
-          filesCount: detail.files_count,
-        })
-        .where(eq(t.pullRequests.id, pr.id));
+      await container.reviewRepo.updatePullMeta(pr.id, {
+        body: detail.body ?? null,
+        // Diff stats aren't on GitHub's PR-list payload — backfill them from
+        // the detail fetch so the Pull Requests list shows real size/files.
+        additions: detail.additions,
+        deletions: detail.deletions,
+        filesCount: detail.files_count,
+      });
 
       return { ...detail, id: pr.id, ...aggregates };
     } catch (err) {
