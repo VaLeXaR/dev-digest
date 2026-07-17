@@ -71,6 +71,9 @@ export type EvalRun = z.infer<typeof EvalRun>;
 export const EvalOwnerKind = z.enum(['skill', 'agent']);
 export type EvalOwnerKind = z.infer<typeof EvalOwnerKind>;
 
+export const EvalCodeMode = z.enum(['new_file', 'modified_file']);
+export type EvalCodeMode = z.infer<typeof EvalCodeMode>;
+
 /**
  * A single scored expectation inside an eval case's `expected_output`.
  * `must_find` — the agent's grounded findings must overlap this file/line
@@ -99,6 +102,13 @@ export const EvalCase = z.object({
   input_diff: z.string(),
   input_files: z.unknown(),
   input_meta: z.unknown(),
+  // SKILL Code tab source snippets (before/after) + new-vs-modified mode.
+  // `input_diff` remains the single value the review engine consumes — it is
+  // generated from these client-side on save. All three are nullish because
+  // every agent-owned row predates them and must still parse.
+  code_before: z.string().nullish(),
+  code_after: z.string().nullish(),
+  code_mode: EvalCodeMode.nullish(),
   expected_output: z.array(ExpectedFinding),
   notes: z.string().nullish(),
 });

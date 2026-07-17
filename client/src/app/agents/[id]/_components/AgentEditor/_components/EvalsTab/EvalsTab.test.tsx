@@ -23,6 +23,10 @@ vi.mock("../../../../../../../lib/hooks/eval", () => ({
   useCreateEvalCase: () => ({ mutateAsync: createMutateAsync, isPending: false }),
   useCreateSkillEvalCase: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateEvalCase: () => ({ mutateAsync: updateMutateAsync, isPending: false }),
+  // Seed-mode hooks: EvalCaseEditor instantiates both unconditionally (Rules of
+  // Hooks), so the factory must return them once "+ New case" renders it.
+  useCreateEvalCaseFromFinding: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  usePreviewEvalRunFromFinding: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import { EvalsTab } from "./EvalsTab";

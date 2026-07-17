@@ -24,6 +24,8 @@ vi.mock("../../../../../../../lib/hooks/eval", () => ({
   useCreateEvalCase: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateSkillEvalCase: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateEvalCase: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateEvalCaseFromFinding: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  usePreviewEvalRunFromFinding: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import { EvalsTab } from "./EvalsTab";

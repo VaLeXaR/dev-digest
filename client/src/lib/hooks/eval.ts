@@ -128,14 +128,16 @@ export interface RunEvalCaseInput {
   /** Suppress the pass/fail toast. The eval-case editor sets this: the modal
    * already shows the result inline, so a toast would be redundant. */
   silent?: boolean;
+  /** Aborts the in-flight run (R7/R8) — wired through to `api.post`. */
+  signal?: AbortSignal;
 }
 
 /** `POST /eval-cases/:id/run` — runs a single case; toasts the pass/fail result. */
 export function useRunEvalCase() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ caseId }: RunEvalCaseInput) =>
-      api.post<EvalRunRecord>(`/eval-cases/${caseId}/run`),
+    mutationFn: ({ caseId, signal }: RunEvalCaseInput) =>
+      api.post<EvalRunRecord>(`/eval-cases/${caseId}/run`, undefined, { signal }),
     onSuccess: (data, variables) => {
       if (!variables.silent) {
         const name = variables.caseName ?? data.case_name ?? "Eval case";
@@ -233,8 +235,8 @@ export function useCreateEvalCaseFromFinding(agentId: string) {
  */
 export function usePreviewEvalRunFromFinding(findingId: string) {
   return useMutation({
-    mutationFn: (input: EvalRunPreviewInput) =>
-      api.post<EvalRunRecord>(`/findings/${findingId}/eval-run-preview`, input),
+    mutationFn: ({ signal, ...input }: EvalRunPreviewInput & { signal?: AbortSignal }) =>
+      api.post<EvalRunRecord>(`/findings/${findingId}/eval-run-preview`, input, { signal }),
   });
 }
 

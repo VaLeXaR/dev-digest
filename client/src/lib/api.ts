@@ -32,6 +32,15 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       },
     });
   } catch (e) {
+    // A deliberate abort (AbortController.abort()) rejects `fetch` too — it is
+    // not "the API is down" and must not be wrapped into a network ApiError,
+    // or callers would see a false "Cannot reach the DevDigest engine" error.
+    const isAbort =
+      (e instanceof DOMException && e.name === "AbortError") ||
+      (e as Error)?.name === "AbortError" ||
+      init?.signal?.aborted === true;
+    if (isAbort) throw e;
+
     // network failure / API down → full-screen error candidate
     throw new ApiError(
       `Cannot reach the DevDigest engine at ${API_BASE}. Is the API running?`,
@@ -62,13 +71,30 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return (await res.json()) as T;
 }
 
+export interface ApiCallOpts {
+  signal?: AbortSignal;
+}
+
 export const api = {
-  get: <T>(path: string) => apiFetch<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
-  put: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
-  patch: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
-  del: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
+  get: <T>(path: string, opts?: ApiCallOpts) => apiFetch<T>(path, { signal: opts?.signal }),
+  post: <T>(path: string, body?: unknown, opts?: ApiCallOpts) =>
+    apiFetch<T>(path, {
+      method: "POST",
+      body: body ? JSON.stringify(body) : undefined,
+      signal: opts?.signal,
+    }),
+  put: <T>(path: string, body?: unknown, opts?: ApiCallOpts) =>
+    apiFetch<T>(path, {
+      method: "PUT",
+      body: body ? JSON.stringify(body) : undefined,
+      signal: opts?.signal,
+    }),
+  patch: <T>(path: string, body?: unknown, opts?: ApiCallOpts) =>
+    apiFetch<T>(path, {
+      method: "PATCH",
+      body: body ? JSON.stringify(body) : undefined,
+      signal: opts?.signal,
+    }),
+  del: <T>(path: string, opts?: ApiCallOpts) =>
+    apiFetch<T>(path, { method: "DELETE", signal: opts?.signal }),
 };

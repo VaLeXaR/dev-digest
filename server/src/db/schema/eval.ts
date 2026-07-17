@@ -15,6 +15,9 @@ export const evalCases = pgTable('eval_cases', {
   inputDiff: text('input_diff'),
   inputFiles: jsonb('input_files'),
   inputMeta: jsonb('input_meta'),
+  codeBefore: text('code_before'),
+  codeAfter: text('code_after'),
+  codeMode: text('code_mode', { enum: ['new_file', 'modified_file'] }),
   expectedOutput: jsonb('expected_output'),
   notes: text('notes'),
   // Set only by "Turn into eval case" (create-from-finding); no FK since

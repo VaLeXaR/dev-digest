@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Verdict, Finding } from './findings.js';
-import { EvalRun, EvalCase, EvalOwnerKind, ExpectedFinding, Conformance, Provider, CiFailOn } from './knowledge.js';
+import { EvalRun, EvalCase, EvalOwnerKind, EvalCodeMode, ExpectedFinding, Conformance, Provider, CiFailOn } from './knowledge.js';
 
 /**
  * A4 — Eval / CI / Compose / Conformance API contracts (L06).
@@ -24,6 +24,13 @@ export const EvalCaseInput = z.object({
   input_diff: z.string().default(''),
   input_files: z.unknown().nullish(),
   input_meta: z.unknown().nullish(),
+  // SKILL Code tab source snippets (before/after) + new-vs-modified mode.
+  // `input_diff` remains the single value the review engine consumes — it is
+  // generated from these client-side on save. All three are nullish because
+  // every agent-owned row predates them and must still parse.
+  code_before: z.string().nullish(),
+  code_after: z.string().nullish(),
+  code_mode: EvalCodeMode.nullish(),
   expected_output: z.array(ExpectedFinding),
   notes: z.string().nullish(),
 });

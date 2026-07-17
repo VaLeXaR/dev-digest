@@ -44,14 +44,23 @@
     "inputLabel": "Input",
     "tabs": {
       "diff": "Diff",
+      "code": "Code",
       "prMeta": "PR meta"
+    },
+    "codeTab": {
+      "newFile": "New file",
+      "modifiedFile": "Modified file",
+      "beforeLabel": "Before",
+      "afterLabel": "After",
+      "beforePlaceholder": "type UserResponse = '{'\n  id: string;\n  name: string;\n  email?: string;\n'}'",
+      "afterPlaceholder": "type UserResponse = '{'\n  id: string;\n'}'"
     },
     "diffPlaceholder": "--- a/src/config.ts\n+++ b/src/config.ts\n@@ -10,6 +10,7 @@\n+  stripeKey: \"sk_live_...\"",
     "titleLabel": "Title",
     "titlePlaceholder": "Add Stripe integration",
     "bodyLabel": "Body",
     "bodyPlaceholder": "Wire up payments via Stripe SDK.",
-    "preview": "Preview",
+    "preview": "Preview generated diff",
     "expectedOutput": "Expected output",
     "actualOutput": "Actual output",
     "negativeCase": "Negative case",

@@ -118,34 +118,6 @@ export const s = {
     whiteSpace: "pre",
     boxSizing: "border-box",
   } satisfies CSSProperties,
-  // Syntax-highlighted read-only diff (design/05): per-line coloring — hunk
-  // headers blue, added lines green band, removed red band, file headers muted.
-  diffContainer: {
-    width: "100%",
-    minHeight: 150,
-    maxHeight: 200,
-    overflow: "auto",
-    margin: 0,
-    padding: "10px 0",
-    fontSize: 13,
-    lineHeight: 1.6,
-    boxSizing: "border-box",
-  } satisfies CSSProperties,
-  diffLine: (kind: "add" | "del" | "hunk" | "meta" | "ctx"): CSSProperties => ({
-    padding: "0 14px",
-    whiteSpace: "pre",
-    color:
-      kind === "add"
-        ? "var(--ok)"
-        : kind === "del"
-          ? "var(--crit)"
-          : kind === "hunk"
-            ? "var(--accent-text)"
-            : kind === "meta"
-              ? "var(--text-muted)"
-              : "var(--text-secondary)",
-    background: kind === "add" ? "var(--ok-bg)" : kind === "del" ? "var(--crit-bg)" : "transparent",
-  }),
   resultLine: (pass: boolean) =>
     ({
       display: "flex",

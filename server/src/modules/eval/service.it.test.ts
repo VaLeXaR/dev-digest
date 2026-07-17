@@ -303,6 +303,129 @@ d('EvalService (Testcontainers pg)', () => {
       expect(mockLlm.calls[0]?.method).toBe('completeStructured');
     });
 
+    it('R9: input_meta.{title,body} reaches the assembled prompt for a skill case', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const skill = await makeSkill(pg.handle.db, workspaceId);
+      const repo = new EvalRepository(pg.handle.db);
+
+      const path = 'src/greet.ts';
+      const evalCase = await repo.createCase(workspaceId, {
+        owner_kind: 'skill',
+        owner_id: skill.id,
+        name: 'skill-case-meta',
+        input_diff: sampleDiff(path),
+        input_meta: { title: 'Add Stripe integration', body: 'Wire up payments via Stripe SDK.' },
+        expected_output: [{ type: 'must_find', file: path, start_line: 2, end_line: 2 }],
+      });
+
+      const mockLlm = new MockLLMProvider('openai', { structured: fixtureReview(path) });
+      const container = new Container(config(), pg.handle.db, {
+        llm: { openrouter: mockLlm },
+      });
+      const service = new EvalService(container);
+
+      await service.runSkillSet(workspaceId, skill.id);
+
+      expect(mockLlm.calls).toHaveLength(1);
+      const req = mockLlm.calls[0]?.req as StructuredRequest<unknown>;
+      const promptText = req.messages.map((m) => m.content).join('\n');
+      expect(promptText).toContain('Add Stripe integration');
+      expect(promptText).toContain('Wire up payments via Stripe SDK.');
+      expect(evalCase.input_meta).toBeTruthy();
+    });
+
+    it('R9: input_meta=null produces no empty PR-description block and the run still succeeds', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const skill = await makeSkill(pg.handle.db, workspaceId);
+      const repo = new EvalRepository(pg.handle.db);
+
+      const path = 'src/greet.ts';
+      await repo.createCase(workspaceId, {
+        owner_kind: 'skill',
+        owner_id: skill.id,
+        name: 'skill-case-null-meta',
+        input_diff: sampleDiff(path),
+        input_meta: null,
+        expected_output: [{ type: 'must_find', file: path, start_line: 2, end_line: 2 }],
+      });
+
+      const mockLlm = new MockLLMProvider('openai', { structured: fixtureReview(path) });
+      const container = new Container(config(), pg.handle.db, {
+        llm: { openrouter: mockLlm },
+      });
+      const service = new EvalService(container);
+
+      const batch = await service.runSkillSet(workspaceId, skill.id);
+      expect(batch.total_count).toBe(1);
+
+      expect(mockLlm.calls).toHaveLength(1);
+      const req = mockLlm.calls[0]?.req as StructuredRequest<unknown>;
+      const promptText = req.messages.map((m) => m.content).join('\n');
+      expect(promptText).not.toMatch(/PR Description/i);
+    });
+
+    it('R9: input_meta as a non-object (string) does not throw and produces no PR description', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const skill = await makeSkill(pg.handle.db, workspaceId);
+      const repo = new EvalRepository(pg.handle.db);
+
+      const path = 'src/greet.ts';
+      await repo.createCase(workspaceId, {
+        owner_kind: 'skill',
+        owner_id: skill.id,
+        name: 'skill-case-string-meta',
+        input_diff: sampleDiff(path),
+        input_meta: 'nope',
+        expected_output: [{ type: 'must_find', file: path, start_line: 2, end_line: 2 }],
+      });
+
+      const mockLlm = new MockLLMProvider('openai', { structured: fixtureReview(path) });
+      const container = new Container(config(), pg.handle.db, {
+        llm: { openrouter: mockLlm },
+      });
+      const service = new EvalService(container);
+
+      const batch = await service.runSkillSet(workspaceId, skill.id);
+      expect(batch.total_count).toBe(1);
+
+      expect(mockLlm.calls).toHaveLength(1);
+      const req = mockLlm.calls[0]?.req as StructuredRequest<unknown>;
+      const promptText = req.messages.map((m) => m.content).join('\n');
+      expect(promptText).not.toContain('nope');
+      expect(promptText).not.toMatch(/PR Description/i);
+    });
+
+    it('R9: an AGENT case with a titled input_meta does NOT surface it in the prompt (skill-only boundary)', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const agent = await makeAgent(pg.handle.db, workspaceId);
+      const repo = new EvalRepository(pg.handle.db);
+
+      const path = 'src/greet.ts';
+      await repo.createCase(workspaceId, {
+        owner_kind: 'agent',
+        owner_id: agent.id,
+        name: 'agent-case-meta',
+        input_diff: sampleDiff(path),
+        input_meta: { title: 'Add Stripe integration', body: 'Wire up payments via Stripe SDK.' },
+        expected_output: [{ type: 'must_find', file: path, start_line: 2, end_line: 2 }],
+      });
+
+      const mockLlm = new MockLLMProvider('openai', { structured: fixtureReview(path) });
+      const container = new Container(config(), pg.handle.db, {
+        llm: { openai: mockLlm },
+      });
+      const service = new EvalService(container);
+
+      const batch = await service.runSet(workspaceId, agent.id);
+      expect(batch.total_count).toBe(1);
+
+      expect(mockLlm.calls).toHaveLength(1);
+      const req = mockLlm.calls[0]?.req as StructuredRequest<unknown>;
+      const promptText = req.messages.map((m) => m.content).join('\n');
+      expect(promptText).not.toContain('Add Stripe integration');
+      expect(promptText).not.toContain('Wire up payments via Stripe SDK.');
+    });
+
     it('AC-37: a disabled skill (enabled=false) still produces a batch', async () => {
       const workspaceId = await makeWorkspace(pg.handle.db);
       const skill = await makeSkill(pg.handle.db, workspaceId, { enabled: false });

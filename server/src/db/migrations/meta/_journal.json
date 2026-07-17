@@ -141,6 +141,13 @@
       "when": 1784204316473,
       "tag": "0019_little_songbird",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784281249904,
+      "tag": "0020_right_bloodaxe",
+      "breakpoints": true
     }
   ]
 }

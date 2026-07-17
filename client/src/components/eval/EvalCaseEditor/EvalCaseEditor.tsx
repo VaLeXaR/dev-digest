@@ -4,7 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
 import { Modal, FormField, TextInput, Button, Badge, Toggle, Tabs, Icon } from "@devdigest/ui";
-import type { EvalCase, EvalCaseInput, EvalRunRecord } from "@devdigest/shared";
+import type { EvalCase, EvalCaseInput, EvalCodeMode, EvalRunRecord } from "@devdigest/shared";
 import { ExpectedFinding } from "@devdigest/shared";
 import {
   useCreateEvalCase,
@@ -15,10 +15,15 @@ import {
   useRunEvalCase,
   type CreateEvalCaseInput,
 } from "../../../lib/hooks/eval";
-import { findingSkeleton, MODAL_WIDTH, type InputTabKey } from "./constants";
+import { notify } from "../../../lib/toast";
+import { findingSkeleton, findingSkillSkeleton, MODAL_WIDTH, type InputTabKey } from "./constants";
+import { generateDiff } from "./generateDiff";
+import { parseSkillExpectedOutput } from "./skillExpectedOutput";
+import { SkillInputPanes } from "./_components/SkillInputPanes/SkillInputPanes";
+import { DiffView } from "./_components/DiffView/DiffView";
 import { s } from "./styles";
 
-/** Schema for validating/parsing the "Expected output" textarea (R13/AC-19). */
+/** Schema for validating/parsing the "Expected output" textarea (R13/AC-19) — agent branch only (R11). */
 const ExpectedOutputArray = z.array(ExpectedFinding);
 
 /** Anything not valid JSON, or valid JSON but not an `ExpectedFinding[]`, is falsy. */
@@ -53,6 +58,21 @@ function formatActualOutput(actual: unknown): string {
   }
 }
 
+/** Read a `title`/`body` string out of the case's `input_meta` (`z.unknown()`) — never cast (R9-adjacent defensiveness). */
+function readMetaString(meta: unknown, key: "title" | "body"): string {
+  if (typeof meta !== "object" || meta === null) return "";
+  const value = (meta as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
+}
+
+/** Whether a caught error is a deliberate `AbortController.abort()` rejection — swallow, don't toast (R8). */
+function isAbortError(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === "AbortError") ||
+    (err as { name?: string } | null | undefined)?.name === "AbortError"
+  );
+}
+
 /**
  * The owning agent or skill this case belongs to — carries the display fields
  * the editor actually reads (`name` for the subtitle) plus enough to scope
@@ -67,11 +87,17 @@ export interface EvalCaseEditorOwner {
 /**
  * New/edit eval-case modal (design/05), owner-generic (agent or skill — R3,
  * T-07 generalization of the original agent-only editor). When editing an
- * existing case the Diff/Files/PR-meta inputs are a READ-ONLY view of the
- * captured fixture — only the Expected output (the assertion) is tuned. In
- * new-case mode they stay editable (G10) so a case can still be hand-authored
- * without a source finding. Save is disabled while the expected-output JSON is
- * invalid (R13/AC-19).
+ * existing case the input fixture is a READ-ONLY view of the captured
+ * snapshot — only the Expected output (the assertion) is tuned. In new-case
+ * mode it stays editable (G10) so a case can still be hand-authored without a
+ * source finding. Save is disabled while the expected-output JSON is invalid
+ * (R13/AC-19).
+ *
+ * R1/R13: `owner.kind === "agent"` renders the original `Diff | Files | PR
+ * meta` raw-textarea Input area, byte-identical to the pre-T-07 behaviour.
+ * `owner.kind === "skill"` renders the `Code | PR meta` design instead
+ * (`SkillInputPanes`) — no `Files` tab (R2), Before/After + generated-diff
+ * preview (R3/R14), and a real Title/Body PR-meta form (R6).
  */
 export function EvalCaseEditor({
   owner,
@@ -84,7 +110,7 @@ export function EvalCaseEditor({
   owner: EvalCaseEditorOwner;
   existingCase?: EvalCase;
   /** Pre-filled fixture for a NOT-yet-persisted case (the "Turn into eval case"
-   *  seed modal, screen 2). Mutually exclusive with `existingCase`. */
+   *  seed modal, screen 2). Mutually exclusive with `existingCase`. Agent-only (C2). */
   seed?: EvalCaseInput;
   /** Present in seed mode: the finding this new case is derived from. Save then
    *  persists via `from-finding` (which links + re-snapshots server-side). */
@@ -116,21 +142,60 @@ export function EvalCaseEditor({
   const [inputMetaText, setInputMetaText] = React.useState(
     src?.input_meta != null ? JSON.stringify(src.input_meta, null, 2) : "",
   );
+  // SKILL Code tab source snippets + mode (R4). Default mode for a brand-new
+  // case is "modified_file" (R15); an existing/seeded case seeds from its
+  // persisted values.
+  const [codeMode, setCodeMode] = React.useState<EvalCodeMode>(src?.code_mode ?? "modified_file");
+  const [codeBefore, setCodeBefore] = React.useState(src?.code_before ?? "");
+  const [codeAfter, setCodeAfter] = React.useState(src?.code_after ?? "");
+  // SKILL PR-meta form fields, read defensively from `input_meta` (z.unknown()).
+  const [metaTitle, setMetaTitle] = React.useState(() => readMetaString(src?.input_meta, "title"));
+  const [metaBody, setMetaBody] = React.useState(() => readMetaString(src?.input_meta, "body"));
   const [expectedOutputText, setExpectedOutputText] = React.useState(
     JSON.stringify(src?.expected_output ?? [], null, 2),
   );
   const [runOnSave, setRunOnSave] = React.useState(false);
-  const [activeInputTab, setActiveInputTab] = React.useState<InputTabKey>("diff");
+  const [activeInputTab, setActiveInputTab] = React.useState<InputTabKey>(
+    owner.kind === "skill" ? "code" : "diff",
+  );
   const [lastRun, setLastRun] = React.useState<EvalRunRecord | null>(() => initialLastRun ?? null);
+
+  // R7/R8: the ONE in-flight run's controller (if any). Only run mutations
+  // ever register here — save mutations never do, which is what makes
+  // "Cancel during a save aborts nothing" true by construction (aborting the
+  // HTTP request cannot undo a committed INSERT).
+  const abortRef = React.useRef<AbortController | null>(null);
+  // R8: blocks Save for the duration of the fresh run a Run-on-save Save
+  // triggers (distinct from `busy`/`saving`, which drive the OTHER button).
+  const [saveRunInFlight, setSaveRunInFlight] = React.useState(false);
 
   // The input fixture is immutable when editing an existing case (design/05) OR
   // when seeded from a finding — in both cases the server owns the snapshot, so
   // only the Expected output assertion (and name) is editable.
   const readOnlyInput = existingCase != null || fromFinding != null;
 
+  // R14: the single generated diff, used for BOTH the preview disclosure and
+  // the persisted payload — never recomputed separately in buildPayload().
+  const generatedDiff = React.useMemo(
+    () => generateDiff({ mode: codeMode, before: codeBefore, after: codeAfter }),
+    [codeMode, codeBefore, codeAfter],
+  );
+
+  // R10: an empty generated diff would run/score against no code at all (a
+  // fake failure). Scoped to editable skill mode only — in edit mode
+  // Before/After are read-only persisted values, so the diff is non-empty by
+  // construction. The agent path keeps its current valid-JSON-only gate.
+  const skillDiffEmpty = owner.kind === "skill" && !readOnlyInput && generatedDiff.trim() === "";
+
+  // R11: the skill branch parses leniently (file/type default) and normalizes
+  // to a full ExpectedFinding before it ever reaches the payload; the agent
+  // branch keeps the strict parse, byte-identical to before (R1).
   const parsedExpected = React.useMemo(
-    () => parseExpectedOutput(expectedOutputText),
-    [expectedOutputText],
+    () =>
+      owner.kind === "skill"
+        ? parseSkillExpectedOutput(expectedOutputText)
+        : parseExpectedOutput(expectedOutputText),
+    [expectedOutputText, owner.kind],
   );
   const isValidJson = parsedExpected !== null;
 
@@ -169,6 +234,24 @@ export function EvalCaseEditor({
   const agentScopeId = owner.kind === "agent" ? owner.id : undefined;
 
   function buildPayload(): CreateEvalCaseInput {
+    if (owner.kind === "skill") {
+      const trimmedTitle = metaTitle.trim();
+      const trimmedBody = metaBody.trim();
+      const meta =
+        trimmedTitle || trimmedBody
+          ? { title: trimmedTitle || undefined, body: trimmedBody || undefined }
+          : undefined;
+      return {
+        name: name.trim(),
+        input_diff: generatedDiff,
+        input_files: undefined,
+        input_meta: meta,
+        expected_output: parsedExpected ?? [],
+        code_before: codeMode === "new_file" ? undefined : codeBefore,
+        code_after: codeAfter,
+        code_mode: codeMode,
+      };
+    }
     return {
       name: name.trim(),
       input_diff: inputDiff,
@@ -184,8 +267,9 @@ export function EvalCaseEditor({
     if (caseId) {
       // Only the assertion (name + expected output) is editable on an existing
       // case — its input fixture is read-only. PATCH just those fields; never
-      // re-send the immutable `input_diff`/`input_files` snapshot, which for a
-      // large PR exceeds the server's 1 MiB body limit (413 "body too large").
+      // re-send the immutable input snapshot (C1) — for a large PR (agent) or
+      // a persisted before/after (skill) that would exceed the server's 1 MiB
+      // body limit (413 "body too large").
       const saved = await update.mutateAsync({
         id: caseId,
         patch: { name: payload.name, expected_output: payload.expected_output },
@@ -193,9 +277,9 @@ export function EvalCaseEditor({
       });
       return saved.id;
     }
-    // Seed mode (screen 2): persist via `from-finding` so the case is LINKED to
-    // its finding and the fixture is re-snapshotted server-side. Only the
-    // editable name/expected-output are sent as overrides.
+    // Seed mode (screen 2, agent-only per C2): persist via `from-finding` so
+    // the case is LINKED to its finding and the fixture is re-snapshotted
+    // server-side. Only the editable name/expected-output are sent as overrides.
     if (fromFinding) {
       const created = await createFromFinding.mutateAsync({
         finding_id: fromFinding.findingId,
@@ -213,49 +297,105 @@ export function EvalCaseEditor({
     return created.id;
   }
 
-  async function runAndCapture(id: string) {
-    const record = await runCase.mutateAsync({
-      caseId: id,
-      agentId: agentScopeId,
-      caseName: name.trim() || undefined,
-      // The modal shows the result inline (run banner) — no redundant toast.
-      silent: true,
-    });
-    setLastRun(record);
+  /** Runs the persisted case, registering an abortable controller (R7/R8). `silent` is a parameter (R8). */
+  async function runAndCapture(id: string, opts: { silent: boolean }) {
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    try {
+      const record = await runCase.mutateAsync({
+        caseId: id,
+        agentId: agentScopeId,
+        caseName: name.trim() || undefined,
+        silent: opts.silent,
+        signal: ctrl.signal,
+      });
+      setLastRun(record);
+    } finally {
+      abortRef.current = null;
+    }
+  }
+
+  /** Aborts the one in-flight RUN, if any. Never registers/aborts a save (R8). */
+  function abortRun() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }
+
+  /** Cancel and the Modal's X behave identically (R8): abort any in-flight run, then close. */
+  function handleClose() {
+    abortRun();
+    onClose();
   }
 
   async function handleRunCase() {
-    if (!isValidJson) return;
-    // Seed mode (unsaved from-finding case): run WITHOUT persisting anything —
-    // the server rebuilds the fixture from the finding and scores against the
-    // current expected output, but writes no eval case and no run row. Only
-    // Save creates the case; only saved cases get persisted runs.
-    if (fromFinding && !caseId) {
-      const record = await previewRun.mutateAsync({ expected_output: parsedExpected ?? [] });
-      setLastRun(record);
-      return;
+    if (!isValidJson || skillDiffEmpty) return;
+    try {
+      // Seed mode (unsaved from-finding case, agent-only per C2): run WITHOUT
+      // persisting anything — the server rebuilds the fixture from the finding
+      // and scores against the current expected output, but writes no eval
+      // case and no run row. Only Save creates the case; only saved cases get
+      // persisted runs. Registered in `abortRef` exactly like a persisted run
+      // (R7) so Cancel/X/Save abort it identically — there is no case id to
+      // scope the abort against, but the controller itself doesn't need one.
+      if (fromFinding && !caseId) {
+        const ctrl = new AbortController();
+        abortRef.current = ctrl;
+        try {
+          const record = await previewRun.mutateAsync({
+            expected_output: parsedExpected ?? [],
+            signal: ctrl.signal,
+          });
+          setLastRun(record);
+        } finally {
+          abortRef.current = null;
+        }
+        return;
+      }
+      const id = await ensureSaved();
+      // The button's own run stays silent: true — the inline banner is the
+      // feedback, and the modal stays open (R8).
+      await runAndCapture(id, { silent: true });
+    } catch (err) {
+      if (isAbortError(err)) return;
+      notify.error(err instanceof Error ? err.message : "Failed to run the eval case");
     }
-    const id = await ensureSaved();
-    await runAndCapture(id);
   }
 
   async function handleSave() {
-    if (!isValidJson) return;
-    const id = await ensureSaved();
-    if (runOnSave) await runAndCapture(id);
-    onClose();
+    if (!isValidJson || skillDiffEmpty) return;
+    // Abort any in-flight Run-case run first — Save is pressable while one is
+    // running (R7's deliberate `busy` drop from Save's disabled rule), and per
+    // R8 pressing Save aborts it rather than waiting for it.
+    abortRun();
+    try {
+      const id = await ensureSaved();
+      if (runOnSave) {
+        // Fresh run against the just-saved case, silent: false — the modal is
+        // closing, so the toast is the only surviving feedback (R8). Save
+        // stays blocked for this run's duration via `saveRunInFlight`.
+        setSaveRunInFlight(true);
+        try {
+          await runAndCapture(id, { silent: false });
+        } finally {
+          setSaveRunInFlight(false);
+        }
+      }
+      onClose();
+    } catch (err) {
+      // A Cancel click during the post-save run aborts THAT run and closes via
+      // `handleClose` itself (R8) — this catch must not also call onClose(),
+      // just swallow. The already-committed save is never undone (only runs
+      // are abortable).
+      if (isAbortError(err)) return;
+      notify.error(err instanceof Error ? err.message : "Failed to save the eval case");
+    }
   }
 
   function addSkeleton() {
     const current = parsedExpected ?? [];
-    setExpectedOutputText(JSON.stringify([...current, findingSkeleton()], null, 2));
+    const skeleton = owner.kind === "skill" ? findingSkillSkeleton() : findingSkeleton();
+    setExpectedOutputText(JSON.stringify([...current, skeleton], null, 2));
   }
-
-  const inputTabs = [
-    { key: "diff", label: t("caseEditor.tabs.diff") },
-    { key: "files", label: "Files" },
-    { key: "prMeta", label: t("caseEditor.tabs.prMeta") },
-  ];
 
   // Full-width run-RESULT banner (design/05), shown above the footer buttons.
   // No separate "running" line — the Run button's own spinner is the in-flight
@@ -289,7 +429,7 @@ export function EvalCaseEditor({
             : t("caseEditor.seededFromAccepted")
           : `${owner.name} · simulate a PR and assert the expected output`
       }
-      onClose={onClose}
+      onClose={handleClose}
       footer={
         <div style={s.footerCol}>
           {runBanner}
@@ -299,13 +439,25 @@ export function EvalCaseEditor({
               Run on save
             </label>
             <div style={s.footerButtons}>
-              <Button kind="ghost" onClick={onClose}>
+              <Button kind="ghost" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button kind="secondary" icon="Play" loading={running} onClick={handleRunCase} disabled={!isValidJson || busy}>
+              <Button
+                kind="secondary"
+                icon="Play"
+                loading={running}
+                onClick={handleRunCase}
+                disabled={!isValidJson || busy || skillDiffEmpty}
+              >
                 {running ? t("caseEditor.running") : t("caseEditor.runCase")}
               </Button>
-              <Button kind="primary" icon="Check" loading={saving} onClick={handleSave} disabled={!isValidJson || busy}>
+              <Button
+                kind="primary"
+                icon="Check"
+                loading={saving}
+                onClick={handleSave}
+                disabled={!isValidJson || saving || saveRunInFlight || skillDiffEmpty}
+              >
                 {saving ? t("caseEditor.saving") : t("caseEditor.save")}
               </Button>
             </div>
@@ -325,40 +477,35 @@ export function EvalCaseEditor({
             <TextInput value={name} onChange={setName} placeholder={t("caseEditor.namePlaceholder")} />
           </FormField>
           <div style={s.sectionTitle}>{t("caseEditor.inputLabel")}</div>
-          <div style={s.tabsWrap}>
-            <Tabs
-              tabs={inputTabs}
-              value={activeInputTab}
-              onChange={(k) => setActiveInputTab(k as InputTabKey)}
-              pad="0"
-            />
-          </div>
-          {activeInputTab === "diff" && (
-            <InputField
-              ariaLabel="Diff input"
-              value={inputDiff}
-              onChange={setInputDiff}
-              placeholder={t("caseEditor.diffPlaceholder")}
-              readOnly={readOnlyInput}
-              highlightDiff
-            />
-          )}
-          {activeInputTab === "files" && (
-            <InputField
-              ariaLabel="Files input"
-              value={inputFilesText}
-              onChange={setInputFilesText}
-              placeholder="[]"
+          {owner.kind === "skill" ? (
+            <SkillInputPanes
+              activeTab={activeInputTab === "prMeta" ? "prMeta" : "code"}
+              onTabChange={setActiveInputTab}
+              mode={codeMode}
+              onModeChange={setCodeMode}
+              before={codeBefore}
+              onBeforeChange={setCodeBefore}
+              after={codeAfter}
+              onAfterChange={setCodeAfter}
+              title={metaTitle}
+              onTitleChange={setMetaTitle}
+              body={metaBody}
+              onBodyChange={setMetaBody}
+              generatedDiff={generatedDiff}
               readOnly={readOnlyInput}
             />
-          )}
-          {activeInputTab === "prMeta" && (
-            <InputField
-              ariaLabel="PR meta input"
-              value={inputMetaText}
-              onChange={setInputMetaText}
-              placeholder="{}"
-              readOnly={readOnlyInput}
+          ) : (
+            <AgentInputPanes
+              t={t}
+              activeInputTab={activeInputTab}
+              onTabChange={setActiveInputTab}
+              inputDiff={inputDiff}
+              onDiffChange={setInputDiff}
+              inputFilesText={inputFilesText}
+              onFilesChange={setInputFilesText}
+              inputMetaText={inputMetaText}
+              onMetaChange={setInputMetaText}
+              readOnlyInput={readOnlyInput}
             />
           )}
         </div>
@@ -394,6 +541,76 @@ export function EvalCaseEditor({
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Agent owner's Input area — `Diff | Files | PR meta` tabs, byte-identical to
+ * the pre-T-07 behaviour (R1). `inputTabs` lives here (not module/component
+ * scope) so a skill owner never builds a `Files` tab (R2).
+ */
+function AgentInputPanes({
+  t,
+  activeInputTab,
+  onTabChange,
+  inputDiff,
+  onDiffChange,
+  inputFilesText,
+  onFilesChange,
+  inputMetaText,
+  onMetaChange,
+  readOnlyInput,
+}: {
+  t: ReturnType<typeof useTranslations>;
+  activeInputTab: InputTabKey;
+  onTabChange: (k: InputTabKey) => void;
+  inputDiff: string;
+  onDiffChange: (v: string) => void;
+  inputFilesText: string;
+  onFilesChange: (v: string) => void;
+  inputMetaText: string;
+  onMetaChange: (v: string) => void;
+  readOnlyInput: boolean;
+}) {
+  const inputTabs = [
+    { key: "diff", label: t("caseEditor.tabs.diff") },
+    { key: "files", label: "Files" },
+    { key: "prMeta", label: t("caseEditor.tabs.prMeta") },
+  ];
+  return (
+    <>
+      <div style={s.tabsWrap}>
+        <Tabs tabs={inputTabs} value={activeInputTab} onChange={(k) => onTabChange(k as InputTabKey)} pad="0" />
+      </div>
+      {activeInputTab === "diff" && (
+        <InputField
+          ariaLabel="Diff input"
+          value={inputDiff}
+          onChange={onDiffChange}
+          placeholder={t("caseEditor.diffPlaceholder")}
+          readOnly={readOnlyInput}
+          highlightDiff
+        />
+      )}
+      {activeInputTab === "files" && (
+        <InputField
+          ariaLabel="Files input"
+          value={inputFilesText}
+          onChange={onFilesChange}
+          placeholder="[]"
+          readOnly={readOnlyInput}
+        />
+      )}
+      {activeInputTab === "prMeta" && (
+        <InputField
+          ariaLabel="PR meta input"
+          value={inputMetaText}
+          onChange={onMetaChange}
+          placeholder="{}"
+          readOnly={readOnlyInput}
+        />
+      )}
+    </>
   );
 }
 
@@ -435,34 +652,5 @@ function InputField({
       style={s.textarea}
       rows={6}
     />
-  );
-}
-
-type DiffLineKind = "add" | "del" | "hunk" | "meta" | "ctx";
-
-/** Classify one unified-diff line for coloring (order matters: headers before +/-). */
-function classifyDiffLine(line: string): DiffLineKind {
-  if (line.startsWith("@@")) return "hunk";
-  if (line.startsWith("+++") || line.startsWith("---")) return "meta";
-  if (line.startsWith("+")) return "add";
-  if (line.startsWith("-")) return "del";
-  return "ctx";
-}
-
-/** Read-only, per-line syntax-highlighted unified diff (design/05). */
-function DiffView({ diff, ariaLabel }: { diff: string; ariaLabel: string }) {
-  const lines = diff.length > 0 ? diff.split("\n") : [];
-  return (
-    <div className="mono" aria-label={ariaLabel} aria-readonly="true" style={s.diffContainer}>
-      {lines.length === 0 ? (
-        <div style={{ ...s.diffLine("ctx"), color: "var(--text-muted)" }}>—</div>
-      ) : (
-        lines.map((line, i) => (
-          <div key={i} style={s.diffLine(classifyDiffLine(line))}>
-            {line === "" ? " " : line}
-          </div>
-        ))
-      )}
-    </div>
   );
 }

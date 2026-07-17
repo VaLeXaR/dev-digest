@@ -25,6 +25,29 @@ import { aggregateBatch, buildRegressionAlert, type CaseRunResult } from './help
 import { SKILL_EVAL_MODEL, SKILL_EVAL_PROVIDER } from './skill-run.constants.js';
 
 /**
+ * R9: narrows a persisted `EvalCase.input_meta` (`z.unknown()` on the
+ * contract, `jsonb` in the DB — any previous writer could have put a string,
+ * a number, an array, or `null` there) into an optional PR description for
+ * `executeSkillCase` ONLY. Never cast; guard with `typeof === 'object'`.
+ * Returns `undefined` (never `''`) when neither `title` nor `body` is a
+ * non-empty string, so the caller can spread-conditionally and omit the
+ * `prDescription` key entirely rather than adding an empty PR-description
+ * block to the assembled prompt. Deliberately NOT used by `executeCase` (the
+ * agent path) — see R9 in `docs/plans/skill-eval-code-input/plan.md`.
+ */
+function prDescriptionFrom(meta: unknown): string | undefined {
+  if (typeof meta !== 'object' || meta === null) return undefined;
+
+  const title = 'title' in meta && typeof meta.title === 'string' ? meta.title.trim() : '';
+  const body = 'body' in meta && typeof meta.body === 'string' ? meta.body.trim() : '';
+
+  if (title && body) return `${title}\n\n${body}`;
+  if (title) return title;
+  if (body) return body;
+  return undefined;
+}
+
+/**
  * A5 — eval run orchestration, create-from-finding, dashboard assembly.
  *
  * Mirrors `run-executor.ts:runOneAgent`'s DIRECT LLM invocation (agent.model +
@@ -250,6 +273,9 @@ export class EvalService {
    * `strategy`. Mirrors `executeCase`'s shape exactly (parse diff once,
    * reconstruct the raw pre-grounding finding set, score, AC-36 try/catch)
    * so `scoreEvalCase`/`groundFindings` behave identically for both owners.
+   * R9: also maps the persisted `input_meta.{title,body}` into `prDescription`
+   * — SKILL-owned cases only (`executeCase`, the agent path, deliberately does
+   * NOT do this, see `prDescriptionFrom`'s doc comment).
    */
   private async executeSkillCase(
     skillBody: string,
@@ -259,11 +285,13 @@ export class EvalService {
     const start = Date.now();
     try {
       const diff = parseUnifiedDiff(evalCase.input_diff);
+      const prDescription = prDescriptionFrom(evalCase.input_meta);
       const outcome = await reviewPullRequest({
         systemPrompt: skillBody,
         model: SKILL_EVAL_MODEL,
         diff,
         llm,
+        ...(prDescription !== undefined ? { prDescription } : {}),
       });
       const raw = [...outcome.review.findings, ...outcome.dropped.map((d) => d.finding)];
       const score = scoreEvalCase(evalCase.expected_output, raw, diff);

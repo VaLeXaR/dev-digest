@@ -22,6 +22,9 @@ function toEvalCase(row: EvalCaseRow): EvalCase {
     input_diff: row.inputDiff ?? '',
     input_files: row.inputFiles,
     input_meta: row.inputMeta,
+    code_before: row.codeBefore,
+    code_after: row.codeAfter,
+    code_mode: row.codeMode,
     expected_output: expected.success ? expected.data : [],
     notes: row.notes,
   };
@@ -84,6 +87,9 @@ export async function createCase(
       inputDiff: input.input_diff,
       inputFiles: input.input_files ?? null,
       inputMeta: input.input_meta ?? null,
+      codeBefore: input.code_before ?? null,
+      codeAfter: input.code_after ?? null,
+      codeMode: input.code_mode ?? null,
       expectedOutput: input.expected_output,
       notes: input.notes ?? null,
       sourceFindingId: sourceFindingId ?? null,
@@ -93,7 +99,18 @@ export async function createCase(
 }
 
 export type EvalCaseUpdate = Partial<
-  Pick<EvalCaseInput, 'name' | 'input_diff' | 'input_files' | 'input_meta' | 'expected_output' | 'notes'>
+  Pick<
+    EvalCaseInput,
+    | 'name'
+    | 'input_diff'
+    | 'input_files'
+    | 'input_meta'
+    | 'code_before'
+    | 'code_after'
+    | 'code_mode'
+    | 'expected_output'
+    | 'notes'
+  >
 >;
 
 export async function updateCase(
@@ -107,6 +124,9 @@ export async function updateCase(
   if (patch.input_diff !== undefined) set.inputDiff = patch.input_diff;
   if (patch.input_files !== undefined) set.inputFiles = patch.input_files;
   if (patch.input_meta !== undefined) set.inputMeta = patch.input_meta;
+  if (patch.code_before !== undefined) set.codeBefore = patch.code_before;
+  if (patch.code_after !== undefined) set.codeAfter = patch.code_after;
+  if (patch.code_mode !== undefined) set.codeMode = patch.code_mode;
   if (patch.expected_output !== undefined) set.expectedOutput = patch.expected_output;
   if (patch.notes !== undefined) set.notes = patch.notes;
 

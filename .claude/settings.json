@@ -1,8 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Edit(**INSIGHTS.md)",
-      "Write(**INSIGHTS.md)"
+      "Edit(**/INSIGHTS.md)",
+      "Write(**/INSIGHTS.md)"
     ]
   },
   "hooks": {
