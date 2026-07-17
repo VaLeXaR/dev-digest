@@ -46,14 +46,24 @@ function caseStatus(run: EvalRunRecord | undefined): CaseStatus {
   return run.pass ? "pass" : "fail";
 }
 
-/** First expected-output entry's severity/category, or "empty []" for a pure-precision case (R10). */
-function caseBadgeText(c: EvalCase): string {
-  const first = c.expected_output[0];
-  if (!first) return "empty []";
-  if (first.severity && first.category) return `${first.severity} · ${first.category}`;
-  if (first.severity) return first.severity;
-  if (first.category) return first.category;
-  return "empty []";
+/**
+ * Provenance chip for a case seeded from a PR-review finding — its
+ * `severity · category`, read from the display-only `input_meta.source_finding`
+ * (so it works for a negative case whose `expected_output` is `[]`). Returns
+ * `null` for a manually-authored case (no `source_finding`) → no chip is shown.
+ */
+function caseBadgeText(c: EvalCase): string | null {
+  const meta = c.input_meta;
+  const sf =
+    meta && typeof meta === "object" && "source_finding" in meta
+      ? (meta as { source_finding?: unknown }).source_finding
+      : undefined;
+  if (!sf || typeof sf !== "object") return null;
+  const { severity, category } = sf as { severity?: unknown; category?: unknown };
+  const sev = typeof severity === "string" ? severity : null;
+  const cat = typeof category === "string" ? category : null;
+  if (sev && cat) return `${sev} · ${cat}`;
+  return sev ?? cat ?? null;
 }
 
 function CaseRow({
@@ -99,7 +109,7 @@ function CaseRow({
             : `expected ${expectedCount} finding${expectedCount === 1 ? "" : "s"}, got ${gotCount}`}
         </span>
       </div>
-      <span style={s.caseBadge}>{caseBadgeText(evalCase)}</span>
+      {caseBadgeText(evalCase) && <span style={s.caseBadge}>{caseBadgeText(evalCase)}</span>}
       <div style={s.caseActions}>
         <IconBtn icon="Play" label={running ? t("evalsTab.running") : t("evalsTab.run")} onClick={onRun} loading={running} />
         <IconBtn icon="Edit" label={t("evalsTab.edit")} onClick={onEdit} />

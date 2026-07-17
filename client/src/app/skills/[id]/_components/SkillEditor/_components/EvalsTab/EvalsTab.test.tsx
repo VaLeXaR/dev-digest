@@ -59,7 +59,10 @@ function makeCase(over: Partial<EvalCase>): EvalCase {
     name: "stripe-key-leak",
     input_diff: "--- a/src/config.ts",
     input_files: null,
-    input_meta: null,
+    // From-finding provenance drives the chip (severity · category), so a
+    // negative case whose expected_output is [] still shows it. Manual cases
+    // pass input_meta: null and render no chip.
+    input_meta: { source_finding: { severity: "CRITICAL", category: "security", title: "stripe key leak" } },
     expected_output: [
       { type: "must_find", file: "src/config.ts", start_line: 12, end_line: 12, severity: "CRITICAL", category: "security" },
     ],
@@ -135,14 +138,33 @@ describe("T-08 skill EvalsTab", () => {
     expect(screen.getByText("expected 1 finding, got 0")).toBeInTheDocument();
   });
 
-  it("renders 'empty []' badge for a pure-precision case with no expected findings", () => {
+  it("shows the source-finding provenance chip for a NEGATIVE case (empty expected_output)", () => {
     mockData({
-      cases: [makeCase({ id: "case3", name: "clean-refactor-no-flags", expected_output: [] })],
+      cases: [
+        makeCase({
+          id: "caseNeg",
+          name: "dismissed-not-a-leak",
+          expected_output: [],
+          input_meta: { source_finding: { severity: "WARNING", category: "security" } },
+        }),
+      ],
+      lastRuns: [makeRun({ case_id: "caseNeg", pass: true, actual_output: [] })],
+    });
+    renderTab();
+
+    expect(screen.getByText("WARNING · security")).toBeInTheDocument();
+    expect(screen.getByText("must not flag")).toBeInTheDocument();
+  });
+
+  it("renders NO provenance chip for a manual case with no source finding", () => {
+    mockData({
+      cases: [makeCase({ id: "case3", name: "manual-clean", expected_output: [], input_meta: null })],
       lastRuns: [makeRun({ case_id: "case3", pass: true, actual_output: [] })],
     });
     renderTab();
 
-    expect(screen.getByText("empty []")).toBeInTheDocument();
+    expect(screen.queryByText("empty []")).not.toBeInTheDocument();
+    expect(screen.queryByText(/·/)).not.toBeInTheDocument();
     expect(screen.getByText("expected 0 findings, got 0")).toBeInTheDocument();
   });
 

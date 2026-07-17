@@ -494,6 +494,17 @@ export class EvalService {
         author: pull.author,
         base: pull.base,
         head_sha: pull.headSha,
+        // Display-only provenance of the PR-review finding this case was seeded
+        // from (severity/category/title are NOT used by scoring). Lets the
+        // Evals-tab chip show "SEVERITY · category" even for a negative case
+        // whose `expected_output` is now `[]`. Present ONLY on from-finding
+        // cases — a manually-authored case has no `source_finding`, so its chip
+        // renders nothing.
+        source_finding: {
+          severity: finding.severity,
+          category: finding.category,
+          title: finding.title,
+        },
       },
       expected_output: expectedOutput,
     };
