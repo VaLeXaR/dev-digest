@@ -454,19 +454,36 @@ export class EvalService {
       );
     }
 
+    // Clamp the expectation's line range to the lines the finding's file diff
+    // actually covers WITHIN the finding's declared range. A reviewer that
+    // reports a finding as spanning the whole file (e.g. 1-256) would otherwise
+    // let ANY grounded finding anywhere in that file overlap the expectation
+    // and falsely PASS a positive case (a must_find case is only satisfied by a
+    // finding whose lines overlap — `reviewer-core/src/eval/score.ts:42-47`).
+    // Narrowing to the real changed region makes overlap-matching distinguish
+    // the finding's location from an unrelated one. LIMIT: a change spanning
+    // several regions of one file still yields a min..max span, and two
+    // findings on the SAME lines are indistinguishable by line-matching at all
+    // — that residual needs a semantic judge, out of scope for code-only scoring.
+    const coveredInRange = fragmentParsed.files[0]!.hunks
+      .flatMap((h) => h.newLineNumbers)
+      .filter((n) => n >= finding.startLine && n <= finding.endLine);
+    const clampedStart = coveredInRange.length > 0 ? Math.min(...coveredInRange) : finding.startLine;
+    const clampedEnd = coveredInRange.length > 0 ? Math.max(...coveredInRange) : finding.endLine;
+
     // R1/R2 (grilling G-A/G-D): a dismissed finding seeds an EMPTY
     // `expected_output` — "flag nothing in this fragment" — not a
     // `must_not_flag` entry, so the scorer's empty-expected branch gives the
     // correct verdict. An accepted finding still seeds a single `must_find`
-    // entry, unchanged. The `expected` object is only built on the accepted
-    // branch — never constructed for a dismissed finding.
+    // entry (its range clamped above). The `expected` object is only built on
+    // the accepted branch — never constructed for a dismissed finding.
     const expectedOutput: ExpectedFinding[] = finding.acceptedAt
       ? [
           {
             type: 'must_find',
             file: finding.file,
-            start_line: finding.startLine,
-            end_line: finding.endLine,
+            start_line: clampedStart,
+            end_line: clampedEnd,
             severity: finding.severity as ExpectedFinding['severity'],
             category: finding.category as ExpectedFinding['category'],
             title: finding.title,

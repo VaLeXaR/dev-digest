@@ -624,6 +624,34 @@ d('EvalService (Testcontainers pg)', () => {
       expect(created.input_diff.length).toBeGreaterThan(0);
     });
 
+    it('clamps a wide-range accepted finding to the actual changed lines (positive false-pass fix)', async () => {
+      const workspaceId = await makeWorkspace(pg.handle.db);
+      const agent = await makeAgent(pg.handle.db, workspaceId);
+      // The reviewer declared this finding as spanning the whole file (1-200),
+      // but the file diff only touches lines 1-4. Without clamping, ANY grounded
+      // finding anywhere in the file (e.g. an unrelated issue at line 73) would
+      // overlap 1-200 and falsely PASS the positive case.
+      const { finding } = await seedReviewWithFinding(pg.handle.db, workspaceId, agent.id, {
+        accepted: true,
+        startLine: 1,
+        endLine: 200,
+      });
+
+      const container = new Container(config(), pg.handle.db, {});
+      const service = new EvalService(container);
+
+      const created = await service.createCaseFromFinding(workspaceId, { finding_id: finding.id });
+      const exp = created.expected_output[0]!;
+
+      expect(exp.type).toBe('must_find');
+      // Clamped to the hunk's covered new-side lines (1..4), NOT the declared 1..200.
+      expect(exp.start_line).toBe(1);
+      expect(exp.end_line).toBe(4);
+      // Consequence: an unrelated finding at line 73 no longer overlaps → the
+      // positive case would correctly FAIL, matching the reference behaviour.
+      expect(exp.end_line).toBeLessThan(73);
+    });
+
     it('create-from-dismissed finding -> empty expected_output ([]), not a must_not_flag entry (G-A/G-D)', async () => {
       const workspaceId = await makeWorkspace(pg.handle.db);
       const agent = await makeAgent(pg.handle.db, workspaceId);
