@@ -3,6 +3,7 @@ import type {
   EvalCase,
   EvalCaseFromFindingInput,
   EvalCaseInput,
+  EvalCaseSeed,
   EvalDashboard,
   EvalDashboardOverview,
   EvalRunBatchRecord,
@@ -350,39 +351,47 @@ export class EvalService {
   // ---- create from finding (R1/AC-1/AC-2/AC-3/AC-26) -----------------------
 
   /**
-   * G6: input is `{ finding_id }` ONLY — the owner agent is resolved
-   * SERVER-SIDE from the finding's own review. G4: snapshots the WHOLE PR
-   * unified diff (pure-DB reconstruction from `pr_files` patches, no live
-   * git) so the case replays deterministically forever, independent of the
-   * live clone. AC-26: always creates a NEW case, never updates an existing
-   * one for the same finding.
+   * Load a finding and validate it can back an eval case (owning agent present,
+   * finding decided). Shared by `evalCaseSeed` (read-only preview) and
+   * `createCaseFromFinding` (persist) so both enforce the exact same gate.
    */
-  async createCaseFromFinding(
-    workspaceId: string,
-    input: EvalCaseFromFindingInput,
-  ): Promise<EvalCase> {
-    const ctx = await this.container.reviewRepo.findingContext(input.finding_id);
+  private async loadDecidedFinding(workspaceId: string, findingId: string) {
+    const ctx = await this.container.reviewRepo.findingContext(findingId);
     if (!ctx || ctx.pull.workspaceId !== workspaceId) {
       throw new NotFoundError('Finding not found');
     }
-    const { finding, review, pull } = ctx;
-
-    if (!review.agentId) {
+    if (!ctx.review.agentId) {
       throw new AppError(
         'no_owning_agent',
         'This review has no owning agent (summary or legacy review) so no eval case can be created from it.',
         400,
       );
     }
-    if (!finding.acceptedAt && !finding.dismissedAt) {
+    if (!ctx.finding.acceptedAt && !ctx.finding.dismissedAt) {
       throw new ValidationError('Finding must be accepted or dismissed first');
     }
+    return ctx;
+  }
+
+  /**
+   * Build the pre-filled eval-case fixture for a decided finding WITHOUT
+   * persisting. G4: snapshots the WHOLE PR unified diff (pure-DB reconstruction
+   * from `pr_files` patches, no live git) so the case replays deterministically
+   * forever. AC-1/AC-2: the expectation type is derived from the finding's
+   * persisted decision (accepted → `must_find`, dismissed → `must_not_flag`).
+   */
+  private async buildSeedFromFinding(
+    ctx: NonNullable<Awaited<ReturnType<Container['reviewRepo']['findingContext']>>>,
+  ): Promise<{ owner: EvalCaseSeed['owner']; seed: EvalCaseInput }> {
+    const { finding, review, pull } = ctx;
+    const agentId = review.agentId!;
 
     const type: ExpectedFinding['type'] = finding.acceptedAt ? 'must_find' : 'must_not_flag';
 
     const diff = await diffFromPrFiles(this.container.reviewRepo, review.prId);
     const files = await this.container.reviewRepo.getPrFiles(review.prId);
     const repo = await this.container.reviewRepo.getRepo(pull.repoId);
+    const agent = await this.container.agentsRepo.getById(pull.workspaceId, agentId);
 
     const expected: ExpectedFinding = {
       type,
@@ -394,10 +403,10 @@ export class EvalService {
       title: finding.title,
     };
 
-    const caseInput: EvalCaseInput = {
+    const seed: EvalCaseInput = {
       owner_kind: 'agent',
-      owner_id: review.agentId,
-      name: finding.title,
+      owner_id: agentId,
+      name: `From finding: ${finding.title}`,
       input_diff: diff.raw,
       input_files: files.map((f) => ({
         path: f.path,
@@ -416,7 +425,98 @@ export class EvalService {
       expected_output: [expected],
     };
 
+    return { owner: { kind: 'agent', id: agentId, name: agent?.name ?? 'Agent' }, seed };
+  }
+
+  /**
+   * Read-only seed for the "Turn into eval case" modal (screen 2) — the owning
+   * agent, the finding-derived fixture, and any case this finding ALREADY backs
+   * WHOSE TYPE MATCHES THE CURRENT DECISION (accepted → a positive/`must_find`
+   * case, dismissed → a negative case). A stale case from a prior, now-reversed
+   * decision is ignored so the client seeds a fresh case of the correct type
+   * instead of reopening the wrong one. Persists nothing.
+   */
+  async evalCaseSeed(workspaceId: string, findingId: string): Promise<EvalCaseSeed> {
+    const ctx = await this.loadDecidedFinding(workspaceId, findingId);
+    const wantPositive = !!ctx.finding.acceptedAt;
+    const cases = await this.repo.casesBySourceFinding(workspaceId, findingId);
+    const existing =
+      cases.find((c) => c.expected_output.some((e) => e.type === 'must_find') === wantPositive) ?? null;
+    const { owner, seed } = await this.buildSeedFromFinding(ctx);
+    return { owner, existing_case: existing, seed };
+  }
+
+  /**
+   * G6: the owner agent is resolved SERVER-SIDE from the finding's own review.
+   * The input fixture (diff/files/meta) is always re-snapshotted here and never
+   * taken from the caller; only `name`/`expected_output` may be overridden by
+   * the seed-modal edits (screen 2). AC-26: always creates a NEW case, never
+   * updates an existing one for the same finding.
+   */
+  async createCaseFromFinding(
+    workspaceId: string,
+    input: EvalCaseFromFindingInput,
+  ): Promise<EvalCase> {
+    const ctx = await this.loadDecidedFinding(workspaceId, input.finding_id);
+    const { seed } = await this.buildSeedFromFinding(ctx);
+
+    const caseInput: EvalCaseInput = {
+      ...seed,
+      name: input.name ?? seed.name,
+      expected_output: input.expected_output ?? seed.expected_output,
+    };
+
     return this.repo.createCase(workspaceId, caseInput, input.finding_id);
+  }
+
+  /**
+   * EPHEMERAL run of a not-yet-saved seed case (screen 2's "Run case" before
+   * Save). Rebuilds the fixture from the finding, runs the owning agent, and
+   * scores against the caller's in-progress `expectedOutput` — but persists
+   * NOTHING (no `eval_cases` row, no `eval_runs` row). Only Save creates the
+   * case; only saved cases get persisted runs. Returns an unsaved
+   * `EvalRunRecord` (synthetic `id`/`case_id` = "preview") for the modal to show.
+   */
+  async evalRunPreviewFromFinding(
+    workspaceId: string,
+    findingId: string,
+    expectedOutput: ExpectedFinding[],
+  ): Promise<EvalRunRecord> {
+    const ctx = await this.loadDecidedFinding(workspaceId, findingId);
+    const { owner, seed } = await this.buildSeedFromFinding(ctx);
+
+    const agent = await this.container.agentsRepo.getById(workspaceId, owner.id);
+    if (!agent) throw new NotFoundError('Owning agent not found');
+    const llm = await this.container.llm(agent.provider as Provider);
+    const skills = await this.resolveSkills(agent.id);
+
+    const ephemeral: EvalCase = {
+      id: 'preview',
+      owner_kind: 'agent',
+      owner_id: owner.id,
+      name: seed.name,
+      input_diff: seed.input_diff,
+      input_files: seed.input_files ?? null,
+      input_meta: seed.input_meta ?? null,
+      expected_output: expectedOutput,
+      notes: null,
+    };
+
+    const result = await this.executeCase(agent, llm, skills, ephemeral);
+
+    return {
+      id: 'preview',
+      case_id: 'preview',
+      case_name: seed.name,
+      ran_at: new Date().toISOString(),
+      actual_output: result.actualOutput,
+      pass: result.pass,
+      recall: result.recall,
+      precision: result.precision,
+      citation_accuracy: result.citation_accuracy,
+      duration_ms: result.durationMs,
+      cost_usd: result.costUsd,
+    };
   }
 
   // ---- case CRUD passthroughs ------------------------------------------------

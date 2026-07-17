@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Verdict, Finding } from './findings.js';
-import { EvalRun, EvalOwnerKind, ExpectedFinding, Conformance, Provider, CiFailOn } from './knowledge.js';
+import { EvalRun, EvalCase, EvalOwnerKind, ExpectedFinding, Conformance, Provider, CiFailOn } from './knowledge.js';
 
 /**
  * A4 — Eval / CI / Compose / Conformance API contracts (L06).
@@ -81,12 +81,43 @@ export type EvalRunBatchResult = z.infer<typeof EvalRunBatchResult>;
 /**
  * Request body for `POST /agents/:id/eval-cases/from-finding` — the owner
  * agent is derived server-side from the finding's own review (G6), never
- * supplied by the caller.
+ * supplied by the caller. `name`/`expected_output` are OPTIONAL overrides the
+ * seed modal (screen 2) captures before Save; when omitted the server falls
+ * back to the finding-derived defaults. The input fixture (diff/files/meta) is
+ * always snapshotted server-side and never accepted from the caller.
  */
 export const EvalCaseFromFindingInput = z.object({
   finding_id: z.string(),
+  name: z.string().min(1).optional(),
+  expected_output: z.array(ExpectedFinding).optional(),
 });
 export type EvalCaseFromFindingInput = z.infer<typeof EvalCaseFromFindingInput>;
+
+/**
+ * Response of `GET /findings/:id/eval-case-seed` — everything the seed modal
+ * needs to open WITHOUT persisting: the owning agent (for the editor header),
+ * the pre-filled `seed` derived from the finding, and the `existing_case` this
+ * finding already backs (non-null → the editor opens that case in edit mode
+ * instead of seeding a new one).
+ */
+export const EvalCaseSeed = z.object({
+  owner: z.object({ kind: EvalOwnerKind, id: z.string(), name: z.string() }),
+  existing_case: EvalCase.nullable(),
+  seed: EvalCaseInput,
+});
+export type EvalCaseSeed = z.infer<typeof EvalCaseSeed>;
+
+/**
+ * Body for `POST /findings/:id/eval-run-preview` — an EPHEMERAL run of a
+ * not-yet-saved seed case (screen 2's "Run case" before Save). The server
+ * rebuilds the input fixture from the finding and scores against the supplied
+ * `expected_output`; it persists NEITHER an eval case NOR a run row. Only Save
+ * creates the case, and only saved cases get persisted runs.
+ */
+export const EvalRunPreviewInput = z.object({
+  expected_output: z.array(ExpectedFinding),
+});
+export type EvalRunPreviewInput = z.infer<typeof EvalRunPreviewInput>;
 
 /** One point on the dashboard trend (per run, chronological). */
 export const EvalTrendPoint = z.object({

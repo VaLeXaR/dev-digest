@@ -6,12 +6,16 @@ import messages from "../../../../messages/en/eval.json";
 
 const createMutateAsync = vi.fn();
 const createSkillMutateAsync = vi.fn();
+const createFromFindingMutateAsync = vi.fn();
+const previewRunMutateAsync = vi.fn();
 const updateMutateAsync = vi.fn();
 const runMutateAsync = vi.fn();
 
 vi.mock("../../../lib/hooks/eval", () => ({
   useCreateEvalCase: () => ({ mutateAsync: createMutateAsync, isPending: false }),
   useCreateSkillEvalCase: () => ({ mutateAsync: createSkillMutateAsync, isPending: false }),
+  useCreateEvalCaseFromFinding: () => ({ mutateAsync: createFromFindingMutateAsync, isPending: false }),
+  usePreviewEvalRunFromFinding: () => ({ mutateAsync: previewRunMutateAsync, isPending: false }),
   useUpdateEvalCase: () => ({ mutateAsync: updateMutateAsync, isPending: false }),
   useRunEvalCase: () => ({ mutateAsync: runMutateAsync, isPending: false }),
 }));
@@ -22,9 +26,21 @@ afterEach(() => {
   cleanup();
   createMutateAsync.mockReset();
   createSkillMutateAsync.mockReset();
+  createFromFindingMutateAsync.mockReset();
+  previewRunMutateAsync.mockReset();
   updateMutateAsync.mockReset();
   runMutateAsync.mockReset();
 });
+
+const SEED = {
+  owner_kind: "agent" as const,
+  owner_id: "ag1",
+  name: "From finding: Missing auth",
+  input_diff: "diff --git a/x b/x",
+  input_files: [],
+  input_meta: {},
+  expected_output: [{ type: "must_find" as const, file: "api.ts", start_line: 9, end_line: 12 }],
+};
 
 const AGENT_OWNER: EvalCaseEditorOwner = { kind: "agent", id: "ag1", name: "Security Reviewer" };
 const SKILL_OWNER: EvalCaseEditorOwner = { kind: "skill", id: "sk1", name: "pr-quality-rubric" };
@@ -153,7 +169,7 @@ describe("T-07 EvalCaseEditor (owner-generic)", () => {
       fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
     });
 
-    expect(runMutateAsync).toHaveBeenCalledWith({ caseId: "new-case", agentId: "ag1" });
+    expect(runMutateAsync).toHaveBeenCalledWith({ caseId: "new-case", agentId: "ag1", silent: true });
   });
 
   it("Run case for a skill owner calls the run mutation without an agentId scope", async () => {
@@ -176,7 +192,7 @@ describe("T-07 EvalCaseEditor (owner-generic)", () => {
     fireEvent.click(screen.getByRole("button", { name: /run case/i }));
 
     await screen.findByText(/Last run passed/);
-    expect(runMutateAsync).toHaveBeenCalledWith({ caseId: "case1", agentId: undefined, caseName: "stripe-key-leak" });
+    expect(runMutateAsync).toHaveBeenCalledWith({ caseId: "case1", agentId: undefined, caseName: "stripe-key-leak", silent: true });
   });
 
   it("Run case shows the last-run result line inline without closing", async () => {
@@ -208,6 +224,56 @@ describe("T-07 EvalCaseEditor (owner-generic)", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("Run/Save on an existing case PATCHes only name + expected_output, never the immutable input snapshot", async () => {
+    updateMutateAsync.mockResolvedValue(EXISTING_CASE);
+    runMutateAsync.mockResolvedValue({
+      id: "run1",
+      case_id: "case1",
+      case_name: "stripe-key-leak",
+      ran_at: "2026-07-16T00:00:00.000Z",
+      actual_output: [],
+      pass: true,
+      recall: 1,
+      precision: 1,
+      citation_accuracy: 1,
+      duration_ms: 1000,
+      cost_usd: 0.01,
+    });
+    renderEditor({ existingCase: EXISTING_CASE });
+
+    fireEvent.click(screen.getByRole("button", { name: /run case/i }));
+    await screen.findByText(/Last run passed/);
+
+    const patch = updateMutateAsync.mock.calls[0]?.[0]?.patch;
+    expect(patch).toMatchObject({ name: "stripe-key-leak" });
+    expect(patch).toHaveProperty("expected_output");
+    // A large PR's diff/files snapshot would blow past the server's 1 MiB body
+    // limit if re-sent on every run — the fixture is immutable, so it must not be.
+    expect(patch).not.toHaveProperty("input_diff");
+    expect(patch).not.toHaveProperty("input_files");
+    expect(patch).not.toHaveProperty("input_meta");
+  });
+
+  it("case-type sub-label names the primary expectation with title + location", () => {
+    renderEditor({
+      existingCase: {
+        ...EXISTING_CASE,
+        expected_output: [
+          {
+            type: "must_find",
+            file: "client/src/lib/api.ts",
+            start_line: 9,
+            end_line: 12,
+            title: "Missing authentication in API calls",
+          },
+        ],
+      },
+    });
+    expect(
+      screen.getByText(/MUST find .*Missing authentication in API calls.* at client\/src\/lib\/api\.ts:9/),
+    ).toBeInTheDocument();
+  });
+
   it("shows a display-only case-type badge derived from expected_output", () => {
     // No must_find entry → NEGATIVE case.
     renderEditor();
@@ -223,5 +289,62 @@ describe("T-07 EvalCaseEditor (owner-generic)", () => {
   it("new-case mode uses the 'New eval case' title", () => {
     renderEditor();
     expect(screen.getByText("New eval case")).toBeInTheDocument();
+  });
+
+  it("seed (from-finding) mode shows the 'New eval case' title and seeded subtitle", () => {
+    renderEditor({ seed: SEED, fromFinding: { findingId: "f1" } });
+    expect(screen.getByText("New eval case")).toBeInTheDocument();
+    // A must_find seed → positive case → "accepted" phrasing.
+    expect(
+      screen.getByText("Seeded from an accepted finding · assert the expected output"),
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue("From finding: Missing auth")).toBeInTheDocument();
+  });
+
+  it("Run case in seed mode previews ephemerally — persists no case and no run", async () => {
+    previewRunMutateAsync.mockResolvedValue({
+      id: "preview",
+      case_id: "preview",
+      case_name: "From finding: Missing auth",
+      ran_at: "2026-07-16T00:00:00.000Z",
+      actual_output: [],
+      pass: true,
+      recall: 1,
+      precision: 1,
+      citation_accuracy: 1,
+      duration_ms: 100,
+      cost_usd: 0.01,
+    });
+    renderEditor({ seed: SEED, fromFinding: { findingId: "f1" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /run case/i }));
+    });
+
+    expect(previewRunMutateAsync).toHaveBeenCalledWith({ expected_output: SEED.expected_output });
+    // No persistence on Run: neither the finding-create nor the plain-create nor
+    // the persisted-run hooks fire.
+    expect(createFromFindingMutateAsync).not.toHaveBeenCalled();
+    expect(createMutateAsync).not.toHaveBeenCalled();
+    expect(runMutateAsync).not.toHaveBeenCalled();
+    // The ephemeral result still surfaces in the modal.
+    await screen.findByText(/Last run passed/);
+  });
+
+  it("Save in seed mode persists via the from-finding hook with name + expected_output", async () => {
+    createFromFindingMutateAsync.mockResolvedValue({ ...EXISTING_CASE, id: "from-finding-case" });
+    renderEditor({ seed: SEED, fromFinding: { findingId: "f1" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+
+    expect(createFromFindingMutateAsync).toHaveBeenCalledWith({
+      finding_id: "f1",
+      name: "From finding: Missing auth",
+      expected_output: SEED.expected_output,
+    });
+    // Never falls through to the plain agent-create hook.
+    expect(createMutateAsync).not.toHaveBeenCalled();
   });
 });

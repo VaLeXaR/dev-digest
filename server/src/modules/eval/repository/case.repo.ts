@@ -128,6 +128,26 @@ export async function deleteCase(db: Db, workspaceId: string, caseId: string): P
   return rows.length > 0;
 }
 
+/**
+ * Every eval case a finding backs, newest first. The seed modal (screen 2)
+ * picks the one whose expectation type matches the finding's CURRENT decision
+ * (accepted → positive, dismissed → negative), so a stale case from a prior,
+ * now-reversed decision is never reopened. A finding may back several cases
+ * (re-click creates a new one, AC-26); `desc(id)` keeps newest first.
+ */
+export async function casesBySourceFinding(
+  db: Db,
+  workspaceId: string,
+  findingId: string,
+): Promise<EvalCase[]> {
+  const rows = await db
+    .select()
+    .from(t.evalCases)
+    .where(and(eq(t.evalCases.workspaceId, workspaceId), eq(t.evalCases.sourceFindingId, findingId)))
+    .orderBy(desc(t.evalCases.id));
+  return rows.map(toEvalCase);
+}
+
 /** AC-26 — the set of finding ids that already back an eval case. */
 export async function casesBackedByFindings(
   db: Db,

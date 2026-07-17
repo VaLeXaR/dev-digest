@@ -156,8 +156,14 @@ export function useFindingAction() {
         `/findings/${findingId}/${action}`,
         reply ? { reply } : undefined,
       ),
-    onSuccess: (_d, { prId }) => {
+    onSuccess: (_d, { findingId, prId }) => {
       if (prId) qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      // The "Turn into eval case" seed derives its expectation type from the
+      // finding's decision (accept → must_find, dismiss → must_not_flag). That
+      // decision just changed, so drop the cached seed — remove (not invalidate)
+      // so the next open waits for a fresh fetch instead of replaying the stale
+      // type via stale-while-revalidate.
+      qc.removeQueries({ queryKey: ["eval-case-seed", findingId] });
     },
   });
 }

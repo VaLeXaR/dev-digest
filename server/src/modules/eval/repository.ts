@@ -67,6 +67,11 @@ export class EvalRepository {
     return caseRepo.casesBackedByFindings(this.db, findingIds);
   }
 
+  /** Every eval case a finding backs, newest first (seed modal reopen, decision-aware). */
+  casesBySourceFinding(workspaceId: string, findingId: string): Promise<EvalCase[]> {
+    return caseRepo.casesBySourceFinding(this.db, workspaceId, findingId);
+  }
+
   // ---- per-case run persistence --------------------------------------------
 
   insertEvalRun(values: InsertEvalRunInput): Promise<EvalRunRecord> {

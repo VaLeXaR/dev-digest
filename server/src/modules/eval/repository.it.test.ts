@@ -114,6 +114,38 @@ describe('EvalRepository — eval-case CRUD', () => {
     expect(backed.has(findingId)).toBe(true);
     expect(backed.has(unusedFindingId)).toBe(false);
   });
+
+  it('casesBySourceFinding returns every case a finding backs, discriminable by type', async () => {
+    const agent = await makeAgent(WS_ID);
+    const findingId = '33333333-3333-3333-3333-333333333333';
+
+    const positive = await repo.createCase(
+      WS_ID,
+      caseInput({
+        owner_id: agent.id,
+        name: 'pos',
+        expected_output: [{ type: 'must_find', file: 'a.ts', start_line: 1, end_line: 1 }],
+      }),
+      findingId,
+    );
+    const negative = await repo.createCase(
+      WS_ID,
+      caseInput({
+        owner_id: agent.id,
+        name: 'neg',
+        expected_output: [{ type: 'must_not_flag', file: 'a.ts', start_line: 1, end_line: 1 }],
+      }),
+      findingId,
+    );
+
+    const cases = await repo.casesBySourceFinding(WS_ID, findingId);
+    expect([...cases.map((c) => c.id)].sort()).toEqual([positive.id, negative.id].sort());
+
+    // The seed's decision filter: accepted → the positive case, dismissed → the negative one.
+    const isPositive = (c: (typeof cases)[number]) => c.expected_output.some((e) => e.type === 'must_find');
+    expect(cases.find((c) => isPositive(c))?.id).toBe(positive.id);
+    expect(cases.find((c) => !isPositive(c))?.id).toBe(negative.id);
+  });
 });
 
 describe('EvalRepository — per-case run persistence', () => {

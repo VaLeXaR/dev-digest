@@ -58,15 +58,48 @@ describe("FindingCard (smoke, both themes)", () => {
     expect(onAction).toHaveBeenCalledWith("dismiss");
   });
 
+  it("shows the Accept button in the active green state when the finding is accepted", () => {
+    renderWithIntl(
+      <FindingCard f={{ ...FINDING, accepted_at: "2026-01-01T00:00:00Z" }} defaultExpanded onAction={() => {}} />,
+    );
+    const accept = screen.getByText("Accept").closest("button");
+    expect(accept?.getAttribute("style")).toContain("var(--ok)");
+  });
+
+  it("shows the Dismiss button in the active red state when the finding is dismissed", () => {
+    renderWithIntl(
+      <FindingCard f={{ ...FINDING, dismissed_at: "2026-01-01T00:00:00Z" }} defaultExpanded onAction={() => {}} />,
+    );
+    const dismiss = screen.getByText("Dismiss").closest("button");
+    expect(dismiss?.getAttribute("style")).toContain("var(--crit)");
+  });
+
   it("does not render the Turn into eval case button when no handler is passed", () => {
     renderWithIntl(<FindingCard f={FINDING} defaultExpanded onAction={() => {}} />);
     expect(screen.queryByText("Turn into eval case")).not.toBeInTheDocument();
   });
 
-  it("fires onTurnIntoEvalCase when the button is clicked", () => {
+  it("disables Turn into eval case until the finding is accepted or dismissed", () => {
     const onTurnIntoEvalCase = vi.fn();
     renderWithIntl(
       <FindingCard f={FINDING} defaultExpanded onAction={() => {}} onTurnIntoEvalCase={onTurnIntoEvalCase} />,
+    );
+    const button = screen.getByText("Turn into eval case").closest("button");
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Accept or dismiss this finding first");
+    fireEvent.click(screen.getByText("Turn into eval case"));
+    expect(onTurnIntoEvalCase).not.toHaveBeenCalled();
+  });
+
+  it("fires onTurnIntoEvalCase when a decided finding's button is clicked", () => {
+    const onTurnIntoEvalCase = vi.fn();
+    renderWithIntl(
+      <FindingCard
+        f={{ ...FINDING, accepted_at: "2026-01-01T00:00:00Z" }}
+        defaultExpanded
+        onAction={() => {}}
+        onTurnIntoEvalCase={onTurnIntoEvalCase}
+      />,
     );
     fireEvent.click(screen.getByText("Turn into eval case"));
     expect(onTurnIntoEvalCase).toHaveBeenCalledTimes(1);
@@ -89,12 +122,5 @@ describe("FindingCard (smoke, both themes)", () => {
     expect(button).toHaveAttribute("title", "No agent for this finding");
     fireEvent.click(screen.getByText("Turn into eval case"));
     expect(onTurnIntoEvalCase).not.toHaveBeenCalled();
-  });
-
-  it("shows the already-has-an-eval-case hint when hasEvalCase is true", () => {
-    renderWithIntl(
-      <FindingCard f={FINDING} defaultExpanded onAction={() => {}} onTurnIntoEvalCase={() => {}} hasEvalCase />,
-    );
-    expect(screen.getByText("Already has an eval case")).toBeInTheDocument();
   });
 });

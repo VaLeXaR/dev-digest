@@ -44,6 +44,19 @@ export const s = {
     fontWeight: 600,
     color: "var(--text-muted)",
   } satisfies CSSProperties,
+  // Active decision styling for the Accept/Dismiss buttons: green when the
+  // finding is accepted, red when dismissed (the Button's `active` prop only
+  // styles the `tertiary` kind, so these are applied via `style`).
+  acceptActive: {
+    borderColor: "var(--ok)",
+    color: "var(--ok)",
+    background: "var(--ok-bg)",
+  } satisfies CSSProperties,
+  dismissActive: {
+    borderColor: "var(--crit)",
+    color: "var(--crit)",
+    background: "var(--crit-bg)",
+  } satisfies CSSProperties,
   metaRow: {
     display: "flex",
     alignItems: "center",
@@ -79,11 +92,6 @@ export const s = {
     marginTop: 14,
     flexWrap: "wrap",
     alignItems: "center",
-  } satisfies CSSProperties,
-  evalCaseHint: {
-    fontSize: 12,
-    color: "var(--text-muted)",
-    fontStyle: "italic",
   } satisfies CSSProperties,
   composer: {
     marginTop: 12,

@@ -28,7 +28,20 @@ export const s = {
     textTransform: "uppercase",
     color: negative ? "var(--warn)" : "var(--ok)",
   }),
-  caseTypeSub: { fontSize: 12, color: "var(--text-secondary)", marginTop: 2 } satisfies CSSProperties,
+  // Clamp to 2 lines with ellipsis: a long finding title + long file path must
+  // NOT grow the badge unboundedly (that stretches the grid row and forces the
+  // whole modal body to scroll). `wordBreak` lets an unbroken path wrap instead
+  // of overflowing horizontally.
+  caseTypeSub: {
+    fontSize: 12,
+    color: "var(--text-secondary)",
+    marginTop: 2,
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+    wordBreak: "break-word",
+  } satisfies CSSProperties,
   sectionTitle: {
     fontSize: 13,
     fontWeight: 600,
@@ -82,11 +95,17 @@ export const s = {
   expectedTextarea: {
     flex: 1,
     minHeight: 0,
+    // Hard cap mirrors the left column's diff (`diffContainer`/`readonlyView`
+    // maxHeight:200): a grid row with `1fr` columns has an auto height, so a
+    // `flex:1` child with no ceiling grows to its content and stretches the
+    // whole modal (only the LEFT column was bounded before). Cap → scroll inside.
+    maxHeight: 220,
   } satisfies CSSProperties,
   actualOutputBox: {
     width: "100%",
     flex: 1,
     minHeight: 0,
+    maxHeight: 220,
     overflow: "auto",
     marginTop: 8,
     padding: "12px 14px",
@@ -141,18 +160,6 @@ export const s = {
   resultIcon: (pass: boolean): CSSProperties => ({ color: pass ? "var(--ok)" : "var(--crit)", flexShrink: 0 }),
   resultLabel: { fontWeight: 700, color: "var(--text-primary)" } satisfies CSSProperties,
   resultDetail: { color: "var(--text-secondary)" } satisfies CSSProperties,
-  // Neutral "run in progress" line — shown while a run executes (design/05).
-  runningLine: {
-    display: "flex",
-    alignItems: "center",
-    gap: 9,
-    padding: "11px 14px",
-    borderRadius: 8,
-    fontSize: 13,
-    border: "1px solid var(--border-strong)",
-    background: "var(--bg-elevated)",
-  } satisfies CSSProperties,
-  runningIcon: { color: "var(--text-secondary)", flexShrink: 0, animation: "ddspin 1s linear infinite" } satisfies CSSProperties,
   // Footer becomes a column: the full-width run banner (design/05) sits above
   // the toggle + action-button row.
   footerCol: { display: "flex", flexDirection: "column", gap: 12 } satisfies CSSProperties,

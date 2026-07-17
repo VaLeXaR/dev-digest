@@ -38,7 +38,6 @@ export function FindingCard({
   evalCaseDisabled,
   evalCaseDisabledReason,
   evalCasePending,
-  hasEvalCase,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -50,16 +49,16 @@ export function FindingCard({
   onGoToDiff?: (file: string, line: number) => void;
   targetId?: string | null;
   targetNonce?: number;
-  /** Creates a new eval case from this finding — NOT a `FindingActionKind`, so a
-   *  separate handler prop rather than overloading `onAction` (see AC-1/AC-2/AC-26). */
+  /** Opens the "Turn into eval case" modal (screen 2) — seeds a new case, or
+   *  reopens the one this finding already backs. NOT a `FindingActionKind`, so a
+   *  separate handler prop rather than overloading `onAction`. */
   onTurnIntoEvalCase?: () => void;
   /** True when the finding's review has no resolvable agent (`review.agent_id`
    *  is null) — the button is disabled rather than removed, with a tooltip. */
   evalCaseDisabled?: boolean;
   evalCaseDisabledReason?: string;
+  /** True while the seed for this finding is being fetched (modal opening). */
   evalCasePending?: boolean;
-  /** Non-blocking hint (R18/AC-26): this finding already backs an eval case. */
-  hasEvalCase?: boolean;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
@@ -130,6 +129,7 @@ export function FindingCard({
               icon="Check"
               disabled={pending}
               active={accepted}
+              style={accepted ? s.acceptActive : undefined}
               onClick={() => onAction?.("accept")}
             >
               {t("finding.accept")}
@@ -140,24 +140,37 @@ export function FindingCard({
               icon="X"
               disabled={pending}
               active={dismissed}
+              style={dismissed ? s.dismissActive : undefined}
               onClick={() => onAction?.("dismiss")}
             >
               {t("finding.dismiss")}
             </Button>
-            {onTurnIntoEvalCase && (
-              <Button
-                kind="ghost"
-                size="sm"
-                icon="FlaskConical"
-                disabled={evalCaseDisabled || evalCasePending}
-                loading={evalCasePending}
-                title={evalCaseDisabled ? evalCaseDisabledReason : undefined}
-                onClick={onTurnIntoEvalCase}
-              >
-                {t("finding.turnIntoEvalCase")}
-              </Button>
-            )}
-            {hasEvalCase && <span style={s.evalCaseHint}>{t("finding.hasEvalCase")}</span>}
+            {onTurnIntoEvalCase &&
+              (() => {
+                // Gated until the finding is decided (screen 1): an eval case's
+                // expectation type is derived from accept/dismiss, so there is
+                // nothing to seed before then.
+                const needsDecision = !accepted && !dismissed;
+                const disabled = evalCaseDisabled || needsDecision;
+                const reason = evalCaseDisabled
+                  ? evalCaseDisabledReason
+                  : needsDecision
+                    ? t("finding.evalNeedsDecision")
+                    : undefined;
+                return (
+                  <Button
+                    kind="ghost"
+                    size="sm"
+                    icon="FlaskConical"
+                    disabled={disabled || evalCasePending}
+                    loading={evalCasePending}
+                    title={reason}
+                    onClick={onTurnIntoEvalCase}
+                  >
+                    {t("finding.turnIntoEvalCase")}
+                  </Button>
+                );
+              })()}
           </div>
         </div>
       )}

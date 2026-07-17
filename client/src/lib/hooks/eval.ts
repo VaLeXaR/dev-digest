@@ -9,6 +9,8 @@ import type {
   EvalCase,
   EvalCaseFromFindingInput,
   EvalCaseInput,
+  EvalCaseSeed,
+  EvalRunPreviewInput,
   EvalDashboard,
   EvalDashboardOverview,
   EvalRunBatchRecord,
@@ -76,22 +78,16 @@ export function useEvalBatchRuns(batchId: string | null | undefined) {
 }
 
 /**
- * Which of `findingIds` already back an eval case — `GET /findings/eval-cases?ids=a,b,c`.
- * Unwraps `{ finding_ids }` into a `Set<string>` so callers can do
- * `data?.has(findingId)` for an O(1) "does this finding already have a case?" check.
- * Disabled when `findingIds` is empty (no server round-trip for an empty list).
+ * Seed for the "Turn into eval case" modal (screen 2) — `GET
+ * /findings/:id/eval-case-seed`. Returns the owning agent, the finding-derived
+ * fixture, and any case the finding already backs. Enabled only when a finding
+ * is actually selected (the modal is opening), so no request fires otherwise.
  */
-export function useFindingsWithEvalCases(findingIds: string[]) {
-  const idsParam = findingIds.join(",");
+export function useEvalCaseSeed(findingId: string | null | undefined) {
   return useQuery({
-    queryKey: ["findings-eval-cases", idsParam],
-    queryFn: async () => {
-      const res = await api.get<{ finding_ids: string[] }>(
-        `/findings/eval-cases?ids=${encodeURIComponent(idsParam)}`
-      );
-      return new Set(res.finding_ids);
-    },
-    enabled: findingIds.length > 0,
+    queryKey: ["eval-case-seed", findingId],
+    queryFn: () => api.get<EvalCaseSeed>(`/findings/${findingId}/eval-case-seed`),
+    enabled: !!findingId,
   });
 }
 
@@ -129,6 +125,9 @@ export interface RunEvalCaseInput {
   /** Optional — the case name, used for the result toast (the run record's
    * `case_name` is null for a single-case run, so callers pass it explicitly). */
   caseName?: string;
+  /** Suppress the pass/fail toast. The eval-case editor sets this: the modal
+   * already shows the result inline, so a toast would be redundant. */
+  silent?: boolean;
 }
 
 /** `POST /eval-cases/:id/run` — runs a single case; toasts the pass/fail result. */
@@ -138,10 +137,12 @@ export function useRunEvalCase() {
     mutationFn: ({ caseId }: RunEvalCaseInput) =>
       api.post<EvalRunRecord>(`/eval-cases/${caseId}/run`),
     onSuccess: (data, variables) => {
-      const name = variables.caseName ?? data.case_name ?? "Eval case";
-      if (data.pass === true) notify.success(`${name} — passed`);
-      else if (data.pass === false) notify.error(`${name} — failed`);
-      else notify.info(`${name} — completed`);
+      if (!variables.silent) {
+        const name = variables.caseName ?? data.case_name ?? "Eval case";
+        if (data.pass === true) notify.success(`${name} — passed`);
+        else if (data.pass === false) notify.error(`${name} — failed`);
+        else notify.info(`${name} — completed`);
+      }
       qc.invalidateQueries({
         queryKey: variables.agentId ? ["eval-cases", variables.agentId] : ["eval-cases"],
       });
@@ -216,8 +217,24 @@ export function useCreateEvalCaseFromFinding(agentId: string) {
       api.post<EvalCase>(`/agents/${agentId}/eval-cases/from-finding`, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["eval-cases", agentId] });
-      qc.invalidateQueries({ queryKey: ["findings-eval-cases"] });
+      // The seed query carries `existing_case`; refresh it so reopening the
+      // modal for this finding lands on the just-created case (edit mode).
+      qc.invalidateQueries({ queryKey: ["eval-case-seed"] });
+      qc.invalidateQueries({ queryKey: ["eval-case-last-runs", agentId] });
     },
+  });
+}
+
+/**
+ * `POST /findings/:id/eval-run-preview` — runs a not-yet-saved seed case
+ * ephemerally (screen 2's "Run case" before Save). Persists NOTHING (no eval
+ * case, no run row), so there is no cache to invalidate; the returned
+ * `EvalRunRecord` is shown in the editor and discarded on close.
+ */
+export function usePreviewEvalRunFromFinding(findingId: string) {
+  return useMutation({
+    mutationFn: (input: EvalRunPreviewInput) =>
+      api.post<EvalRunRecord>(`/findings/${findingId}/eval-run-preview`, input),
   });
 }
 

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { EvalCaseFromFindingInput, EvalCaseInput } from '@devdigest/shared';
+import { EvalCaseFromFindingInput, EvalCaseInput, EvalRunPreviewInput } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -28,6 +28,8 @@ const FindingsEvalCasesQuery = z.object({ ids: z.string().min(1) });
  *   DELETE /eval-cases/:id                   → delete a case
  *   POST   /eval-cases/:id/run               → run one case (design/05)
  *   POST   /agents/:id/eval-cases/from-finding → create a case from a finding (R1/AC-26)
+ *   GET    /findings/:id/eval-case-seed       → seed the "Turn into eval case" modal (screen 2)
+ *   POST   /findings/:id/eval-run-preview     → ephemeral run of an unsaved seed case (persists nothing)
  *   GET    /agents/:id/eval/dashboard        → single-agent detail
  *   GET    /eval/dashboard                   → cross-agent overview (R9)
  *   GET    /agents/:id/eval-batches          → batch history
@@ -138,6 +140,23 @@ export default async function evalRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(container, req);
     return service.batchRuns(workspaceId, req.params.id);
   });
+
+  // ---- seed modal (screen 2): finding → pre-filled case, no persist ----------
+
+  app.get('/findings/:id/eval-case-seed', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.evalCaseSeed(workspaceId, req.params.id);
+  });
+
+  // Ephemeral "Run case" for an unsaved seed case — persists nothing (screen 2).
+  app.post(
+    '/findings/:id/eval-run-preview',
+    { schema: { params: IdParams, body: EvalRunPreviewInput } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.evalRunPreviewFromFinding(workspaceId, req.params.id, req.body.expected_output);
+    },
+  );
 
   // ---- AC-26 hint: findings already backing a case ---------------------------
 

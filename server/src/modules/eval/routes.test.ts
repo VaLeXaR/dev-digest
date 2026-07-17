@@ -133,6 +133,86 @@ describe('POST /agents/:id/eval-cases/from-finding (no DB)', () => {
     expect(res.statusCode).toBe(422);
     await app.close();
   });
+
+  it('passes name/expected_output overrides through to the service', async () => {
+    const spy = vi
+      .spyOn(EvalService.prototype, 'createCaseFromFinding')
+      .mockResolvedValue(buildEvalCase());
+
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/agents/${AGENT_ID}/eval-cases/from-finding`,
+      payload: {
+        finding_id: FINDING_ID,
+        name: 'From finding: X',
+        expected_output: [{ type: 'must_find', file: 'a.ts', start_line: 1, end_line: 2 }],
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(spy).toHaveBeenCalledWith(
+      WORKSPACE_ID,
+      expect.objectContaining({ finding_id: FINDING_ID, name: 'From finding: X' }),
+    );
+    await app.close();
+  });
+});
+
+describe('GET /findings/:id/eval-case-seed (no DB)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns the finding-derived seed', async () => {
+    const seed = {
+      owner: { kind: 'agent' as const, id: AGENT_ID, name: 'Security Reviewer' },
+      existing_case: null,
+      seed: {
+        owner_kind: 'agent' as const,
+        owner_id: AGENT_ID,
+        name: 'From finding: X',
+        input_diff: 'diff --git a/x b/x',
+        input_files: [],
+        input_meta: {},
+        expected_output: [],
+      },
+    };
+    vi.spyOn(EvalService.prototype, 'evalCaseSeed').mockResolvedValue(seed);
+
+    const app = await makeApp();
+    const res = await app.inject({ method: 'GET', url: `/findings/${FINDING_ID}/eval-case-seed` });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ owner: { id: AGENT_ID }, existing_case: null });
+    await app.close();
+  });
+});
+
+describe('POST /findings/:id/eval-run-preview (no DB)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('runs ephemerally and returns the unsaved run record', async () => {
+    const spy = vi.spyOn(EvalService.prototype, 'evalRunPreviewFromFinding').mockResolvedValue(
+      buildRunRecord({ id: 'preview', case_id: 'preview' }),
+    );
+
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/findings/${FINDING_ID}/eval-run-preview`,
+      payload: { expected_output: [{ type: 'must_find', file: 'a.ts', start_line: 1, end_line: 2 }] },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ id: 'preview', case_id: 'preview' });
+    expect(spy).toHaveBeenCalledWith(WORKSPACE_ID, FINDING_ID, [
+      { type: 'must_find', file: 'a.ts', start_line: 1, end_line: 2 },
+    ]);
+    await app.close();
+  });
 });
 
 describe('POST /agents/:id/eval-cases (no DB)', () => {

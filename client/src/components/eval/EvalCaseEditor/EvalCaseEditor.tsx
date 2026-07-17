@@ -4,11 +4,13 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
 import { Modal, FormField, TextInput, Button, Badge, Toggle, Tabs, Icon } from "@devdigest/ui";
-import type { EvalCase, EvalRunRecord } from "@devdigest/shared";
+import type { EvalCase, EvalCaseInput, EvalRunRecord } from "@devdigest/shared";
 import { ExpectedFinding } from "@devdigest/shared";
 import {
   useCreateEvalCase,
   useCreateSkillEvalCase,
+  useCreateEvalCaseFromFinding,
+  usePreviewEvalRunFromFinding,
   useUpdateEvalCase,
   useRunEvalCase,
   type CreateEvalCaseInput,
@@ -74,11 +76,19 @@ export interface EvalCaseEditorOwner {
 export function EvalCaseEditor({
   owner,
   existingCase,
+  seed,
+  fromFinding,
   initialLastRun,
   onClose,
 }: {
   owner: EvalCaseEditorOwner;
   existingCase?: EvalCase;
+  /** Pre-filled fixture for a NOT-yet-persisted case (the "Turn into eval case"
+   *  seed modal, screen 2). Mutually exclusive with `existingCase`. */
+  seed?: EvalCaseInput;
+  /** Present in seed mode: the finding this new case is derived from. Save then
+   *  persists via `from-finding` (which links + re-snapshots server-side). */
+  fromFinding?: { findingId: string };
   /** The case's persisted last run, shown immediately on open (design/05). */
   initialLastRun?: EvalRunRecord;
   onClose: () => void;
@@ -89,28 +99,34 @@ export function EvalCaseEditor({
   // hooks unchanged for both owner kinds (mirrors T-06's hooks-file decision).
   const createAgentCase = useCreateEvalCase(owner.kind === "agent" ? owner.id : "");
   const createSkillCase = useCreateSkillEvalCase(owner.kind === "skill" ? owner.id : "");
+  const createFromFinding = useCreateEvalCaseFromFinding(owner.kind === "agent" ? owner.id : "");
+  const previewRun = usePreviewEvalRunFromFinding(fromFinding?.findingId ?? "");
   const update = useUpdateEvalCase();
   const runCase = useRunEvalCase();
 
+  // Initial form state comes from an existing case (edit) or a finding-derived
+  // seed (screen 2) — whichever is present.
+  const src = existingCase ?? seed;
   const [caseId, setCaseId] = React.useState<string | undefined>(existingCase?.id);
-  const [name, setName] = React.useState(existingCase?.name ?? "");
-  const [inputDiff, setInputDiff] = React.useState(existingCase?.input_diff ?? "");
+  const [name, setName] = React.useState(src?.name ?? "");
+  const [inputDiff, setInputDiff] = React.useState(src?.input_diff ?? "");
   const [inputFilesText, setInputFilesText] = React.useState(
-    existingCase?.input_files != null ? JSON.stringify(existingCase.input_files, null, 2) : "",
+    src?.input_files != null ? JSON.stringify(src.input_files, null, 2) : "",
   );
   const [inputMetaText, setInputMetaText] = React.useState(
-    existingCase?.input_meta != null ? JSON.stringify(existingCase.input_meta, null, 2) : "",
+    src?.input_meta != null ? JSON.stringify(src.input_meta, null, 2) : "",
   );
   const [expectedOutputText, setExpectedOutputText] = React.useState(
-    JSON.stringify(existingCase?.expected_output ?? [], null, 2),
+    JSON.stringify(src?.expected_output ?? [], null, 2),
   );
   const [runOnSave, setRunOnSave] = React.useState(false);
   const [activeInputTab, setActiveInputTab] = React.useState<InputTabKey>("diff");
   const [lastRun, setLastRun] = React.useState<EvalRunRecord | null>(() => initialLastRun ?? null);
 
-  // Editing an existing case: the input fixture is immutable (design/05) — only
-  // the Expected output assertion is editable. New-case mode keeps inputs open.
-  const readOnlyInput = existingCase != null;
+  // The input fixture is immutable when editing an existing case (design/05) OR
+  // when seeded from a finding — in both cases the server owns the snapshot, so
+  // only the Expected output assertion (and name) is editable.
+  const readOnlyInput = existingCase != null || fromFinding != null;
 
   const parsedExpected = React.useMemo(
     () => parseExpectedOutput(expectedOutputText),
@@ -125,8 +141,26 @@ export function EvalCaseEditor({
   const effectiveExpected = parsedExpected ?? existingCase?.expected_output ?? [];
   const isNegativeCase = !effectiveExpected.some((e) => e.type === "must_find");
 
-  const saving = createAgentCase.isPending || createSkillCase.isPending || update.isPending;
-  const running = runCase.isPending;
+  // Case-type sub-label spells out the primary expectation, e.g.
+  // `MUST find "Missing authentication in API calls" at client/src/lib/api.ts:9`
+  // (design/05). Falls back to the generic verb when there is no titled entry
+  // (an empty precision case, or a hand-authored entry with no title).
+  const primaryExpectation =
+    effectiveExpected.find((e) => (isNegativeCase ? e.type === "must_not_flag" : e.type === "must_find")) ??
+    effectiveExpected[0];
+  const caseTypeSubText = primaryExpectation?.title
+    ? t(isNegativeCase ? "caseEditor.mustNotFlagAt" : "caseEditor.mustFindAt", {
+        title: primaryExpectation.title,
+        location: `${primaryExpectation.file}:${primaryExpectation.start_line}`,
+      })
+    : t(isNegativeCase ? "caseEditor.mustNotFlag" : "caseEditor.mustFind");
+
+  const saving =
+    createAgentCase.isPending ||
+    createSkillCase.isPending ||
+    createFromFinding.isPending ||
+    update.isPending;
+  const running = runCase.isPending || previewRun.isPending;
   const busy = saving || running;
 
   // The owner-agnostic update/run hooks scope invalidation via an optional
@@ -148,8 +182,28 @@ export function EvalCaseEditor({
   async function ensureSaved(): Promise<string> {
     const payload = buildPayload();
     if (caseId) {
-      const saved = await update.mutateAsync({ id: caseId, patch: payload, agentId: agentScopeId });
+      // Only the assertion (name + expected output) is editable on an existing
+      // case — its input fixture is read-only. PATCH just those fields; never
+      // re-send the immutable `input_diff`/`input_files` snapshot, which for a
+      // large PR exceeds the server's 1 MiB body limit (413 "body too large").
+      const saved = await update.mutateAsync({
+        id: caseId,
+        patch: { name: payload.name, expected_output: payload.expected_output },
+        agentId: agentScopeId,
+      });
       return saved.id;
+    }
+    // Seed mode (screen 2): persist via `from-finding` so the case is LINKED to
+    // its finding and the fixture is re-snapshotted server-side. Only the
+    // editable name/expected-output are sent as overrides.
+    if (fromFinding) {
+      const created = await createFromFinding.mutateAsync({
+        finding_id: fromFinding.findingId,
+        name: payload.name,
+        expected_output: payload.expected_output,
+      });
+      setCaseId(created.id);
+      return created.id;
     }
     const created =
       owner.kind === "skill"
@@ -164,12 +218,23 @@ export function EvalCaseEditor({
       caseId: id,
       agentId: agentScopeId,
       caseName: name.trim() || undefined,
+      // The modal shows the result inline (run banner) — no redundant toast.
+      silent: true,
     });
     setLastRun(record);
   }
 
   async function handleRunCase() {
     if (!isValidJson) return;
+    // Seed mode (unsaved from-finding case): run WITHOUT persisting anything —
+    // the server rebuilds the fixture from the finding and scores against the
+    // current expected output, but writes no eval case and no run row. Only
+    // Save creates the case; only saved cases get persisted runs.
+    if (fromFinding && !caseId) {
+      const record = await previewRun.mutateAsync({ expected_output: parsedExpected ?? [] });
+      setLastRun(record);
+      return;
+    }
     const id = await ensureSaved();
     await runAndCapture(id);
   }
@@ -192,14 +257,10 @@ export function EvalCaseEditor({
     { key: "prMeta", label: t("caseEditor.tabs.prMeta") },
   ];
 
-  // Full-width run banner (design/05): a neutral "running" line while a run is
-  // in flight, then the pass/fail result — shown above the footer buttons.
-  const runBanner = running ? (
-    <div style={s.runningLine}>
-      <Icon.RefreshCw size={14} style={s.runningIcon} />
-      <span style={s.resultLabel}>{t("caseEditor.running")}</span>
-    </div>
-  ) : lastRun ? (
+  // Full-width run-RESULT banner (design/05), shown above the footer buttons.
+  // No separate "running" line — the Run button's own spinner is the in-flight
+  // indicator, so the banner only ever shows the last completed run's result.
+  const runBanner = lastRun ? (
     <div style={s.resultLine(lastRun.pass ?? false)}>
       {lastRun.pass ? (
         <Icon.Check size={14} style={s.resultIcon(true)} />
@@ -221,7 +282,13 @@ export function EvalCaseEditor({
     <Modal
       width={MODAL_WIDTH}
       title={existingCase ? t("caseEditor.caseTitle", { name: name.trim() || "Untitled" }) : t("caseEditor.newCase")}
-      subtitle={`${owner.name} · simulate a PR and assert the expected output`}
+      subtitle={
+        fromFinding
+          ? isNegativeCase
+            ? t("caseEditor.seededFromDismissed")
+            : t("caseEditor.seededFromAccepted")
+          : `${owner.name} · simulate a PR and assert the expected output`
+      }
       onClose={onClose}
       footer={
         <div style={s.footerCol}>
@@ -235,10 +302,10 @@ export function EvalCaseEditor({
               <Button kind="ghost" onClick={onClose}>
                 Cancel
               </Button>
-              <Button kind="secondary" icon="Play" onClick={handleRunCase} disabled={!isValidJson || busy}>
+              <Button kind="secondary" icon="Play" loading={running} onClick={handleRunCase} disabled={!isValidJson || busy}>
                 {running ? t("caseEditor.running") : t("caseEditor.runCase")}
               </Button>
-              <Button kind="primary" icon="Check" onClick={handleSave} disabled={!isValidJson || busy}>
+              <Button kind="primary" icon="Check" loading={saving} onClick={handleSave} disabled={!isValidJson || busy}>
                 {saving ? t("caseEditor.saving") : t("caseEditor.save")}
               </Button>
             </div>
@@ -252,9 +319,7 @@ export function EvalCaseEditor({
             <div style={s.caseTypeLabel(isNegativeCase)}>
               {isNegativeCase ? t("caseEditor.negativeCase") : t("caseEditor.positiveCase")}
             </div>
-            <div style={s.caseTypeSub}>
-              {isNegativeCase ? t("caseEditor.mustNotFlag") : t("caseEditor.mustFind")}
-            </div>
+            <div style={s.caseTypeSub}>{caseTypeSubText}</div>
           </div>
           <FormField label={t("caseEditor.nameLabel")} required>
             <TextInput value={name} onChange={setName} placeholder={t("caseEditor.namePlaceholder")} />

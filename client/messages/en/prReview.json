@@ -21,7 +21,7 @@
     "sendReply": "Send reply",
     "cancel": "Cancel",
     "turnIntoEvalCase": "Turn into eval case",
-    "hasEvalCase": "Already has an eval case",
+    "evalNeedsDecision": "Accept or dismiss this finding first",
     "noAgentForEvalCase": "No agent for this finding"
   },
   "trifecta": {
