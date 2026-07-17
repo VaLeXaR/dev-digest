@@ -30,6 +30,16 @@ export function skillContent(skillName: string): string {
   return parts.join("\n");
 }
 
+/** Does a skill artifact exist on disk? Lets the DSL SKIP (not fail) an eval whose subject is absent. */
+export function skillExists(skillName: string): boolean {
+  return existsSync(join(SKILLS_DIR, skillName, "SKILL.md"));
+}
+
+/** Does an agent artifact exist on disk? Same skip-not-fail purpose as `skillExists`. */
+export function agentExists(agentName: string): boolean {
+  return existsSync(join(AGENTS_DIR, `${agentName}.md`));
+}
+
 /** An agent definition with its frontmatter stripped (the behavioral prompt only). */
 export function agentContent(agentName: string): string {
   const f = join(AGENTS_DIR, `${agentName}.md`);
