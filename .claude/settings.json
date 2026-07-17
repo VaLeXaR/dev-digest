@@ -21,8 +21,14 @@
       {
         "hooks": [
           {
+            "type": "command",
+            "shell": "bash",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && mkdir -p .claude/tmp && git status --short > .claude/tmp/insights-changes.txt && git diff --name-only HEAD >> .claude/tmp/insights-changes.txt",
+            "timeout": 15
+          },
+          {
             "type": "agent",
-            "prompt": "Before ending this session, invoke the engineering-insights skill. Detect which modules (client/, server/, reviewer-core/, e2e/, mcp-server/) were meaningfully touched by running `git status --short` and `git diff --name-only HEAD` and mapping each changed path to its top-level module — do NOT parse the session transcript or use jq/wc/piped commands. Rank candidates by signal strength: user corrections first, then failed approaches, repeated patterns, non-obvious solutions, workflow discoveries. Apply the quality filter (discard anything obvious from 5 minutes of reading the code). Use the Read and Grep tools (not bash) to re-read the target module's INSIGHTS.md and dedup before writing. For each surviving insight, append with an anchored Edit to {module}/INSIGHTS.md (e.g. server/INSIGHTS.md, reviewer-core/INSIGHTS.md) under the matching '## Section' header, format: 'YYYY-MM-DD — actionable fact. ref: file:line' — if the file does not exist, create it with the 7-section template using Write. If the session was trivial (typo fix, rename, formatting) or no insights passed the filter, skip silently. Do not ask for confirmation."
+            "prompt": "Before ending this session, invoke the engineering-insights skill. The set of files changed this session was written by the preceding command hook to `.claude/tmp/insights-changes.txt` (relative to the project root — the output of `git status --short` followed by `git diff --name-only HEAD`). Read that file with the Read tool and map each changed path to its top-level module (client/, server/, reviewer-core/, e2e/, mcp-server/) — do NOT run git, bash, PowerShell, or any shell command, and do NOT parse the session transcript. Rank candidates by signal strength: user corrections first, then failed approaches, repeated patterns, non-obvious solutions, workflow discoveries. Apply the quality filter (discard anything obvious from 5 minutes of reading the code). Use the Read and Grep tools (not bash) to re-read the target module's INSIGHTS.md and dedup before writing. For each surviving insight, append with an anchored Edit to {module}/INSIGHTS.md (e.g. server/INSIGHTS.md, reviewer-core/INSIGHTS.md) under the matching '## Section' header, format: 'YYYY-MM-DD — actionable fact. ref: file:line' — if the file does not exist, create it with the 7-section template using Write. If the session was trivial (typo fix, rename, formatting), the change-list file is empty, or no insights passed the filter, skip silently. Do not ask for confirmation."
           }
         ]
       }
