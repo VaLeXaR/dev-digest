@@ -7,7 +7,9 @@ import { useTranslations } from "next-intl";
 import { Toggle, EmptyState } from "@devdigest/ui";
 import type { FindingRecord } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
+import { EvalCaseEditor } from "../../../../../../../components/eval/EvalCaseEditor/EvalCaseEditor";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
+import { useEvalCaseSeed } from "../../../../../../../lib/hooks/eval";
 import { KEY_TO_ACTION } from "./constants";
 import { visibleFindings } from "./helpers";
 import { s } from "./styles";
@@ -21,6 +23,7 @@ export function FindingsPanel({
   onGoToDiff,
   targetFindingId,
   targetFindingNonce,
+  agentId,
 }: {
   findings: FindingRecord[];
   prId: string;
@@ -30,11 +33,27 @@ export function FindingsPanel({
   onGoToDiff?: (file: string, line: number) => void;
   targetFindingId?: string | null;
   targetFindingNonce?: number;
+  /** The finding's own review's reviewing agent id (`review.agent_id`, G6) —
+   *  required to build the "Turn into eval case" request path. Null/undefined
+   *  when the review has no agent (summary/legacy reviews); the button is then
+   *  disabled rather than hidden. */
+  agentId?: string | null;
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
   const [hideLow, setHideLow] = React.useState(false);
   const [focusIdx, setFocusIdx] = React.useState(0);
+
+  // The finding whose "Turn into eval case" modal (screen 2) is open. Its seed
+  // (owner + pre-filled fixture + any existing case) is fetched on demand; the
+  // modal opens once the seed resolves. Only one is ever open at a time.
+  const [evalFindingId, setEvalFindingId] = React.useState<string | null>(null);
+  const seedQuery = useEvalCaseSeed(evalFindingId);
+
+  // Never leave the button stuck in its loading state if the seed fetch fails.
+  React.useEffect(() => {
+    if (seedQuery.isError) setEvalFindingId(null);
+  }, [seedQuery.isError]);
 
   const shown = React.useMemo(
     () => visibleFindings(findings, hideLow, severityFilter ?? null),
@@ -82,10 +101,24 @@ export function FindingsPanel({
               onGoToDiff={onGoToDiff}
               targetId={targetFindingId}
               targetNonce={targetFindingNonce}
+              onTurnIntoEvalCase={() => setEvalFindingId(f.id)}
+              evalCaseDisabled={!agentId}
+              evalCaseDisabledReason={t("finding.noAgentForEvalCase")}
+              evalCasePending={seedQuery.isLoading && evalFindingId === f.id}
             />
           ))
         )}
       </div>
+
+      {evalFindingId && seedQuery.data && (
+        <EvalCaseEditor
+          owner={seedQuery.data.owner}
+          existingCase={seedQuery.data.existing_case ?? undefined}
+          seed={seedQuery.data.existing_case ? undefined : seedQuery.data.seed}
+          fromFinding={seedQuery.data.existing_case ? undefined : { findingId: evalFindingId }}
+          onClose={() => setEvalFindingId(null)}
+        />
+      )}
     </div>
   );
 }

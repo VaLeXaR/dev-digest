@@ -30,4 +30,8 @@ test-results/
 # Claude Code agent worktrees (local scratch space)
 .claude/worktrees/
 
+# Claude Code hook scratch space (engineering-insights change list, etc.)
+.claude/tmp/
+*/.claude/tmp/
+
 data/

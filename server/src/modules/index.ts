@@ -17,6 +17,7 @@ import reviewDiff from './review-diff/routes.js';
 import projectContext from './project-context/routes.js';
 import onboarding from './onboarding/routes.js';
 import whyRiskBriefRoutes from './why-risk-brief/routes.js';
+import evalRoutes from './eval/routes.js';
 
 /**
  * Module registry. Each feature module is a Fastify plugin in
@@ -50,4 +51,5 @@ export const modules: Record<string, FastifyPluginAsync> = {
   projectContext,
   onboarding,
   whyRiskBriefRoutes,
+  evalRoutes,
 };

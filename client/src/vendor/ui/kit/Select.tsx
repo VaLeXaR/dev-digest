@@ -16,6 +16,8 @@ export function Select<T extends string>({
   placeholder = "Select…",
   width,
   disabled,
+  icon,
+  size = "md",
 }: {
   value: T | "";
   onChange?: (v: T) => void;
@@ -23,6 +25,10 @@ export function Select<T extends string>({
   placeholder?: string;
   width?: number | string;
   disabled?: boolean;
+  /** Optional leading icon shown inside the trigger. */
+  icon?: keyof typeof Icon;
+  /** "sm" matches a md Button's height (compact toolbar dropdowns); "md" is the taller form field. */
+  size?: "sm" | "md";
 }) {
   const [open, setOpen] = React.useState(false);
   const [rect, setRect] = React.useState<DOMRect | null>(null);
@@ -56,6 +62,8 @@ export function Select<T extends string>({
   );
 
   const selected = normalized.find((o) => o.value === value);
+  const LeadIcon = icon ? Icon[icon] : null;
+  const compact = size === "sm";
 
   function handleToggle() {
     if (disabled) return;
@@ -112,15 +120,16 @@ export function Select<T extends string>({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: compact ? 7 : 8,
           width: "100%",
-          padding: "10px 12px",
-          borderRadius: 7,
+          padding: compact ? "7px 12px" : "10px 12px",
+          borderRadius: compact ? 6 : 7,
           border: `1px solid ${open ? "var(--accent)" : "var(--border-strong)"}`,
           background: "var(--bg-elevated)",
           color: selected ? "var(--text-primary)" : "var(--text-muted)",
-          fontSize: 14,
+          fontSize: compact ? 13 : 14,
           fontWeight: 400,
+          lineHeight: 1.2,
           textAlign: "left",
           cursor: disabled ? "default" : "pointer",
           outline: "none",
@@ -129,7 +138,18 @@ export function Select<T extends string>({
           opacity: disabled ? 0.6 : 1,
         }}
       >
-        <span style={{ flex: 1 }}>{selected?.label ?? placeholder}</span>
+        {LeadIcon && <LeadIcon size={compact ? 15 : 16} style={{ color: "var(--text-muted)", flexShrink: 0 }} />}
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {selected?.label ?? placeholder}
+        </span>
         <Icon.ChevronDown
           size={14}
           style={{

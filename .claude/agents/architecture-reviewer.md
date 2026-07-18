@@ -213,6 +213,27 @@ _If no violations are found: "No violations found against the checked rules."_
 reading beyond the standard docs (Step 1) to resolve, whether `## Architecture context:` was
 supplied and actually covered what was needed (or you had to fall back to reading CLAUDE.md
 anyway), or a suspicious pattern noticed that didn't cleanly map to any of the 12 rules.>
+
+### Insight candidates
+<0-2 bullets, or "none" — durable facts about the CODE, for the caller to run through the
+`engineering-insights` filter. Distinct from Process notes above: those are about how the RUN went
+and feed `/workflow-retro`; these are about what the codebase IS and feed `{module}/INSIGHTS.md`.
+
+This is not the findings table restated. A single violation is already reported above and needs no
+insight. Only write a bullet when the audit surfaced something a future agent would otherwise
+re-derive from scratch:
+
+- the same rule broken the same way across several modules — a mistake the code's shape invites,
+  not one slip
+- a rule that turned out not to mean what its wording suggests, once you read the authoritative doc
+- a convention you had to reconstruct by reading code because no doc states it
+
+Format: one actionable sentence + `file:line`, per the skill's quality standard. Suppress anything
+obvious from five minutes of reading the code — "no violations found" is not an insight, and an
+empty section is expected on most runs.
+
+You never write `INSIGHTS.md` yourself; you are read-only. These are candidates, and the caller
+decides.>
 ```
 
 **Severity scale:**

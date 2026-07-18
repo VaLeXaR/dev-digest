@@ -49,7 +49,7 @@ export class AnthropicProvider implements LLMProvider {
   async listModels(): Promise<ModelInfo[]> {
     return withRetry(async () => {
       // SDK 0.33 exposes models.list()
-      const res = await this.client.models.list();
+      const res = await withTimeout(this.client.models.list(), DEFAULT_TIMEOUT);
       return res.data.map((m) => ({
         id: m.id,
         provider: 'anthropic' as const,

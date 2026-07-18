@@ -120,6 +120,41 @@
       "when": 1783862082372,
       "tag": "0016_shocking_havok",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784129304669,
+      "tag": "0017_strong_ink",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784204278431,
+      "tag": "0018_past_christian_walker",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784204316473,
+      "tag": "0019_little_songbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784281249904,
+      "tag": "0020_right_bloodaxe",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784302099547,
+      "tag": "0021_closed_mantis",
+      "breakpoints": true
     }
   ]
 }

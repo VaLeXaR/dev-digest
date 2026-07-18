@@ -1,0 +1,114 @@
+# Skill evals — content tier. Runs the eval for each CHANGED skill.
+#
+# Trigger: a change to a skill (`.claude/skills/<name>/**`) or its eval (`evals/skills/<name>/**`).
+# `detect` (scripts/ci-detect.mjs) maps the diff to the skills that have evals; a changed skill
+# with NO eval is reported as SKIP, not a failure.
+#
+# Model is a knob, not code: EVAL_SKILLS_MODEL (Actions VARIABLE, not a Secret) → default
+# deepseek/deepseek-chat, called natively over OpenRouter (no proxy — the content tier needs no
+# tools). Judge is decoupled: EVAL_JUDGE_MODEL → default anthropic/claude-haiku-4.5.
+
+name: eval-skills
+
+on:
+  pull_request:
+    paths:
+      - ".claude/skills/**"
+      - "evals/skills/**"
+  workflow_dispatch:
+    inputs:
+      skills_model:
+        description: "Override EVAL_MODEL for the skills tier — OpenRouter slug"
+        required: false
+        default: ""
+      judge_model:
+        description: "Override EVAL_JUDGE_MODEL (the grader) — OpenRouter slug"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-skills-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: evals
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      skills: ${{ steps.detect.outputs.skills }}
+      skipped_skills: ${{ steps.detect.outputs.skipped_skills }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so we can diff against the PR base
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck # fail fast before spending any tokens
+
+      - name: Compute changed files
+        working-directory: . # repo root — paths must be repo-relative for ci-detect
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual run = sweep every skill that has an eval.
+            { for d in evals/skills/*/; do [ -d "$d" ] && echo "${d}dispatch"; done; } > changed.txt
+          else
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            git diff --name-only "origin/${{ github.base_ref }}...HEAD" > changed.txt
+          fi
+          echo "----- changed files -----"; cat changed.txt
+
+      - name: Detect eval targets
+        id: detect
+        run: |
+          export CHANGED_FILES="$(cat ../changed.txt)"
+          node scripts/ci-detect.mjs
+
+      - name: Note skipped skills (no evals)
+        if: steps.detect.outputs.skipped_skills != ''
+        run: |
+          {
+            echo "### Skipped — changed but no evals written"
+            echo "- skills: \`${{ steps.detect.outputs.skipped_skills }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  skills-evals:
+    needs: detect
+    if: needs.detect.outputs.skills != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        skill: ${{ fromJSON(needs.detect.outputs.skills) }}
+    env:
+      EVAL_BACKEND: openrouter
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.skills_model || vars.EVAL_SKILLS_MODEL || 'deepseek/deepseek-chat' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || vars.EVAL_JUDGE_MODEL || 'anthropic/claude-haiku-4.5' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: eval skills/${{ matrix.skill }}
+        # Trailing slash anchors the filter to this exact dir — a bare name is a substring
+        # match that would also pull sibling dirs sharing the prefix (e.g. foo vs foo-lite).
+        run: pnpm vitest run "skills/${{ matrix.skill }}/"

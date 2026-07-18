@@ -1,0 +1,176 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for AgentEvalDetail (design/06-eval-dashboard-agent-detail.png). */
+export const s = {
+  page: { padding: "24px 32px 44px", maxWidth: 1180, margin: "0 auto" } satisfies CSSProperties,
+
+  backLink: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    fontSize: 13.5,
+    color: "var(--text-secondary)",
+    textDecoration: "none",
+    marginBottom: 18,
+  } satisfies CSSProperties,
+
+  headerRow: {
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 18,
+    flexWrap: "wrap",
+    marginBottom: 22,
+  } satisfies CSSProperties,
+  headerText: { minWidth: 0 } satisfies CSSProperties,
+  titleRow: { display: "flex", alignItems: "center", gap: 10 } satisfies CSSProperties,
+  h1: { fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 } satisfies CSSProperties,
+  modelBadge: {
+    fontSize: 12,
+    color: "var(--text-secondary)",
+    background: "var(--bg-hover)",
+    border: "1px solid var(--border)",
+    borderRadius: 5,
+    padding: "2px 8px",
+  } satisfies CSSProperties,
+  subtitle: { fontSize: 14, color: "var(--text-secondary)", marginTop: 6, margin: 0 } satisfies CSSProperties,
+
+  headerControls: { display: "flex", alignItems: "center", gap: 10, flexShrink: 0 } satisfies CSSProperties,
+
+  section: { marginTop: 26 } satisfies CSSProperties,
+  chartCard: {
+    marginTop: 26,
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
+    borderRadius: 9,
+    padding: 20,
+  } satisfies CSSProperties,
+  emptyText: { fontSize: 13.5, color: "var(--text-secondary)", padding: "12px 4px" } satisfies CSSProperties,
+
+  banner: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: "13px 16px",
+    borderRadius: 8,
+    border: "1px solid var(--warn)",
+    background: "var(--warn-bg)",
+    marginBottom: 22,
+  } satisfies CSSProperties,
+  bannerIcon: { color: "var(--warn)", flexShrink: 0, marginTop: 1 } satisfies CSSProperties,
+  bannerText: { fontSize: 13.5, color: "var(--text-primary)", lineHeight: 1.5 } satisfies CSSProperties,
+
+  tiles: { display: "flex", gap: 14 } satisfies CSSProperties,
+  tile: {
+    flex: 1,
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
+    borderRadius: 9,
+    padding: 18,
+    minWidth: 0,
+  } satisfies CSSProperties,
+  tileHeader: { display: "flex", alignItems: "center", justifyContent: "space-between" } satisfies CSSProperties,
+  tileLabel: {
+    fontSize: 11.5,
+    fontWeight: 700,
+    letterSpacing: "0.05em",
+    color: "var(--text-muted)",
+    textTransform: "uppercase",
+  } satisfies CSSProperties,
+  tileValueRow: { display: "flex", alignItems: "baseline", gap: 10, marginTop: 12 } satisfies CSSProperties,
+  tileValue: { fontSize: 32, fontWeight: 700, letterSpacing: "-0.02em" } satisfies CSSProperties,
+  tileSuffix: { fontSize: 18, color: "var(--text-muted)", marginLeft: 1 } satisfies CSSProperties,
+  tileDelta: { fontSize: 13, fontWeight: 600 } satisfies CSSProperties,
+
+  legend: { display: "flex", alignItems: "center", gap: 16 } satisfies CSSProperties,
+  legendItem: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-secondary)" } satisfies CSSProperties,
+  legendSwatch: { width: 10, height: 2, borderRadius: 1, display: "inline-block" } satisfies CSSProperties,
+
+  selectedCount: {
+    marginLeft: 10,
+    fontSize: 12.5,
+    fontWeight: 400,
+    letterSpacing: "normal",
+    textTransform: "none",
+    color: "var(--text-secondary)",
+  } satisfies CSSProperties,
+
+  table: { display: "flex", flexDirection: "column" } satisfies CSSProperties,
+  runRowHeader: {
+    display: "grid",
+    gridTemplateColumns: "28px 150px 64px 1fr 1fr 1fr 64px 64px",
+    alignItems: "center",
+    gap: 14,
+    padding: "0 4px 8px",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.05em",
+    color: "var(--text-muted)",
+    textTransform: "uppercase",
+  } satisfies CSSProperties,
+  runRow: {
+    display: "grid",
+    gridTemplateColumns: "28px 150px 64px 1fr 1fr 1fr 64px 64px",
+    alignItems: "center",
+    gap: 14,
+    padding: "11px 4px",
+    borderBottom: "1px solid var(--border)",
+  } satisfies CSSProperties,
+  runTimestamp: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
+  runVersion: { fontSize: 13, fontWeight: 600, color: "var(--accent-text)" } satisfies CSSProperties,
+  runPass: { fontSize: 13.5, fontWeight: 700, textAlign: "right" } satisfies CSSProperties,
+  runCost: { fontSize: 13, color: "var(--text-secondary)", textAlign: "right" } satisfies CSSProperties,
+
+  barCell: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
+  barTrack: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    background: "var(--bg-hover)",
+    overflow: "hidden",
+  } satisfies CSSProperties,
+  barFill: (width: number, color: string): CSSProperties => ({
+    width: `${width}%`,
+    height: "100%",
+    background: color,
+    borderRadius: 3,
+  }),
+  barValue: {
+    fontSize: 12.5,
+    color: "var(--text-secondary)",
+    width: 34,
+    textAlign: "right",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+
+  // METRIC TREND chart hover tooltip (T-03, R1/R9) — reuses the chart card's
+  // own surface treatment (`chartCard` above): var(--bg-elevated), 1px solid
+  // var(--border), borderRadius 9.
+  tooltipCard: {
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
+    borderRadius: 9,
+    padding: "10px 12px",
+    minWidth: 168,
+  } satisfies CSSProperties,
+  tooltipTimestamp: { fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 } satisfies CSSProperties,
+  tooltipVersionRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  } satisfies CSSProperties,
+  tooltipVersion: { fontSize: 13, fontWeight: 600, color: "var(--accent-text)" } satisfies CSSProperties,
+  tooltipCost: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
+  tooltipDivider: { height: 1, background: "var(--border)", margin: "8px 0" } satisfies CSSProperties,
+  tooltipMetricRow: { display: "flex", alignItems: "center", gap: 6, padding: "2px 0" } satisfies CSSProperties,
+  tooltipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    display: "inline-block",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  tooltipMetricLabel: { fontSize: 12.5, color: "var(--text-secondary)", flex: 1 } satisfies CSSProperties,
+  tooltipMetricValue: { fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)" } satisfies CSSProperties,
+} as const;

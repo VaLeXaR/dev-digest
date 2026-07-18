@@ -4,12 +4,18 @@ import type { CSSProperties } from "react";
 export const s = {
   card: (focused: boolean, sevColor: string, muted: boolean): CSSProperties => ({
     borderRadius: 8,
-    // All-longhand (never mix `border` shorthand with `borderLeft` — React warns
-    // about updating shorthand + non-shorthand on the same rerender).
+    // Genuinely all-longhand: `borderColor`/`borderWidth` are SHORTHANDS (they
+    // set all four sides, incl. left), so mixing them with `borderLeft*` makes
+    // React warn about updating a shorthand + non-shorthand on the same rerender
+    // (the `focused` toggle changes the color). Set each side explicitly instead.
     borderStyle: "solid",
-    borderColor: focused ? sevColor : "var(--border)",
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
     borderLeftWidth: 3,
+    borderTopColor: focused ? sevColor : "var(--border)",
+    borderRightColor: focused ? sevColor : "var(--border)",
+    borderBottomColor: focused ? sevColor : "var(--border)",
     borderLeftColor: sevColor,
     background: "var(--bg-elevated)",
     overflow: "hidden",
@@ -43,6 +49,19 @@ export const s = {
     fontSize: 12,
     fontWeight: 600,
     color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  // Active decision styling for the Accept/Dismiss buttons: green when the
+  // finding is accepted, red when dismissed (the Button's `active` prop only
+  // styles the `tertiary` kind, so these are applied via `style`).
+  acceptActive: {
+    borderColor: "var(--ok)",
+    color: "var(--ok)",
+    background: "var(--ok-bg)",
+  } satisfies CSSProperties,
+  dismissActive: {
+    borderColor: "var(--crit)",
+    color: "var(--crit)",
+    background: "var(--crit-bg)",
   } satisfies CSSProperties,
   metaRow: {
     display: "flex",
@@ -78,6 +97,7 @@ export const s = {
     gap: 8,
     marginTop: 14,
     flexWrap: "wrap",
+    alignItems: "center",
   } satisfies CSSProperties,
   composer: {
     marginTop: 12,

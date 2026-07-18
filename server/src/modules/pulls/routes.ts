@@ -186,14 +186,11 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       for (const r of needStats) {
         try {
           const detail = await gh.getPullRequest({ owner: repo.owner, name: repo.name }, r.number);
-          await container.db
-            .update(t.pullRequests)
-            .set({
-              additions: detail.additions,
-              deletions: detail.deletions,
-              filesCount: detail.files_count,
-            })
-            .where(eq(t.pullRequests.id, r.id));
+          await container.reviewRepo.updatePullMeta(r.id, {
+            additions: detail.additions,
+            deletions: detail.deletions,
+            filesCount: detail.files_count,
+          });
           r.additions = detail.additions;
           r.deletions = detail.deletions;
           r.filesCount = detail.files_count;
@@ -271,41 +268,32 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       const gh = await container.github();
       const detail = await gh.getPullRequest({ owner: repo.owner, name: repo.name }, pr.number);
 
-      await container.db.delete(t.prFiles).where(eq(t.prFiles.prId, pr.id));
-      if (detail.files.length > 0) {
-        await container.db.insert(t.prFiles).values(
-          detail.files.map((f) => ({
-            prId: pr.id,
-            path: f.path,
-            additions: f.additions,
-            deletions: f.deletions,
-            patch: f.patch ?? null,
-          })),
-        );
-      }
-      await container.db.delete(t.prCommits).where(eq(t.prCommits.prId, pr.id));
-      if (detail.commits.length > 0) {
-        await container.db.insert(t.prCommits).values(
-          detail.commits.map((c) => ({
-            prId: pr.id,
-            sha: c.sha,
-            message: c.message,
-            author: c.author,
-            committedAt: c.committed_at ? new Date(c.committed_at) : null,
-          })),
-        );
-      }
-      await container.db
-        .update(t.pullRequests)
-        .set({
-          body: detail.body ?? null,
-          // Diff stats aren't on GitHub's PR-list payload — backfill them from
-          // the detail fetch so the Pull Requests list shows real size/files.
-          additions: detail.additions,
-          deletions: detail.deletions,
-          filesCount: detail.files_count,
-        })
-        .where(eq(t.pullRequests.id, pr.id));
+      await container.reviewRepo.replacePrFiles(
+        pr.id,
+        detail.files.map((f) => ({
+          path: f.path,
+          additions: f.additions,
+          deletions: f.deletions,
+          patch: f.patch ?? null,
+        })),
+      );
+      await container.reviewRepo.replacePrCommits(
+        pr.id,
+        detail.commits.map((c) => ({
+          sha: c.sha,
+          message: c.message,
+          author: c.author,
+          committedAt: c.committed_at ? new Date(c.committed_at) : null,
+        })),
+      );
+      await container.reviewRepo.updatePullMeta(pr.id, {
+        body: detail.body ?? null,
+        // Diff stats aren't on GitHub's PR-list payload — backfill them from
+        // the detail fetch so the Pull Requests list shows real size/files.
+        additions: detail.additions,
+        deletions: detail.deletions,
+        filesCount: detail.files_count,
+      });
 
       return { ...detail, id: pr.id, ...aggregates };
     } catch (err) {

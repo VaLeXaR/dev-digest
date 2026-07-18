@@ -1,0 +1,133 @@
+{
+  "skill_name": "onion-architecture-node",
+  "notes": "Evaluating an EXISTING skill. Baseline = no skill (does the skill add value?). Fixtures live in fixtures/mini-backend and carry planted violations + negative controls, no hint comments. Assertions are graded against ground-truth.md.",
+  "measurement": {
+    "summary": "Iteration-2 evidence: on a strong model, whole-tree reviews barely discriminate (sibling ports+container leak the architecture, so a no-skill run infers the rules). The skill's value concentrates in CONVENTIONS/EXCEPTIONS not derivable from code. Cases carrying that signal set discriminates:true.",
+    "flags": {
+      "single_file": "The run may read ONLY the named target file, no other fixture source. Strips the architectural context that lets an unguided model infer the rules.",
+      "no_explore": "The run may not list/read/grep the fixture tree beyond the named file(s). Required for knowledge tests, else the baseline discovers the answer by exploration.",
+      "baseline_strip_project_context": "The no-skill baseline MUST run without the repo's CLAUDE.md/AGENTS.md in context. Those files encode DevDigest architecture ('NO workspace hoisting', vendoring, layer roles) and leak DevDigest knowledge into a supposedly-blind baseline. The runner is responsible for honoring this; the in-conversation iteration-2 run could NOT and is flagged contaminated."
+    }
+  },
+  "evals": [
+    {
+      "id": 0,
+      "name": "full-review-sweep",
+      "discriminates": false,
+      "prompt": "Review the backend under fixtures/mini-backend/ for architecture and layering problems. Go through every file. For each problem, give the file path, what's wrong, and how you'd fix it. Also call out any files that are structured correctly.",
+      "expected_output": "Finds V1-V7. Does NOT flag N1 container.ts, N2 repository.ts, N3 scoring.ts, or the repo-intel service (allowed exception). NOTE: the tree grew in iteration 2 (repo-intel, pulls, depgraph, helpers, client copy). Before re-running, extend ground truth: repo-intel/service.ts + adapters/depgraph must NOT be flagged; pulls/routes.ts and pulls/service.ts ARE cross-module violations.",
+      "files": ["fixtures/mini-backend/"],
+      "assertions": [
+        {"id": "V1", "kind": "recall", "text": "Flags reviewer-core/src/grounding.ts for I/O (node:fs and/or octokit) inside the pure core."},
+        {"id": "V2", "kind": "recall", "text": "Flags modules/reviews/service.ts for instantiating the concrete adapter instead of the LLMProvider port via the container."},
+        {"id": "V3", "kind": "recall", "text": "Flags modules/repos/routes.ts for reaching into an adapter and holding business logic in a route."},
+        {"id": "V4", "kind": "recall", "text": "Flags modules/reviews/routes.ts for an inline Drizzle/db query in a route."},
+        {"id": "V5", "kind": "recall", "text": "Flags adapters/github/octokit.ts for importing a feature module."},
+        {"id": "V6", "kind": "recall", "text": "Flags modules/repos/service.ts for importing modules/reviews/repository directly."},
+        {"id": "V7", "kind": "recall", "text": "Flags vendor/shared/adapters.ts for a port leaking a vendor (raw():Octokit / OpenAIEmbedder)."},
+        {"id": "N-precision", "kind": "precision", "text": "Does NOT flag container.ts, repository.ts, or scoring.ts as violations."}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "service-layering",
+      "discriminates": false,
+      "prompt": "Is fixtures/mini-backend/server/src/modules/reviews/service.ts correctly layered for this backend? If not, tell me exactly what to change.",
+      "expected_output": "Identifies V2: the service instantiates AnthropicProvider directly; fix is the LLMProvider port via the container.",
+      "files": ["fixtures/mini-backend/server/src/modules/reviews/service.ts"],
+      "assertions": [
+        {"id": "V2-detect", "kind": "recall", "text": "Concludes the service is NOT correctly layered; pinpoints the direct AnthropicProvider adapter import/instantiation."},
+        {"id": "V2-fix", "kind": "recall", "text": "Prescribes the LLMProvider port via the container (container.llm()), not newing the adapter."}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "core-purity",
+      "discriminates": false,
+      "prompt": "Take a look at fixtures/mini-backend/reviewer-core/src/grounding.ts and tell me if it belongs in reviewer-core as written.",
+      "expected_output": "Identifies V1: core must be pure; this file does node:fs + octokit I/O. Fix: move I/O behind ports / out of core.",
+      "files": ["fixtures/mini-backend/reviewer-core/src/grounding.ts"],
+      "assertions": [
+        {"id": "V1-detect", "kind": "recall", "text": "Concludes it does NOT belong as written because core must be pure and this file does I/O."},
+        {"id": "V1-fix", "kind": "recall", "text": "Prescribes removing I/O from core (inject a reader/port or move it out)."}
+      ]
+    },
+    {
+      "id": 3,
+      "name": "placement-new-integration",
+      "discriminates": "weak",
+      "prompt": "I want to add a Linear integration to this backend so the reviewer can post its findings as Linear issues. Where does each piece of code go, and what's the sequence of steps?",
+      "expected_output": "Canonical move: vendor-neutral port in vendor/shared/adapters.ts, adapter in src/adapters/linear/, mock, wire in platform/container.ts, service consumes container.<port>. Baseline tends to name the port after the vendor (LinearClient).",
+      "files": ["fixtures/mini-backend/"],
+      "assertions": [
+        {"id": "D-port", "kind": "recall", "text": "Defines a vendor-NEUTRAL port in vendor/shared/adapters.ts (not 'Linear' in the interface shape)."},
+        {"id": "D-adapter", "kind": "recall", "text": "Puts the SDK-wrapping adapter under src/adapters/ (e.g. adapters/linear/)."},
+        {"id": "D-container", "kind": "recall", "text": "Wires the port->adapter binding in platform/container.ts."},
+        {"id": "D-service", "kind": "recall", "text": "Service consumes the port via container.<port>, never importing the SDK directly."}
+      ]
+    },
+    {
+      "id": 4,
+      "name": "repo-intel-exception-singlefile",
+      "discriminates": true,
+      "single_file": true,
+      "no_explore": true,
+      "baseline_strip_project_context": true,
+      "prompt": "Review ONLY this file: fixtures/mini-backend/server/src/modules/repo-intel/service.ts. Do not read any other files under fixtures/. Is it correctly layered for this backend, or is it a violation? Explain why.",
+      "expected_output": "CORRECT / allowed. repo-intel is the documented exception to services-depend-on-ports (indexer subsystem via container.repoIntel). A no-skill run is expected to false-positive ('violation'). PROVEN discriminator (iter 2: with 2/2, baseline 0/2).",
+      "files": ["fixtures/mini-backend/server/src/modules/repo-intel/service.ts"],
+      "assertions": [
+        {"id": "P1-verdict", "kind": "precision", "text": "Concludes the file is CORRECTLY layered (allowed exception); does NOT flag the adapter imports (astgrep, codeindex) as a violation."},
+        {"id": "P1-reason", "kind": "precision", "text": "Justifies via repo-intel as the indexer subsystem / documented exception to services-depend-on-ports (container.repoIntel facade)."}
+      ]
+    },
+    {
+      "id": 5,
+      "name": "shared-contract-sync",
+      "discriminates": true,
+      "single_file": true,
+      "no_explore": true,
+      "baseline_strip_project_context": true,
+      "prompt": "Review ONLY this file: fixtures/mini-backend/server/src/vendor/shared/adapters.ts. Do NOT read or explore any other file. I want to add a field latencyMs: number to the Finding contract. What must I do across this codebase for it to be correct? List the files and steps.",
+      "expected_output": "The shared contract is vendored as two hand-maintained copies (server + client/src/vendor/shared), synced by hand — BOTH must be edited. With exploration barred and CLAUDE.md stripped, a no-skill baseline cannot know the client copy exists. (Iter-2 run was CONTAMINATED: exploration allowed + CLAUDE.md inherited, so baseline passed; this corrected single-file/no-explore form is the clean test.)",
+      "files": ["fixtures/mini-backend/server/src/vendor/shared/adapters.ts"],
+      "assertions": [
+        {"id": "K1-detect", "kind": "recall", "text": "States the contract exists as TWO copies (server AND client/src/vendor/shared) and both must be edited."},
+        {"id": "K1-nature", "kind": "recall", "text": "Notes the copies are hand-synced (no codegen), so editing one silently drifts the other."}
+      ]
+    },
+    {
+      "id": 6,
+      "name": "depgraph-exception-singlefile",
+      "discriminates": true,
+      "single_file": true,
+      "no_explore": true,
+      "baseline_strip_project_context": true,
+      "prompt": "Review ONLY this file: fixtures/mini-backend/server/src/adapters/depgraph/index.ts. Do not read any other files under fixtures/. It's an adapter that imports from a feature module (modules/repo-intel/constants). Is that a build-breaking layering violation here, or something else? Explain.",
+      "expected_output": "NOT a build-breaking error. adapters/depgraph -> repo-intel/constants is the documented sanctioned exception (pathNot on adapters-dont-know-modules; shares SUPPORTED_EXT), so the depcruise gate does not fail on it. The documented clean fix is to relocate the shared constant to _shared/platform, then delete the pathNot. A no-skill run is expected to call it a flat adapters-must-not-import-modules violation.",
+      "files": ["fixtures/mini-backend/server/src/adapters/depgraph/index.ts"],
+      "assertions": [
+        {"id": "P2-verdict", "kind": "precision", "text": "Identifies this as the documented/sanctioned adapters/depgraph -> repo-intel/constants exception (NOT a build-breaking error; the gate does not fail on it)."},
+        {"id": "P2-fix", "kind": "recall", "text": "Notes the intended clean fix is relocating the shared constant (SUPPORTED_EXT) to _shared/platform and then removing the exception, rather than treating it as a plain violation."}
+      ]
+    },
+    {
+      "id": 7,
+      "name": "drift-severity",
+      "discriminates": true,
+      "single_file": true,
+      "no_explore": true,
+      "baseline_strip_project_context": true,
+      "prompt": "Review ONLY this file: fixtures/mini-backend/server/src/modules/reviews/routes.ts. Do not read any other files under fixtures/. One handler runs a Drizzle db.select() inline. Under THIS backend's enforcement gate, is that a build-breaking error or known/tolerated drift, and does the gate fail on it today?",
+      "expected_output": "db-confined-to-repositories is a WARN (known drift, an 8-file burn-down backlog), NOT an error; depcruise exits non-zero only on error, so the gate is green today and does not block CI on this edge — but it's tracked drift to migrate into a repository, then promote to error. A no-skill run can call it 'a violation' but cannot classify it as tolerated warn vs blocking error.",
+      "files": ["fixtures/mini-backend/server/src/modules/reviews/routes.ts"],
+      "assertions": [
+        {"id": "K2-severity", "kind": "recall", "text": "Classifies db-in-route here as WARN-level known drift (not a build-breaking error) and that the depcruise gate does not currently fail on it."},
+        {"id": "K2-context", "kind": "recall", "text": "Notes it is tracked drift to burn down (move the query into a repository), i.e. warn today, promote to error once cleared."}
+      ]
+    }
+  ],
+  "retired": [
+    {"name": "cross-module-import-singlefile", "reason": "Did not discriminate (iter 2: with 2/2, baseline 2/2). A strong model flags reaching into ../reviews/helpers as cross-module coupling unaided; the skill added only the exact rule name + _shared fix. Fixture (modules/pulls/*, reviews/helpers.ts) is retained and now feeds eval-0's expanded whole-tree expectations."}
+  ]
+}

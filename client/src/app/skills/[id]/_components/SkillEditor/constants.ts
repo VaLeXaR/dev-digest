@@ -10,6 +10,7 @@ export const TABS: readonly EditorTab[] = [
   { key: "config", label: "Config", icon: "Settings" },
   { key: "preview", label: "Preview", icon: "Eye" },
   { key: "context", label: "Context", icon: "FileText" },
+  { key: "evals", label: "Evals", icon: "Target" },
   { key: "stats", label: "Stats", icon: "BarChart" },
   { key: "versions", label: "Versions", icon: "History" },
 ];

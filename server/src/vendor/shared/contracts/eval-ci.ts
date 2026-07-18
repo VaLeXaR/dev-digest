@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Verdict, Finding } from './findings.js';
-import { EvalRun, EvalOwnerKind, Conformance, Provider, CiFailOn } from './knowledge.js';
+import { EvalRun, EvalCase, EvalOwnerKind, EvalCodeMode, ExpectedFinding, Conformance, Provider, CiFailOn } from './knowledge.js';
 
 /**
  * A4 — Eval / CI / Compose / Conformance API contracts (L06).
@@ -24,7 +24,14 @@ export const EvalCaseInput = z.object({
   input_diff: z.string().default(''),
   input_files: z.unknown().nullish(),
   input_meta: z.unknown().nullish(),
-  expected_output: z.unknown(),
+  // SKILL Code tab source snippets (before/after) + new-vs-modified mode.
+  // `input_diff` remains the single value the review engine consumes — it is
+  // generated from these client-side on save. All three are nullish because
+  // every agent-owned row predates them and must still parse.
+  code_before: z.string().nullish(),
+  code_after: z.string().nullish(),
+  code_mode: EvalCodeMode.nullish(),
+  expected_output: z.array(ExpectedFinding),
   notes: z.string().nullish(),
 });
 export type EvalCaseInput = z.infer<typeof EvalCaseInput>;
@@ -53,40 +60,141 @@ export const EvalRunResult = z.object({
 });
 export type EvalRunResult = z.infer<typeof EvalRunResult>;
 
-/** One point on the dashboard trend (per run, chronological). */
+/**
+ * A persisted set-run batch row (`eval_run_batches`) — one row per "Run all
+ * evals" execution, recording the agent version + aggregate metrics.
+ * `recall`/`precision`/`citation_accuracy` are `null` ("n/a") whenever their
+ * denominator across the whole set is 0 (G2/G3) — never coerced to 0.
+ */
+export const EvalRunBatchRecord = z.object({
+  id: z.string(),
+  owner_kind: EvalOwnerKind,
+  owner_id: z.string(),
+  owner_version: z.number().int(),
+  ran_at: z.string(),
+  recall: z.number().nullable(),
+  precision: z.number().nullable(),
+  citation_accuracy: z.number().nullable(),
+  pass_count: z.number().int(),
+  total_count: z.number().int(),
+  cost_usd: z.number().nullable(),
+});
+export type EvalRunBatchRecord = z.infer<typeof EvalRunBatchRecord>;
+
+/** Response of `POST /agents/:id/eval-runs` — the newly created batch record. */
+export const EvalRunBatchResult = EvalRunBatchRecord;
+export type EvalRunBatchResult = z.infer<typeof EvalRunBatchResult>;
+
+/**
+ * Request body for `POST /agents/:id/eval-cases/from-finding` — the owner
+ * agent is derived server-side from the finding's own review (G6), never
+ * supplied by the caller. `name`/`expected_output` are OPTIONAL overrides the
+ * seed modal (screen 2) captures before Save; when omitted the server falls
+ * back to the finding-derived defaults. The input fixture (diff/files/meta) is
+ * always snapshotted server-side and never accepted from the caller.
+ */
+export const EvalCaseFromFindingInput = z.object({
+  finding_id: z.string(),
+  name: z.string().min(1).optional(),
+  expected_output: z.array(ExpectedFinding).optional(),
+});
+export type EvalCaseFromFindingInput = z.infer<typeof EvalCaseFromFindingInput>;
+
+/**
+ * Response of `GET /findings/:id/eval-case-seed` — everything the seed modal
+ * needs to open WITHOUT persisting: the owning agent (for the editor header),
+ * the pre-filled `seed` derived from the finding, and the `existing_case` this
+ * finding already backs (non-null → the editor opens that case in edit mode
+ * instead of seeding a new one).
+ */
+export const EvalCaseSeed = z.object({
+  owner: z.object({ kind: EvalOwnerKind, id: z.string(), name: z.string() }),
+  existing_case: EvalCase.nullable(),
+  seed: EvalCaseInput,
+});
+export type EvalCaseSeed = z.infer<typeof EvalCaseSeed>;
+
+/**
+ * Body for `POST /findings/:id/eval-run-preview` — an EPHEMERAL run of a
+ * not-yet-saved seed case (screen 2's "Run case" before Save). The server
+ * rebuilds the input fixture from the finding and scores against the supplied
+ * `expected_output`; it persists NEITHER an eval case NOR a run row. Only Save
+ * creates the case, and only saved cases get persisted runs.
+ */
+export const EvalRunPreviewInput = z.object({
+  expected_output: z.array(ExpectedFinding),
+});
+export type EvalRunPreviewInput = z.infer<typeof EvalRunPreviewInput>;
+
+/**
+ * One point on the dashboard trend (per run, chronological). `owner_version`
+ * is the agent/skill version that produced this batch — the "what did I
+ * change" axis a trend-chart reader needs alongside the metric movement.
+ * `recall`/`precision`/`citation_accuracy`/`pass_rate` are `null` ("n/a")
+ * whenever their denominator across the set is 0 (G2/G3) — never coerced to
+ * 0, which would render as a false-regression cliff to the floor.
+ */
 export const EvalTrendPoint = z.object({
   ran_at: z.string(),
-  recall: z.number(),
-  precision: z.number(),
-  citation_accuracy: z.number(),
-  pass_rate: z.number(),
+  owner_version: z.number().int(),
+  recall: z.number().nullable(),
+  precision: z.number().nullable(),
+  citation_accuracy: z.number().nullable(),
+  pass_rate: z.number().nullable(),
   cost_usd: z.number().nullable(),
 });
 export type EvalTrendPoint = z.infer<typeof EvalTrendPoint>;
 
-/** Aggregate dashboard for an owner (agent/skill) or the whole workspace. */
+/**
+ * Aggregate dashboard for an owner (agent/skill) or the whole workspace.
+ * `current.recall`/`delta.recall` are nullable (AC-25) so a set with zero
+ * `must_find` expectations across every case is representable as "n/a"
+ * rather than a misleading `0`. `precision`/`citation_accuracy` on both
+ * `current` and `delta` are ALSO nullable (G2/G3) for the same reason — a 0/0
+ * covered-set (no batch yet, or every case's expectations empty) must render
+ * "n/a", never a misleading `0`.
+ */
 export const EvalDashboard = z.object({
   owner_kind: EvalOwnerKind.nullable(),
   owner_id: z.string().nullable(),
   cases_total: z.number().int(),
   current: z.object({
-    recall: z.number(),
-    precision: z.number(),
-    citation_accuracy: z.number(),
+    recall: z.number().nullable(),
+    precision: z.number().nullable(),
+    citation_accuracy: z.number().nullable(),
     traces_passed: z.number().int(),
     traces_total: z.number().int(),
     cost_usd: z.number().nullable(),
   }),
   delta: z.object({
-    recall: z.number(),
-    precision: z.number(),
-    citation_accuracy: z.number(),
+    recall: z.number().nullable(),
+    precision: z.number().nullable(),
+    citation_accuracy: z.number().nullable(),
   }),
   trend: z.array(EvalTrendPoint),
   recent_runs: z.array(EvalRunRecord),
   alert: z.string().nullable(),
 });
 export type EvalDashboard = z.infer<typeof EvalDashboard>;
+
+/**
+ * Cross-agent landing-page overview (G8) — `GET /eval/dashboard`. Distinct
+ * from `EvalDashboard`, which is the single-owner per-agent detail shape
+ * (`GET /agents/:id/eval/dashboard`).
+ */
+export const EvalDashboardOverview = z.object({
+  agents: z.array(
+    z.object({
+      agent_id: z.string(),
+      agent_name: z.string(),
+      model: z.string(),
+      latest_batch: EvalRunBatchRecord.nullable(),
+      sparkline: z.array(z.number()),
+    }),
+  ),
+  recent_runs: z.array(EvalRunBatchRecord.extend({ agent_name: z.string() })),
+});
+export type EvalDashboardOverview = z.infer<typeof EvalDashboardOverview>;
 
 // ===========================================================================
 // Compose Review
