@@ -35,8 +35,10 @@ ${fx("benign-refactor.diff")}`;
 // `di-discipline`, `reviewer-core-zero-io`, `reviewer-core-ground-findings`). Practices must cite
 // those exact slugs, never invented variants, or a correct agent is failed for wording alone.
 // Thresholds are < 1.0 on purpose: an LLM judge has ~5-10% per-practice noise, so demanding 100%
-// of practices reds a correct run. Allow one miss on the multi-practice cases (0.8); the benign
-// negative case sits at 0.67 (2 of 3). Pair with a stronger cross-family judge (EVAL_JUDGE_MODEL).
+// of practices reds a correct run. Allow one miss on the six-practice cases (0.8 = 5/6). The
+// three-practice cases sit at 0.66 to allow one miss — 2/3 = 0.667, so do NOT set 0.67: it rounds a
+// legitimate 2-of-3 pass into a red (that's exactly what flaked CI). Pair with a stronger
+// cross-family judge (EVAL_JUDGE_MODEL).
 export const cases: AgentCase[] = [
   {
     name: "flags both violations in the checkout diff with severity and a citable rule",
@@ -69,7 +71,7 @@ export const cases: AgentCase[] = [
       "every finding it reports carries a structural architecture rule label (`inward-only-imports` / `no-http-in-services` / `di-discipline`) — none is labeled a security vulnerability or runtime bug",
       "keeps findings scoped to structural/layering/DI contracts — it does not raise separate naming, code-style, or test-coverage findings",
     ],
-    threshold: 0.67,
+    threshold: 0.66,
     maxTurns: 25,
   },
   {
@@ -100,7 +102,7 @@ export const cases: AgentCase[] = [
       "does not fabricate a documented-rule violation where the diff violates none of the checked rules",
       "the final gate verdict is PASS",
     ],
-    threshold: 0.67,
+    threshold: 0.66,
     maxTurns: 25,
   },
 ];

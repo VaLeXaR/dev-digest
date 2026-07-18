@@ -32,15 +32,19 @@ export const cases: WorkflowCase[] = [
   // --- trace (1 session): two "Read When" rows at once -----------------------------------------
   {
     kind: "trace",
-    // Tests the CLAUDE.md "Read When" routing, so the prompt must push toward CONSULTING the docs,
+    // Tests the CLAUDE.md "Read when" routing, so the prompt must push toward CONSULTING the docs,
     // not exploring source. Earlier phrasing ("розберись, як усе влаштовано") sent the model straight
-    // into schema.ts / pipeline.run.ts and it never opened the routed doc. One anchor doc (pipeline.md)
-    // keeps this a deterministic routing check — asserting two docs in one session is inherently flaky.
+    // into schema.ts / pipeline.run.ts and it never opened the routed doc. It must also target the
+    // "Read when" ROW specifically ("Full pipeline, public API, prompt slots → README.md"): a generic
+    // "which docs for pipeline work" matches the "Before answering: check docs/" line too, and the
+    // model read the 84-byte docs/README.md stub instead of the root README. Quote that row's own
+    // wording (full pipeline + public API) so it routes to reviewer-core/README.md deterministically.
     name: "pipeline task follows CLAUDE.md routing to reviewer-core/README",
     prompt:
-      "I'm about to change the review pipeline, which lives in the reviewer-core package. Before " +
-      "touching code, consult that package's own guidance (its CLAUDE.md) on which docs to read for " +
-      "pipeline work, and read exactly those docs.",
+      "I'm about to change the review pipeline in the reviewer-core package and need to understand " +
+      "its full pipeline and public API before touching code. Consult that package's own guidance " +
+      "(its CLAUDE.md 'Read when' section) to find the single doc that covers the full pipeline and " +
+      "public API, and read exactly that doc.",
     expectFilesRead: ["reviewer-core/README.md"],
     maxTurns: 8,
   },
