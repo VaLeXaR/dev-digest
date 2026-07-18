@@ -31,6 +31,20 @@ Cross-package code: tsconfig path aliases, not published modules.
 docker compose down # stop Postgres — NEVER add -v (destroys all data permanently)
 ```
 
+### Harness evals (`evals/` — run from that folder: `cd evals`)
+
+Regression suite for the Claude Code harness itself (skills, subagents, workflow behavior).
+
+```sh
+pnpm eval:quality   # static gate, NO model — SKILL.md structure/frontmatter/links
+pnpm eval:skills    # LLM-judged quality of .claude/skills/*  (vitest run skills)
+pnpm eval:agents    # LLM-judged quality of .claude/agents/*  (vitest run agents)
+pnpm eval:workflow  # trace-asserted systemic behavior: dispatch/activation/CLAUDE.md effects
+pnpm eval           # all tiers
+```
+
+Runs on the Claude Code subscription by default (no API token). See [evals/README.md](evals/README.md).
+
 ## Gotchas
 
 - **IMPORTANT:** Migrations do NOT run on boot → `cd server && pnpm db:migrate` after every schema change
@@ -134,3 +148,12 @@ project folders) unless the user explicitly requests one.
 - Overall architecture, full flow from PR to findings → [README.md](README.md)
 - Test strategy and CI workflows → [TESTING.md](TESTING.md)
 - Agent prompts (general / security / performance) → [docs/agent-prompts/README.md](docs/agent-prompts/README.md)
+- Harness eval engine, backends, statistical tools → [evals/README.md](evals/README.md)
+
+## Run evals when
+
+After editing a harness artifact, run the matching eval before considering the change done:
+
+- Changed `.claude/skills/**` → `cd evals && pnpm eval:quality` (static gate) then `pnpm eval:skills`
+- Changed `.claude/agents/**` → `cd evals && pnpm eval:agents`
+- Changed `CLAUDE.md`/`AGENTS.md` or on-disk harness config → `cd evals && pnpm eval:workflow`
