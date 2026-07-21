@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/skills/pr-self-review/scripts/check-gate.sh"
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/skills/pr-self-review/scripts/check-gate.sh\""
           }
         ]
       }
