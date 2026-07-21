@@ -19,6 +19,34 @@ export class RunCancelledError extends Error {
   }
 }
 
+/**
+ * Runs `worker` over `items` with at most `limit` concurrent in flight — a
+ * fixed-size pool of "runner" loops that each pull the next item off a shared
+ * index until the list is exhausted. This is the SOLE throttle against
+ * provider 429s for multi-agent fan-out (T-03/AC-23): no rate limiter/queue
+ * exists anywhere in the LLM adapters (server INSIGHTS 2026-07-19). A single
+ * `worker` failure never stops the pool — callers are responsible for
+ * catching inside `worker` if per-item isolation is required (as
+ * `executeRuns` does). `limit=1` (or `items.length<=1`) degrades to a single
+ * runner processing items strictly one at a time, i.e. the original
+ * sequential loop's behavior.
+ */
+async function runBounded<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const poolSize = Math.max(1, Math.min(limit, items.length));
+  const runners = Array.from({ length: poolSize }, async () => {
+    while (next < items.length) {
+      const item = items[next++]!;
+      await worker(item);
+    }
+  });
+  await Promise.all(runners);
+}
+
 /** Minimal structured logger (pino-compatible: (obj, msg)) for runtime logs. */
 export type Logger = {
   info: (obj: unknown, msg?: string) => void;
@@ -137,7 +165,15 @@ export class ReviewRunExecutor {
       );
     }
 
-    for (const { agent, runId } of jobs) {
+    // Bounded-concurrency fan-out (T-03/AC-23): pool size from AppConfig (env
+    // MULTI_AGENT_CONCURRENCY, default 4), NOT a hardcoded literal — this is
+    // the sole throttle against provider 429s (no rate limiter/queue exists
+    // anywhere in the LLM adapters). Per-agent try/catch isolation below is
+    // unchanged from the prior sequential loop: one agent's throw never stops
+    // the others. `runOneAgent`'s own `parentLog.forRun(runId)` narrowing
+    // ensures concurrent runs never cross-write each other's live-log stream.
+    const concurrency = Math.max(1, this.container.config.multiAgentConcurrency);
+    await runBounded(jobs, concurrency, async ({ agent, runId }) => {
       const agentStart = Date.now();
       logger?.info(
         { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: pull.id },
@@ -164,7 +200,7 @@ export class ReviewRunExecutor {
           `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
         );
       }
-    }
+    });
   }
 
   /** Execute a single agent's review against a PR, streaming progress. */

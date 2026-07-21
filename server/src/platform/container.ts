@@ -25,6 +25,7 @@ import { PriceBook } from './price-book.js';
 import { ConfigError } from './errors.js';
 import { AgentsRepository } from '../modules/agents/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
+import { ReviewService } from '../modules/reviews/service.js';
 import { SkillsRepository } from '../modules/skills/repository.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -73,6 +74,7 @@ export class Container {
   // `container.agentsRepo` instead of reaching into another module's folder.
   private _agentsRepo?: AgentsRepository;
   private _reviewRepo?: ReviewRepository;
+  private _reviewService?: ReviewService;
   private _skillsRepo?: SkillsRepository;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
@@ -100,6 +102,16 @@ export class Container {
 
   get reviewRepo(): ReviewRepository {
     return (this._reviewRepo ??= new ReviewRepository(this.db));
+  }
+
+  /**
+   * Shared review-execution service (runReview/etc). Lazily constructed so
+   * consuming modules reuse the same run pipeline through the container
+   * (e.g. `container.reviewService.runReview(...)`) instead of importing
+   * `ReviewService` from the `reviews` module folder directly.
+   */
+  get reviewService(): ReviewService {
+    return (this._reviewService ??= new ReviewService(this));
   }
 
   get skillsRepo(): SkillsRepository {

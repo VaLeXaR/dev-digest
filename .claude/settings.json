@@ -1,4 +1,7 @@
 {
+  "env": {
+    "ENABLE_TOOL_SEARCH": "true"
+  },
   "permissions": {
     "allow": [
       "Edit(**/INSIGHTS.md)",
@@ -31,9 +34,7 @@
     ]
   },
   "enabledPlugins": {
-    "github@claude-plugins-official": true
-  },
-  "env": {
-    "ENABLE_TOOL_SEARCH": "true"
+    "github@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true
   }
 }

@@ -2,7 +2,8 @@
 
 import React, { useCallback } from "react";
 import { Icon, Avatar, Badge, Button, Tabs } from "@devdigest/ui";
-import { RunReviewDropdown } from "../RunReviewDropdown";
+import { PickAgentsToRun } from "../PickAgentsToRun";
+import { PastReviews } from "../PastReviews";
 import { s } from "./styles";
 import type { PrDetail } from "@/lib/types";
 
@@ -89,8 +90,9 @@ export function PrDetailHeader({
           >
             View on GitHub
           </Button>
+          {prId && <PastReviews prId={prId} />}
           {prId && (
-            <RunReviewDropdown
+            <PickAgentsToRun
               prId={prId}
               warnMerged={pr.status === "merged" || pr.status === "closed"}
               onRunStart={handleRunStart}

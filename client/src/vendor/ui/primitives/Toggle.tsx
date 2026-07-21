@@ -11,6 +11,7 @@ export function Toggle({
 }) {
   return (
     <button
+      type="button"
       onClick={() => onChange(!on)}
       role="switch"
       aria-checked={on}

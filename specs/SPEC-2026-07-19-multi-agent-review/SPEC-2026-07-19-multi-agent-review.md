@@ -27,9 +27,10 @@ rebuilding them.
   (`design/01.png`, `design/03.png`)
 - G3: Persist each multi-agent run as its own addressable `multi_agent_runs` record that links the
   N spawned `agent_runs`; a re-run creates a new record and never overwrites a prior one.
-- G4: Cross-agent grouping ("Where agents disagree") using a **same-file + overlapping-line-range**
-  rule only, showing a column per agent that actually ran with a binary `flagged` / `did not flag`
-  verdict, and a "Show only conflicts" toggle. (`design/04.png`, `design/05.png`)
+- G4: Cross-agent grouping ("Where agents disagree") using a **same-file + overlapping-line-range +
+  essence-similarity** rule (_amended 2026-07-20 — see N3_), showing a column per agent that
+  actually ran with a binary `flagged` / `did not flag` verdict, and a "Show only conflicts" toggle.
+  (`design/04.png`, `design/05.png`)
 - G5: A Multi-Agent Review results page with a **Columns ⇄ Tabs** mode toggle: Columns = one
   column per agent (live status + cost + score header, "View trace", findings); Tabs+detail =
   per-agent tabs rendering findings via the reused `FindingCard`. (`design/04.png`, `design/05.png`)
@@ -47,7 +48,13 @@ rebuilding them.
   conditional-prop pattern as the existing `onTurnIntoEvalCase`), so they appear in the Multi-Agent
   Review detail but NOT on the existing PR findings page. No server route change — `learn`/`reply`
   keep their current 400. (See AC-24.)
-- N3: No semantic / "essence" similarity in the grouping rule — file + line-range overlap only.
+- ~~N3: No semantic / "essence" similarity in the grouping rule — file + line-range overlap only.~~
+  **Reversed 2026-07-20.** Essence similarity IS part of the grouping rule: two findings merge only
+  when they share a file, an overlapping line range, AND a similar essence — so two *different*
+  issues that merely overlap in lines (e.g. one flags "SSRF", another "missing rate limit" at the
+  same block) stay as separate groups instead of collapsing under one title. Similarity is an
+  overlap coefficient (`|A∩B| / min(|A|,|B|)`, threshold 0.34) over stopword-filtered title token
+  sets; titles with no usable tokens fall back to overlap-only. (`server/src/modules/multi-agent-runs/grouping.ts:titlesSimilar`)
 - N4: No Per-Agent Stats / "Agent Performance" page — attribution data is captured, but that page
   is a separate feature. Its sidebar nav entry is **not** added by worktree A either; only the
   "Multi-Agent Review" nav entry + route is added (the `NAV` array has neither today —
@@ -65,8 +72,9 @@ rebuilding them.
   mirrored in both `server/src/vendor/shared/` and `client/src/vendor/shared/` (manual copy), with
   the client `extensionAlias` gotcha honored. (`client/INSIGHTS.md:93`, `client/INSIGHTS.md:130`)
 - A4: The grouping rule is computed server-side and returned by the read-multi-run route, so the
-  ~6-line line-overlap helper is reimplemented locally in the server (matching the in-repo
-  duplication pattern), not imported from `reviewer-core`. (`reviewer-core/INSIGHTS.md:23`)
+  line-overlap + essence-similarity clustering (union-find) is implemented locally in the server
+  (matching the in-repo duplication pattern), not imported from `reviewer-core` — reviewer-core's
+  matcher is overlap-only and carries no similarity clause. (`reviewer-core/INSIGHTS.md:23`)
 - A5: This is a single-tenant/workspace-scoped app; every multi-run read/write is scoped to the
   active `workspaceId` (both `multi_agent_runs` and `agent_runs` carry it).
 
@@ -278,9 +286,11 @@ stateDiagram-v2
   (any agent) when available, else a workspace-global average. Rationale: cost/time scale with repo
   size (file count, context), so history and the fallback baseline are both repo-scoped.
 - AC-12: WHEN the results page loads a multi-run, the system **shall** form one cross-agent group
-  per flagged code location (a location being a file plus a set of overlapping line ranges), merging
-  into that single group every agent's finding whose file matches and whose line range overlaps —
-  including a location flagged by only one agent. WHILE "Show only conflicts" is OFF, the system
+  per flagged code location (a location being a file plus a set of overlapping line ranges that
+  share a similar essence), merging into that single group every agent's finding whose file matches,
+  whose line range overlaps, AND whose essence is similar (_amended 2026-07-20 — see N3_) —
+  including a location flagged by only one agent. Findings that overlap the same lines but are
+  essence-dissimilar form **separate** groups. WHILE "Show only conflicts" is OFF, the system
   **shall** display every such group (all findings, by location); a single-agent-only location is
   still shown. (`design/04.png`)
 - AC-13: WHERE a cross-agent group exists, the system **shall** show, for each agent that ran in
@@ -334,8 +344,9 @@ stateDiagram-v2
   1-agent run's cost (parallelism saves wall-clock, not dollars) — i.e. total cost scales ~linearly
   with agent count, within normal per-run variance.
 - SC-3: Cross-agent grouping collapses M findings that different agents raised at the same
-  file+overlapping-range into a single group, so the user sees one group instead of M duplicate
-  findings for that location.
+  file+overlapping-range **for the same issue (essence-similar)** into a single group, so the user
+  sees one group instead of M duplicate findings for that location; genuinely different issues at an
+  overlapping range remain distinct groups.
 - SC-4: Wall-clock of a multi-run ≈ the slowest single agent's `duration_ms` (parallel), not the
   sum, once the concurrent fan-out (AC-23) lands. Measurable by comparing the multi-run's total
   wall-clock against `max(agent_runs.duration_ms)` for its linked runs.
@@ -345,8 +356,9 @@ stateDiagram-v2
   not flag" for every group. (`design/04.png`)
 - E2: A location flagged by every agent that ran (unanimous) is a cross-agent group but not a
   conflict — hidden when "Show only conflicts" is on. (`design/04.png`; see AC-16)
-- E3: Findings in the same file with non-overlapping line ranges are **not** grouped (no semantic
-  merge) — distinct locations stay separate. (`reviewer-core/INSIGHTS.md:23`)
+- E3: Findings in the same file are **not** grouped when their line ranges don't overlap OR when
+  their ranges overlap but their essences are dissimilar (_amended 2026-07-20 — see N3_) — distinct
+  locations, and distinct issues at the same location, stay separate. (`reviewer-core/INSIGHTS.md:23`)
 - E4: A re-run mid-flight or a second concurrent run on the same PR must not link its `agent_runs`
   to the wrong `multi_agent_runs` row (each create-multi-run owns exactly its spawned runs). (AC-4)
 - E5: Partial failure — some agents finish, one fails; the results page and grouping must render
@@ -358,8 +370,9 @@ stateDiagram-v2
 - E7: The results page may be opened for an in-progress run — grouping over not-yet-complete agents
   should reflect only agents that have reported so far, and update as more finish. (AC-12, AC-17)
 - E8: A finding's line range may be a whole-file range; overlap then matches broadly. This mirrors
-  the known over-broad-overlap behavior in the eval matcher and should be expected, not "fixed".
-  (`reviewer-core/INSIGHTS.md:11`)
+  the known over-broad-overlap behavior in the eval matcher and should be expected, not "fixed" —
+  the essence-similarity clause (N3, amended 2026-07-20) still keeps unrelated findings apart even
+  when a whole-file range overlaps everything. (`reviewer-core/INSIGHTS.md:11`)
 - E9: **"did not flag" renders WITHOUT a reason.** An agent that ran but did not flag a location
   leaves no record and therefore no rationale, so the per-agent "did not flag" cell shows only the
   state — not a reason. This is a deliberate divergence from `design/04.png` / `design/05.png`,
@@ -396,7 +409,7 @@ stateDiagram-v2
 - Kicking a review from a route — `[reused: server/src/modules/reviews/routes.ts:27-44, service.ts:103-138]`.
 - `agent_runs` cost/token/duration/score data feeding estimate + headers — `[deterministic: server/src/db/schema/runs.ts:8-32]`.
 - `multi_agent_runs` base table (to be extended) — `[deterministic: server/src/db/schema/runs.ts:42-51]` (currently a stub; no reader/writer exists).
-- Cross-agent line-overlap helper — `[new: reimplemented locally in server; NOT importable from reviewer-core per reviewer-core/INSIGHTS.md:23]`.
+- Cross-agent line-overlap + essence-similarity clustering helper — `[new: implemented locally in server (union-find); NOT importable from reviewer-core per reviewer-core/INSIGHTS.md:23]`.
 - Pre-run estimate (hybrid history/diff-size) — `[new: 0 LLM calls; deterministic arithmetic over agent_runs aggregate + diff size]`.
 - Live per-agent status — `[reused: client/src/lib/hooks/reviews.ts:176-225 over server/src/modules/reviews/routes.ts:48-92]`.
 - Finding rendering + Accept/Dismiss + Turn-into-eval-case — `[reused: client/.../FindingCard/FindingCard.tsx; server/src/modules/reviews/findings.ts:11-34; server/src/modules/eval/routes.ts:109-118, :146-149]`.
