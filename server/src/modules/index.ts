@@ -19,6 +19,7 @@ import onboarding from './onboarding/routes.js';
 import whyRiskBriefRoutes from './why-risk-brief/routes.js';
 import evalRoutes from './eval/routes.js';
 import ciRoutes from './ci/routes.js';
+import multiAgentRunsRoutes from './multi-agent-runs/routes.js';
 
 /**
  * Module registry. Each feature module is a Fastify plugin in
@@ -54,4 +55,5 @@ export const modules: Record<string, FastifyPluginAsync> = {
   whyRiskBriefRoutes,
   evalRoutes,
   ciRoutes,
+  multiAgentRunsRoutes,
 };

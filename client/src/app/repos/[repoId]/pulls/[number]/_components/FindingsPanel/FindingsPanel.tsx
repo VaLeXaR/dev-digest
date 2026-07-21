@@ -6,7 +6,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Toggle, EmptyState } from "@devdigest/ui";
 import type { FindingRecord } from "@devdigest/shared";
-import { FindingCard } from "../FindingCard";
+import { FindingCard } from "@/components/FindingCard";
 import { EvalCaseEditor } from "../../../../../../../components/eval/EvalCaseEditor/EvalCaseEditor";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
 import { useEvalCaseSeed } from "../../../../../../../lib/hooks/eval";

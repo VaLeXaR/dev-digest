@@ -122,6 +122,8 @@ export async function createAgentRun(
     prId: string;
     provider: string | null;
     model: string | null;
+    /** Links this run to its parent multi-agent run (Multi-Agent Review); null for solo runs. */
+    multiRunId?: string;
   },
 ): Promise<string> {
   const [row] = await db
@@ -134,6 +136,7 @@ export async function createAgentRun(
       model: values.model,
       status: 'running',
       source: 'local',
+      multiAgentRunId: values.multiRunId ?? null,
     })
     .returning({ id: t.agentRuns.id });
   return row!.id;

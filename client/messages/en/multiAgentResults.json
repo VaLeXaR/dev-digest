@@ -1,0 +1,46 @@
+{
+  "header": {
+    "configureRun": "Configure run",
+    "history": "History",
+    "historyItemHint": "{count, plural, one {# agent} other {# agents}} · {cost}",
+    "title": "Multi-Agent Review",
+    "subtitle": "{count, plural, one {# selected agent} other {# selected agents}} · parallel",
+    "meta": "{count, plural, one {# agent} other {# agents}} · parallel fan-out · {duration} total · {cost}",
+    "columns": "Columns",
+    "tabs": "Tabs",
+    "historyDelete": "Delete review"
+  },
+  "delete": {
+    "confirmTitle": "Delete this multi-agent review?",
+    "confirmBody": "Removes the {label} comparison. The individual agent runs and their findings are kept on this PR.",
+    "confirmCurrentBody": "Removes the {label} comparison you're viewing. The individual agent runs and their findings are kept on this PR — you'll return to the Multi-Agent Review list.",
+    "cancel": "Cancel",
+    "confirm": "Delete",
+    "deleting": "Deleting…"
+  },
+  "status": {
+    "running": "Running",
+    "finished": "Finished",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  },
+  "column": {
+    "viewTrace": "View trace",
+    "findingsCount": "{count, plural, one {# finding} other {# findings}}",
+    "noFindings": "No findings"
+  },
+  "tab": {
+    "loadingSummary": "Loading summary…",
+    "noSummary": "No summary yet."
+  },
+  "disagree": {
+    "title": "Where agents disagree",
+    "onlyConflicts": "Show only conflicts",
+    "didNotFlag": "did not flag",
+    "empty": "No cross-agent findings yet"
+  },
+  "error": {
+    "title": "Couldn't load this run",
+    "body": "This multi-agent run could not be loaded."
+  }
+}

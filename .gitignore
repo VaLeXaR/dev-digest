@@ -36,3 +36,8 @@ test-results/
 
 data/
 .claude/settings.local.json
+
+# Windows/Git Bash quirk: `NUL` is a reserved device name; `2>/dev/null`-style
+# redirects can materialize a literal `NUL` file at the repo root, which then
+# pollutes `git status` and trips the engineering-insights stop gate every turn.
+NUL

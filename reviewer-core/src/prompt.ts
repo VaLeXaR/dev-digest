@@ -43,6 +43,18 @@ const SCOPE_RULE = [
   'surface it as a single signal finding rather than many.',
 ].join(' ');
 
+// Appended to every agent's system prompt so all output renders in English,
+// regardless of the model's default language or the language of the analyzed
+// content. Some models (e.g. deepseek) otherwise emit findings in Chinese even
+// on English code. Placed after the untrusted-data rule so a diff/PR/comment in
+// another language can never redirect the output language.
+export const OUTPUT_LANGUAGE_RULE = [
+  'OUTPUT LANGUAGE — Write EVERY finding you emit (its title, rationale, suggested fix,',
+  'and any summary text) in English (en-US). This holds regardless of the language used',
+  'in the diff, code comments, PR title/description, specs, or any other content you',
+  'analyze — do NOT mirror the input language. English output only.',
+].join(' ');
+
 export function wrapUntrusted(label: string, content: string): string {
   // strip any attempt to close our own delimiter
   const safe = content.replaceAll('</untrusted>', '<\\/untrusted>');
@@ -111,10 +123,11 @@ export interface AssembledPrompt {
  * appended to the system message.
  */
 export function assemblePrompt(parts: PromptParts): AssembledPrompt {
-  const system =
+  const base =
     parts.intent && parts.intent.summary.trim().length > 0
       ? `${parts.system}\n\n${INJECTION_GUARD}\n\n${SCOPE_RULE}`
       : `${parts.system}\n\n${INJECTION_GUARD}`;
+  const system = `${base}\n\n${OUTPUT_LANGUAGE_RULE}`;
 
   const skillsBlock =
     parts.skills && parts.skills.length > 0

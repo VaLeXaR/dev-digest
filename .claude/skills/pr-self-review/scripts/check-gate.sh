@@ -14,6 +14,10 @@
 set -uo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
+# Run from the repo root so STATE + diff-hash.sh resolve identically no matter
+# which cwd the Bash tool (and thus this PreToolUse hook) happens to be in —
+# a subdirectory cwd otherwise causes a spurious "no review on record" deny.
+cd "$(git rev-parse --show-toplevel 2>/dev/null || echo .)" || exit 0
 STATE=".pr-self-review.json"
 
 input="$(cat)"

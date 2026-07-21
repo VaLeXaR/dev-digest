@@ -1,5 +1,5 @@
 {
-  "id": "db6bcc6a-8d01-40fc-b235-21d26f042c0a",
+  "id": "37931484-221f-4258-a015-cd303804bd96",
   "prevId": "e58ddc33-d66e-4102-ac28-6da697f00706",
   "version": "7",
   "dialect": "postgresql",
@@ -2849,30 +2849,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "critical": {
-          "name": "critical",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "warning": {
-          "name": "warning",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "suggestion": {
-          "name": "suggestion",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pr_title": {
-          "name": "pr_title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},
@@ -3011,6 +2987,12 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
+        },
+        "multi_agent_run_id": {
+          "name": "multi_agent_run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -3047,6 +3029,19 @@
           "tableTo": "pull_requests",
           "columnsFrom": [
             "pr_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agent_runs_multi_agent_run_id_multi_agent_runs_id_fk": {
+          "name": "agent_runs_multi_agent_run_id_multi_agent_runs_id_fk",
+          "tableFrom": "agent_runs",
+          "tableTo": "multi_agent_runs",
+          "columnsFrom": [
+            "multi_agent_run_id"
           ],
           "columnsTo": [
             "id"
@@ -3090,6 +3085,30 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "selected_agent_ids": {
+          "name": "selected_agent_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "estimated_cost_usd": {
+          "name": "estimated_cost_usd",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "estimated_duration_ms": {
+          "name": "estimated_duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
