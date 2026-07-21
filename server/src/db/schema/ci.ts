@@ -23,4 +23,8 @@ export const ciRuns = pgTable('ci_runs', {
   costUsd: doublePrecision('cost_usd'),
   githubUrl: text('github_url'),
   source: text('source'),
+  critical: integer('critical'),
+  warning: integer('warning'),
+  suggestion: integer('suggestion'),
+  prTitle: text('pr_title'),
 });

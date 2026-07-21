@@ -1,0 +1,239 @@
+import type { Container } from '../../platform/container.js';
+import type { CiExportInput, CiExport, CiFile, CiInstallation, CiRun } from '@devdigest/shared';
+import { CiResultArtifact } from '@devdigest/shared';
+import { NotFoundError } from '../../platform/errors.js';
+import { CiRepository } from './repository.js';
+import { buildAgentManifest, serializeManifestYaml, toSlug } from './manifest.js';
+import { buildWorkflowYaml } from './workflow.js';
+import { readRunnerBundle } from './bundle.js';
+import { parseOwnerName, extractResultArtifactJson } from './helpers.js';
+import {
+  AGENTS_DIR,
+  SKILLS_DIR,
+  MEMORY_PATH,
+  RUNNER_BUNDLE_PATH,
+  WORKFLOW_PATH,
+  RESULT_ARTIFACT_NAME,
+  CI_BRANCH,
+} from './constants.js';
+
+/**
+ * Export-to-CI orchestration (L07/T-02): agent -> manifest/workflow bundle,
+ * `devdigest/ci` PR, and the pull-based `ci_runs` ingest. Constructed
+ * per-request (`new CiService(container)`, mirrors `EvalService`) — depends
+ * only on ports (`container.github()`, `container.githubActions()`,
+ * `CiRepository`), never a concrete SDK.
+ */
+export class CiService {
+  private repo: CiRepository;
+
+  constructor(private container: Container) {
+    this.repo = new CiRepository(container.db);
+  }
+
+  /**
+   * Build the full export bundle (AC-13, AC-14, AC-15, AC-46) — pure
+   * generation, no GitHub call, no DB write. Shared by both the
+   * side-effect-free `action=files` preview (REC-1) and the `open_pr` path.
+   */
+  private async buildFiles(
+    workspaceId: string,
+    agentId: string,
+    input: CiExportInput,
+  ): Promise<CiFile[]> {
+    const agent = await this.container.agentsRepo.getById(workspaceId, agentId);
+    if (!agent) throw new NotFoundError('Agent not found');
+
+    const linkedSkills = await this.container.agentsRepo.linkedSkills(agentId);
+    // Mirror the exact enabled-skill filter a local review applies
+    // (`reviews/run-executor.ts`: `l.enabled && l.skill.enabled`) so the CI
+    // manifest never diverges from what a local run of the same agent would
+    // actually use (AC-36 parity).
+    const enabledSkills = linkedSkills
+      .filter((l) => l.enabled && l.skill.enabled)
+      .map((l) => l.skill);
+
+    const manifest = buildAgentManifest(agent, enabledSkills);
+    const manifestYaml = serializeManifestYaml(manifest);
+    const agentSlug = toSlug(agent.name);
+
+    return [
+      { path: `${AGENTS_DIR}/${agentSlug}.yaml`, contents: manifestYaml, editable: false },
+      ...enabledSkills.map((skill) => ({
+        path: `${SKILLS_DIR}/${toSlug(skill.name)}.md`,
+        contents: skill.body,
+        editable: false,
+      })),
+      // No consumer reads this yet (agent-runner does not load memory) —
+      // scaffolded ahead of a future lesson; an empty JSONL log is valid.
+      { path: MEMORY_PATH, contents: '', editable: false },
+      { path: RUNNER_BUNDLE_PATH, contents: readRunnerBundle(), editable: false },
+      { path: WORKFLOW_PATH, contents: buildWorkflowYaml(input), editable: true },
+    ];
+  }
+
+  /** `POST /agents/:id/export-ci` (AC-17…AC-19, AC-44, REC-1, REC-3). */
+  async exportCi(workspaceId: string, agentId: string, input: CiExportInput): Promise<CiExport> {
+    // Validate the repo shape BEFORE touching the DB or GitHub at all
+    // (AC-19) — a malformed `owner/name` must never reach commitFiles/
+    // openPullRequest, regardless of `action`.
+    const repoRef = parseOwnerName(input.repo);
+
+    const files = await this.buildFiles(workspaceId, agentId, input);
+
+    if (input.action === 'files') {
+      // REC-1 (resolved): side-effect-free preview/regenerate — no
+      // `ci_installations` write, no GitHub call. `installation` is an
+      // EPHEMERAL, never-persisted placeholder purely to satisfy `CiExport`'s
+      // non-nullable `installation` field; nothing about returning this
+      // shape writes a row anywhere.
+      const installation: CiInstallation = {
+        id: crypto.randomUUID(),
+        agent_id: agentId,
+        repo: input.repo,
+        target_type: input.target,
+        installed_at: new Date().toISOString(),
+      };
+      return { installation, files, pr_url: null };
+    }
+
+    const github = await this.container.github();
+    await github.commitFiles(repoRef, {
+      branch: CI_BRANCH,
+      base: input.base,
+      message: 'devdigest: add/update CI review workflow',
+      files: files.map((f) => ({ path: f.path, contents: f.contents })),
+    });
+
+    // Reuse a single existing PR for this branch rather than opening a
+    // second one on every re-export (AC-17/18).
+    const existingPr = await github.findOpenPr(repoRef, CI_BRANCH);
+    const pr =
+      existingPr ??
+      (await github.openPullRequest(repoRef, {
+        title: 'Add DevDigest CI review',
+        head: CI_BRANCH,
+        base: input.base,
+        body:
+          'Adds an automated DevDigest code review to pull requests via GitHub Actions.\n\n' +
+          'Generated by the DevDigest Export-to-CI wizard.',
+      }));
+
+    const installation = await this.repo.upsertInstallation({
+      agentId,
+      repo: input.repo,
+      targetType: input.target,
+    });
+
+    return { installation, files, pr_url: pr.url };
+  }
+
+  /** `GET /agents/:id/ci-installations`. */
+  listInstallations(workspaceId: string, agentId: string): Promise<CiInstallation[]> {
+    return this.repo.listInstallationsForAgent(workspaceId, agentId);
+  }
+
+  /** `GET /ci-runs` (AC-24…AC-28). */
+  listRuns(workspaceId: string): Promise<CiRun[]> {
+    return this.repo.listRunsForWorkspace(workspaceId);
+  }
+
+  /**
+   * `POST /ci-runs/refresh` — pull-based ingest (AC-29, AC-30, AC-37, AC-38).
+   * Fans out to every installed repo in the workspace; a per-repo/per-run
+   * failure (token can no longer reach the repo, a transient artifact
+   * download error) is isolated so it never blocks the rest of the refresh —
+   * it is simply retried on the next poll.
+   */
+  async refreshRuns(workspaceId: string): Promise<{ refreshed: number }> {
+    const installations = await this.repo.listInstallationsForWorkspace(workspaceId);
+    const githubActions = await this.container.githubActions();
+    const github = await this.container.github();
+    let refreshed = 0;
+
+    for (const installation of installations) {
+      const repoRef = parseOwnerName(installation.repo);
+
+      let runs;
+      try {
+        runs = await githubActions.listWorkflowRuns(repoRef);
+      } catch {
+        continue;
+      }
+
+      for (const run of runs) {
+        // Still in progress — nothing to ingest yet, revisit next poll.
+        if (run.status !== 'completed') continue;
+
+        const artifactMeta = run.artifacts.find((a) => a.name === RESULT_ARTIFACT_NAME);
+        if (!artifactMeta) {
+          // AC-37: a failed job with no result artifact still records a
+          // status='failed' row, built entirely from job metadata (no
+          // findings/cost/duration to report).
+          await this.repo.upsertRun({
+            ciInstallationId: installation.id,
+            prNumber: run.prNumber,
+            ranAt: run.createdAt,
+            status: 'failed',
+            findingsCount: null,
+            costUsd: null,
+            githubUrl: run.htmlUrl,
+            source: installation.targetType,
+            critical: null,
+            warning: null,
+            suggestion: null,
+            prTitle: null,
+          });
+          refreshed += 1;
+          continue;
+        }
+
+        let zip: Buffer;
+        try {
+          zip = await githubActions.downloadArtifact(repoRef, artifactMeta.id);
+        } catch {
+          continue;
+        }
+
+        const raw = extractResultArtifactJson(zip);
+        const parsed = raw === null ? undefined : CiResultArtifact.safeParse(raw);
+        if (!parsed?.success) continue; // AC-29: reject-without-persist on parse failure
+
+        const artifact = parsed.data;
+        const prNumber = artifact.pr_number ?? run.prNumber;
+
+        // Resolve `pr_title` ONCE (REC-2) — reuse whatever a prior refresh
+        // already stored for this run rather than re-calling `getPullRequest`
+        // on every ~15s poll.
+        const existingRun = await this.repo.findRunByGithubUrl(installation.id, run.htmlUrl);
+        let prTitle: string | null = existingRun?.prTitle ?? null;
+        if (prTitle === null && prNumber != null) {
+          try {
+            const pr = await github.getPullRequest(repoRef, prNumber);
+            prTitle = pr.title;
+          } catch {
+            prTitle = null; // best-effort — a deleted/inaccessible PR shouldn't block ingest
+          }
+        }
+
+        await this.repo.upsertRun({
+          ciInstallationId: installation.id,
+          prNumber: prNumber ?? null,
+          ranAt: run.createdAt,
+          status: artifact.findings_count > 0 ? 'succeeded' : 'no_findings',
+          findingsCount: artifact.findings_count,
+          costUsd: artifact.cost_usd,
+          githubUrl: run.htmlUrl,
+          source: installation.targetType,
+          critical: artifact.critical ?? null,
+          warning: artifact.warning ?? null,
+          suggestion: artifact.suggestion ?? null,
+          prTitle,
+        });
+        refreshed += 1;
+      }
+    }
+
+    return { refreshed };
+  }
+}

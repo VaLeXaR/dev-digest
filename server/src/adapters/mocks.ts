@@ -17,6 +17,9 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  GitHubActionsClient,
+  WorkflowRunFilter,
+  WorkflowRun,
   GitClient,
   CloneOptions,
   UnifiedDiff,
@@ -236,6 +239,33 @@ export class MockGitHubClient implements GitHubClient {
 
   async currentLogin(): Promise<string> {
     return this.opts.login ?? 'mock-user';
+  }
+}
+
+// ---------- Mock GitHub Actions (pull-based CI ingest — Export-to-CI) ----------
+export interface MockGitHubActionsOptions {
+  /** Workflow runs returned by `listWorkflowRuns`, regardless of repo/opts. */
+  runs?: WorkflowRun[];
+  /** Zip bytes returned by `downloadArtifact`, keyed by `WorkflowArtifact.id`. */
+  artifacts?: Record<string, Buffer>;
+}
+
+export class MockGitHubActionsClient implements GitHubActionsClient {
+  public listCalls: { repo: RepoRef; opts?: WorkflowRunFilter }[] = [];
+  public downloadCalls: { repo: RepoRef; artifactId: string }[] = [];
+
+  constructor(private opts: MockGitHubActionsOptions = {}) {}
+
+  async listWorkflowRuns(repo: RepoRef, opts?: WorkflowRunFilter): Promise<WorkflowRun[]> {
+    this.listCalls.push({ repo, opts });
+    return this.opts.runs ?? [];
+  }
+
+  async downloadArtifact(repo: RepoRef, artifactId: string): Promise<Buffer> {
+    this.downloadCalls.push({ repo, artifactId });
+    const buf = this.opts.artifacts?.[artifactId];
+    if (!buf) throw new Error(`MockGitHubActionsClient: no fixture artifact for id '${artifactId}'`);
+    return buf;
   }
 }
 

@@ -35,3 +35,4 @@ test-results/
 */.claude/tmp/
 
 data/
+.claude/settings.local.json

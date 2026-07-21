@@ -2,6 +2,7 @@ import type {
   AuthProvider,
   SecretsProvider,
   GitHubClient,
+  GitHubActionsClient,
   GitClient,
   CodeIndex,
   Embedder,
@@ -14,6 +15,7 @@ import { runBus, type RunBus } from './sse.js';
 import { LocalSecretsProvider } from '../adapters/secrets/local.js';
 import { LocalNoAuthProvider } from '../adapters/auth/local.js';
 import { OctokitGitHubClient } from '../adapters/github/octokit.js';
+import { OctokitGitHubActionsClient } from '../adapters/github-actions/octokit.js';
 import { SimpleGitClient } from '../adapters/git/simple-git.js';
 import { RipgrepCodeIndex } from '../adapters/codeindex/ripgrep.js';
 import { OpenAIProvider } from '../adapters/llm/openai.js';
@@ -42,6 +44,7 @@ export interface ContainerOverrides {
   secrets?: SecretsProvider;
   auth?: AuthProvider;
   github?: GitHubClient;
+  githubActions?: GitHubActionsClient;
   git?: GitClient;
   codeIndex?: CodeIndex;
   embedder?: Embedder;
@@ -64,6 +67,9 @@ export class Container {
 
   private _git?: GitClient;
   private _github?: GitHubClient;
+  private _githubToken?: string;
+  private _githubActions?: GitHubActionsClient;
+  private _githubActionsToken?: string;
   private _codeIndex?: CodeIndex;
   private _embedder?: Embedder;
   private llmCache = new Map<string, LLMProvider>();
@@ -158,11 +164,26 @@ export class Container {
 
   async github(): Promise<GitHubClient> {
     if (this.overrides.github) return this.overrides.github;
-    if (this._github) return this._github;
     const token = await this.secrets.get('GITHUB_TOKEN');
     if (!token) throw new ConfigError('GITHUB_TOKEN is not configured');
+    // Rebuild when the token changes on disk (BYO key re-entered in the UI, or
+    // written by another process) so we never keep authenticating with a stale
+    // token — `secrets.get` reloads the file by mtime, this compares the value.
+    if (this._github && this._githubToken === token) return this._github;
     this._github = new OctokitGitHubClient(token);
+    this._githubToken = token;
     return this._github;
+  }
+
+  /** Pull-based CI ingest gateway (Export-to-CI) — same lazy/ConfigError pattern as `github()`. */
+  async githubActions(): Promise<GitHubActionsClient> {
+    if (this.overrides.githubActions) return this.overrides.githubActions;
+    const token = await this.secrets.get('GITHUB_TOKEN');
+    if (!token) throw new ConfigError('GITHUB_TOKEN is not configured');
+    if (this._githubActions && this._githubActionsToken === token) return this._githubActions;
+    this._githubActions = new OctokitGitHubActionsClient(token);
+    this._githubActionsToken = token;
+    return this._githubActions;
   }
 
   /** Resolve an LLM provider by id; constructs from the secret key, cached. */
@@ -220,6 +241,9 @@ export class Container {
   invalidateSecretCaches(): void {
     this.llmCache.clear();
     this._github = undefined;
+    this._githubToken = undefined;
+    this._githubActions = undefined;
+    this._githubActionsToken = undefined;
     this._embedder = undefined;
   }
 }
