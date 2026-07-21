@@ -28,6 +28,10 @@ const EnvSchema = z.object({
   REPO_INTEL_ENABLED: z.string().optional(),
   API_PORT: z.coerce.number().int().default(4001),
   WEB_PORT: z.coerce.number().int().default(4000),
+  // Bounded fan-out pool size for the review executor's multi-agent runs (T-03,
+  // AC-23) — the SOLE throttle against provider 429s (no rate limiter/queue
+  // exists anywhere in the LLM adapters). Default 4.
+  MULTI_AGENT_CONCURRENCY: z.coerce.number().int().positive().default(4),
   DEVDIGEST_CLONE_DIR: z.string().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   // `.env` (and .env.example) ship `LOG_LEVEL=` empty; an empty string is not a
@@ -42,6 +46,11 @@ export type AppConfig = {
   databaseUrl: string;
   apiPort: number;
   webPort: number;
+  /**
+   * Bounded pool size for the review executor's concurrent agent fan-out
+   * (T-03, AC-23). Default 4 — the sole throttle against provider 429s.
+   */
+  multiAgentConcurrency: number;
   /** Absolute path where repos are cloned (~/.devdigest/workspace by default). */
   cloneDir: string;
   /** Absolute path to the writable secrets store (BYO keys from the UI). */
@@ -70,6 +79,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     databaseUrl: parsed.DATABASE_URL,
     apiPort: parsed.API_PORT,
     webPort: parsed.WEB_PORT,
+    multiAgentConcurrency: parsed.MULTI_AGENT_CONCURRENCY,
     cloneDir,
     secretsPath: join(homedir(), '.devdigest', 'secrets.json'),
     nodeEnv: parsed.NODE_ENV,

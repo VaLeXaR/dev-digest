@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Icon, Badge, CircularScore } from "@devdigest/ui";
 import type { IconName } from "@devdigest/ui";
 import type { RiskSeverity } from "@devdigest/shared";
-import { formatCost } from "../../../RunTraceDrawer/helpers";
+import { formatCost } from "@/lib/format";
 import { s } from "./styles";
 
 /** "8.2K→1.3K" — one decimal + capital K on both sides, per

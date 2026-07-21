@@ -1,4 +1,13 @@
-import { pgTable, uuid, text, integer, doublePrecision, jsonb, timestamp } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  integer,
+  doublePrecision,
+  jsonb,
+  timestamp,
+  type AnyPgColumn,
+} from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { agents } from './agents';
 import { pullRequests } from './pulls';
@@ -29,6 +38,10 @@ export const agentRuns = pgTable('agent_runs', {
   score: integer('score'),
   /** Findings that tripped the agent's gate (severity ≥ ciFailOn). */
   blockers: integer('blockers'),
+  /** Multi-agent run this agent run was spawned as part of; null for solo/existing runs. */
+  multiAgentRunId: uuid('multi_agent_run_id').references((): AnyPgColumn => multiAgentRuns.id, {
+    onDelete: 'set null',
+  }),
 });
 
 /** Whole trace of one run as a SINGLE jsonb document. */
@@ -48,4 +61,10 @@ export const multiAgentRuns = pgTable('multi_agent_runs', {
     .notNull()
     .references(() => pullRequests.id, { onDelete: 'cascade' }),
   ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
+  /** Agent ids selected when this run was launched (echoed back for the UI). */
+  selectedAgentIds: jsonb('selected_agent_ids').$type<string[]>(),
+  /** Derived-on-write initial status; effective status is derived-on-read from child agent_runs. */
+  status: text('status'),
+  estimatedCostUsd: doublePrecision('estimated_cost_usd'),
+  estimatedDurationMs: integer('estimated_duration_ms'),
 });

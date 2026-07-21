@@ -1,22 +1,12 @@
 import { SIZE_MEDIUM_MAX, SIZE_SMALL_MAX, type PrMeta, type SizeInfo } from "./constants";
 
+export { formatCost } from "@/lib/format";
+
 /** Bucket a PR into S/M/L by total changed lines. */
 export function sizeOf(pr: PrMeta): SizeInfo {
   const lines = pr.additions + pr.deletions;
   const size = lines < SIZE_SMALL_MAX ? "S" : lines < SIZE_MEDIUM_MAX ? "M" : "L";
   return { size, lines };
-}
-
-/** Cost in USD (e.g. "$0.0013", "$0.14"). Returns "—" when null. */
-export function formatCost(usd: number | null | undefined): string {
-  if (usd == null) return '—';
-  if (usd === 0) return '$0.00';
-  return usd.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumSignificantDigits: 2,
-    maximumSignificantDigits: 3,
-  });
 }
 
 /** Compact relative time for the list's UPDATED column (e.g. "3h", "2d"). */

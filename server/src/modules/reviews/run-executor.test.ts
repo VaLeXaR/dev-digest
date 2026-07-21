@@ -66,6 +66,10 @@ function buildContainer(opts: { git: GitClient; llm?: MockLLMProvider }): Contai
     db: {} as never,
     runBus: new RunBus(),
     git: opts.git,
+    // T-03 (AC-23): executeRuns now reads the bounded-fan-out pool size from
+    // container.config — every job here is a single-job list, so any pool
+    // size behaves identically to the prior strictly-sequential loop.
+    config: { multiAgentConcurrency: 4 } as unknown as Container['config'],
     llm: vi.fn().mockResolvedValue(llm),
   } as unknown as Container;
 }

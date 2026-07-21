@@ -45,6 +45,19 @@ describe('assemblePrompt intent section', () => {
     });
     expect(messages[1]!.content).not.toContain('## PR Intent');
   });
+
+  it('appends the English output-language rule to the system message on every path', () => {
+    // With intent (SCOPE_RULE path) and without — both must carry the rule.
+    const withIntent = assemblePrompt({
+      ...base,
+      intent: { summary: 'Adds X', inScope: ['x'], outOfScope: [] },
+    });
+    const withoutIntent = assemblePrompt(base);
+    for (const { messages } of [withIntent, withoutIntent]) {
+      expect(messages[0]!.content).toContain('OUTPUT LANGUAGE');
+      expect(messages[0]!.content).toContain('English (en-US)');
+    }
+  });
 });
 
 /**

@@ -208,6 +208,8 @@ export class ReviewRepository {
     prId: string;
     provider: string | null;
     model: string | null;
+    /** Links this run to its parent multi-agent run (Multi-Agent Review); null for solo runs. */
+    multiRunId?: string;
   }): Promise<string> {
     return runRepo.createAgentRun(this.db, values);
   }

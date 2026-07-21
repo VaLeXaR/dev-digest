@@ -1,0 +1,18 @@
+{
+  "trigger": "Run Review",
+  "running": "Running…",
+  "panelTitle": "Pick agents to run",
+  "clear": "Clear",
+  "runButton": "Run multi-agent review ({count})",
+  "configureAgents": "Configure agents…",
+  "noAgents": "No agents yet — create one",
+  "mergedTooltip": "This PR is already merged; running a review won’t affect the merged code.",
+  "pastReviews": "Past reviews ({count})",
+  "pastReviewsItemHint": "{count, plural, one {# agent} other {# agents}} · {cost}",
+  "pastReviewsDelete": "Delete review",
+  "deleteConfirmTitle": "Delete this multi-agent review?",
+  "deleteConfirmBody": "Removes the {label} comparison. The individual agent runs and their findings are kept on this PR.",
+  "deleteCancel": "Cancel",
+  "deleteConfirm": "Delete",
+  "deleting": "Deleting…"
+}
