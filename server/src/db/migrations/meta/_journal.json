@@ -162,6 +162,13 @@
       "when": 1784470543209,
       "tag": "0022_volatile_tyger_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784653919286,
+      "tag": "0023_silent_hellcat",
+      "breakpoints": true
     }
   ]
 }

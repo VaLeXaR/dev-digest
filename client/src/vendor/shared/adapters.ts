@@ -166,6 +166,46 @@ export interface GitHubClient {
   currentLogin(): Promise<string>;
 }
 
+// ---------- GitHub Actions (pull-based CI ingest — Export-to-CI) ----------
+
+/** Narrows `listWorkflowRuns` to one workflow file and/or a page size. */
+export interface WorkflowRunFilter {
+  /** Workflow file name to scope to (e.g. "devdigest-ci.yml"). Omit for all workflows. */
+  workflowFile?: string;
+  /** Max runs to return, most recent first. */
+  perPage?: number;
+}
+
+/** One artifact attached to a workflow run (e.g. the uploaded `devdigest-result.json` bundle). */
+export interface WorkflowArtifact {
+  id: string;
+  name: string;
+}
+
+/** One GitHub Actions run, as needed to populate a `ci_runs` row on ingest. */
+export interface WorkflowRun {
+  id: string;
+  /** PR number the run was triggered for, when resolvable (null for push-only runs). */
+  prNumber: number | null;
+  status: 'queued' | 'in_progress' | 'completed';
+  conclusion: string | null;
+  htmlUrl: string;
+  createdAt: string;
+  /** Artifacts uploaded by this run (the CI job's `devdigest-result.json`, if any). */
+  artifacts: WorkflowArtifact[];
+}
+
+export interface GitHubActionsClient {
+  /** List recent workflow runs for the repo, newest first. */
+  listWorkflowRuns(repo: RepoRef, opts?: WorkflowRunFilter): Promise<WorkflowRun[]>;
+  /**
+   * Download one run's uploaded artifact by id. GitHub serves artifacts as a
+   * ZIP archive — callers extract + `CiResultArtifact.safeParse` the
+   * `devdigest-result.json` entry themselves.
+   */
+  downloadArtifact(repo: RepoRef, artifactId: string): Promise<Buffer>;
+}
+
 // ---------- Git (simple-git, heavy) ----------
 export interface CloneOptions {
   depth?: number;
@@ -297,4 +337,14 @@ export interface SecretsProvider {
    * providers (e.g. the env-only MVP backend) may omit it.
    */
   set?(key: SecretKey, value: string): Promise<void>;
+}
+
+// ---------- Runner bundle (prebuilt agent-runner ncc bundle, embedded on CI export) ----------
+export interface RunnerBundleProvider {
+  /**
+   * Returns the prebuilt agent-runner bundle source that gets embedded as
+   * `.devdigest/runner/index.js` in every CI export. Throws (ConfigError) if
+   * the bundle has not been built yet — never returns an empty/placeholder.
+   */
+  read(): string;
 }

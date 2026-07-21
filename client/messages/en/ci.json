@@ -2,6 +2,7 @@
   "runs": {
     "emptyTitle": "No CI runs yet",
     "emptyBody": "Once you export an agent to CI, every automated review shows up here.",
+    "emptyCta": "Set up CI for an agent",
     "title": "CI Runs",
     "subtitle": "Agent reviews executed inside CI · not local runs",
     "autoRefresh": "auto-refresh on",
@@ -11,7 +12,8 @@
       "last7Days": "Last 7 days",
       "allAgents": "All agents",
       "allRepos": "All repos",
-      "allStatuses": "All statuses"
+      "allStatuses": "All statuses",
+      "allSources": "All sources"
     },
     "table": {
       "timestamp": "Timestamp",
@@ -60,6 +62,7 @@
     "filesToCreate": "FILES TO CREATE",
     "generating": "Generating…",
     "editable": "editable",
+    "previewTruncated": "Preview truncated to the first {shown} of {total} lines — the full file ({size}) is written on install.",
     "triggerLabel": "Trigger",
     "postResultsLabel": "Post results as",
     "postAs": {
@@ -67,8 +70,7 @@
       "prComment": "PR comment",
       "none": "None (exit code only)"
     },
-    "blockMergeTitle": "Block merge on findings",
-    "blockMergeDesc": "Requires a GitHub App — not available with PAT in local mode",
+    "blockMergeDesc": "Set Fail CI on so the run exits non-zero, then add a required status check in the repo's branch protection. No GitHub App needed.",
     "installCardTitle": "Open a PR with these files",
     "installCardBody": "DevDigest opens a PR in {repo} titled “Add DevDigest CI review” with the {count} generated files.",
     "ownerRepo": "owner/repo",

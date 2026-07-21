@@ -2,10 +2,12 @@ import type {
   AuthProvider,
   SecretsProvider,
   GitHubClient,
+  GitHubActionsClient,
   GitClient,
   CodeIndex,
   Embedder,
   LLMProvider,
+  RunnerBundleProvider,
 } from '@devdigest/shared';
 import type { AppConfig } from './config.js';
 import type { Db } from '../db/client.js';
@@ -14,6 +16,7 @@ import { runBus, type RunBus } from './sse.js';
 import { LocalSecretsProvider } from '../adapters/secrets/local.js';
 import { LocalNoAuthProvider } from '../adapters/auth/local.js';
 import { OctokitGitHubClient } from '../adapters/github/octokit.js';
+import { OctokitGitHubActionsClient } from '../adapters/github-actions/octokit.js';
 import { SimpleGitClient } from '../adapters/git/simple-git.js';
 import { RipgrepCodeIndex } from '../adapters/codeindex/ripgrep.js';
 import { OpenAIProvider } from '../adapters/llm/openai.js';
@@ -31,6 +34,7 @@ import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
+import { FsRunnerBundleProvider } from '../adapters/runner-bundle/fs.js';
 
 /**
  * DI container. One per app instance. Holds config, db, the JobRunner,
@@ -43,6 +47,7 @@ export interface ContainerOverrides {
   secrets?: SecretsProvider;
   auth?: AuthProvider;
   github?: GitHubClient;
+  githubActions?: GitHubActionsClient;
   git?: GitClient;
   codeIndex?: CodeIndex;
   embedder?: Embedder;
@@ -53,6 +58,8 @@ export interface ContainerOverrides {
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
+  /** Prebuilt agent-runner bundle reader (CI export). */
+  runnerBundle?: RunnerBundleProvider;
 }
 
 export class Container {
@@ -65,6 +72,9 @@ export class Container {
 
   private _git?: GitClient;
   private _github?: GitHubClient;
+  private _githubToken?: string;
+  private _githubActions?: GitHubActionsClient;
+  private _githubActionsToken?: string;
   private _codeIndex?: CodeIndex;
   private _embedder?: Embedder;
   private llmCache = new Map<string, LLMProvider>();
@@ -79,6 +89,7 @@ export class Container {
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
+  private _runnerBundle?: RunnerBundleProvider;
   private _priceBook?: PriceBook;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
@@ -149,6 +160,13 @@ export class Container {
     return this._tokenizer;
   }
 
+  /** Prebuilt agent-runner bundle reader — embedded into every CI export. */
+  get runnerBundle(): RunnerBundleProvider {
+    if (this.overrides.runnerBundle) return this.overrides.runnerBundle;
+    this._runnerBundle ??= new FsRunnerBundleProvider();
+    return this._runnerBundle;
+  }
+
   /**
    * Live OpenRouter pricing for cost attribution. The lister builds a bare
    * OpenRouter provider just for `/models` (no estimator needed) and degrades to
@@ -170,11 +188,26 @@ export class Container {
 
   async github(): Promise<GitHubClient> {
     if (this.overrides.github) return this.overrides.github;
-    if (this._github) return this._github;
     const token = await this.secrets.get('GITHUB_TOKEN');
     if (!token) throw new ConfigError('GITHUB_TOKEN is not configured');
+    // Rebuild when the token changes on disk (BYO key re-entered in the UI, or
+    // written by another process) so we never keep authenticating with a stale
+    // token — `secrets.get` reloads the file by mtime, this compares the value.
+    if (this._github && this._githubToken === token) return this._github;
     this._github = new OctokitGitHubClient(token);
+    this._githubToken = token;
     return this._github;
+  }
+
+  /** Pull-based CI ingest gateway (Export-to-CI) — same lazy/ConfigError pattern as `github()`. */
+  async githubActions(): Promise<GitHubActionsClient> {
+    if (this.overrides.githubActions) return this.overrides.githubActions;
+    const token = await this.secrets.get('GITHUB_TOKEN');
+    if (!token) throw new ConfigError('GITHUB_TOKEN is not configured');
+    if (this._githubActions && this._githubActionsToken === token) return this._githubActions;
+    this._githubActions = new OctokitGitHubActionsClient(token);
+    this._githubActionsToken = token;
+    return this._githubActions;
   }
 
   /** Resolve an LLM provider by id; constructs from the secret key, cached. */
@@ -232,6 +265,9 @@ export class Container {
   invalidateSecretCaches(): void {
     this.llmCache.clear();
     this._github = undefined;
+    this._githubToken = undefined;
+    this._githubActions = undefined;
+    this._githubActionsToken = undefined;
     this._embedder = undefined;
   }
 }

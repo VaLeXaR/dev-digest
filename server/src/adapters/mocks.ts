@@ -17,6 +17,9 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  GitHubActionsClient,
+  WorkflowRunFilter,
+  WorkflowRun,
   GitClient,
   CloneOptions,
   UnifiedDiff,
@@ -31,6 +34,7 @@ import type {
   AuthWorkspace,
   SecretsProvider,
   SecretKey,
+  RunnerBundleProvider,
 } from '@devdigest/shared';
 import { parseUnifiedDiff } from './git/diff-parser.js';
 
@@ -239,6 +243,33 @@ export class MockGitHubClient implements GitHubClient {
   }
 }
 
+// ---------- Mock GitHub Actions (pull-based CI ingest — Export-to-CI) ----------
+export interface MockGitHubActionsOptions {
+  /** Workflow runs returned by `listWorkflowRuns`, regardless of repo/opts. */
+  runs?: WorkflowRun[];
+  /** Zip bytes returned by `downloadArtifact`, keyed by `WorkflowArtifact.id`. */
+  artifacts?: Record<string, Buffer>;
+}
+
+export class MockGitHubActionsClient implements GitHubActionsClient {
+  public listCalls: { repo: RepoRef; opts?: WorkflowRunFilter }[] = [];
+  public downloadCalls: { repo: RepoRef; artifactId: string }[] = [];
+
+  constructor(private opts: MockGitHubActionsOptions = {}) {}
+
+  async listWorkflowRuns(repo: RepoRef, opts?: WorkflowRunFilter): Promise<WorkflowRun[]> {
+    this.listCalls.push({ repo, opts });
+    return this.opts.runs ?? [];
+  }
+
+  async downloadArtifact(repo: RepoRef, artifactId: string): Promise<Buffer> {
+    this.downloadCalls.push({ repo, artifactId });
+    const buf = this.opts.artifacts?.[artifactId];
+    if (!buf) throw new Error(`MockGitHubActionsClient: no fixture artifact for id '${artifactId}'`);
+    return buf;
+  }
+}
+
 // ---------- Mock Git ----------
 export interface MockGitOptions {
   diff?: string;
@@ -336,5 +367,13 @@ export class MockSecretsProvider implements SecretsProvider {
   constructor(private secrets: Partial<Record<string, string>> = {}) {}
   async get(key: SecretKey): Promise<string | undefined> {
     return this.secrets[key as string];
+  }
+}
+
+// ---------- Mock runner bundle ----------
+export class MockRunnerBundleProvider implements RunnerBundleProvider {
+  constructor(private contents = '// mock agent-runner bundle\n') {}
+  read(): string {
+    return this.contents;
   }
 }
