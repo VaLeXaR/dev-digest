@@ -338,3 +338,13 @@ export interface SecretsProvider {
    */
   set?(key: SecretKey, value: string): Promise<void>;
 }
+
+// ---------- Runner bundle (prebuilt agent-runner ncc bundle, embedded on CI export) ----------
+export interface RunnerBundleProvider {
+  /**
+   * Returns the prebuilt agent-runner bundle source that gets embedded as
+   * `.devdigest/runner/index.js` in every CI export. Throws (ConfigError) if
+   * the bundle has not been built yet — never returns an empty/placeholder.
+   */
+  read(): string;
+}

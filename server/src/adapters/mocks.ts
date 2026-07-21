@@ -34,6 +34,7 @@ import type {
   AuthWorkspace,
   SecretsProvider,
   SecretKey,
+  RunnerBundleProvider,
 } from '@devdigest/shared';
 import { parseUnifiedDiff } from './git/diff-parser.js';
 
@@ -366,5 +367,13 @@ export class MockSecretsProvider implements SecretsProvider {
   constructor(private secrets: Partial<Record<string, string>> = {}) {}
   async get(key: SecretKey): Promise<string | undefined> {
     return this.secrets[key as string];
+  }
+}
+
+// ---------- Mock runner bundle ----------
+export class MockRunnerBundleProvider implements RunnerBundleProvider {
+  constructor(private contents = '// mock agent-runner bundle\n') {}
+  read(): string {
+    return this.contents;
   }
 }

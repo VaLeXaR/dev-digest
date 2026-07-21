@@ -5,7 +5,6 @@ import { NotFoundError } from '../../platform/errors.js';
 import { CiRepository } from './repository.js';
 import { buildAgentManifest, serializeManifestYaml, toSlug } from './manifest.js';
 import { buildWorkflowYaml } from './workflow.js';
-import { readRunnerBundle } from './bundle.js';
 import { parseOwnerName, extractResultArtifactJson } from './helpers.js';
 import {
   AGENTS_DIR,
@@ -22,7 +21,7 @@ import {
  * `devdigest/ci` PR, and the pull-based `ci_runs` ingest. Constructed
  * per-request (`new CiService(container)`, mirrors `EvalService`) — depends
  * only on ports (`container.github()`, `container.githubActions()`,
- * `CiRepository`), never a concrete SDK.
+ * `container.runnerBundle`, `CiRepository`), never a concrete SDK.
  */
 export class CiService {
   private repo: CiRepository;
@@ -67,7 +66,7 @@ export class CiService {
       // No consumer reads this yet (agent-runner does not load memory) —
       // scaffolded ahead of a future lesson; an empty JSONL log is valid.
       { path: MEMORY_PATH, contents: '', editable: false },
-      { path: RUNNER_BUNDLE_PATH, contents: readRunnerBundle(), editable: false },
+      { path: RUNNER_BUNDLE_PATH, contents: this.container.runnerBundle.read(), editable: false },
       { path: WORKFLOW_PATH, contents: buildWorkflowYaml(input), editable: true },
     ];
   }

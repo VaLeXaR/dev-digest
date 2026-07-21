@@ -56,11 +56,13 @@ export function ExportWizard({
   const [previewLoaded, setPreviewLoaded] = React.useState(false);
   const [selectedPath, setSelectedPath] = React.useState<string | null>(null);
   const [editedWorkflow, setEditedWorkflow] = React.useState<string | null>(null);
-  const [workflowEdited, setWorkflowEdited] = React.useState(false);
   const [showRegenerateWarning, setShowRegenerateWarning] = React.useState(false);
   const [installMethod, setInstallMethod] = React.useState<InstallMethod>("open_pr");
   const [prUrl, setPrUrl] = React.useState<string | null>(null);
   const [zipDownloaded, setZipDownloaded] = React.useState(false);
+
+  // Derived, not stored: the workflow is "edited" exactly while an edited copy exists.
+  const workflowEdited = editedWorkflow !== null;
 
   const stepLabels = [
     t("exportWizard.steps.target"),
@@ -90,7 +92,6 @@ export function ExportWizard({
       setPreviewLoaded(true);
       setSelectedPath((prev) => (prev && result.files.some((f) => f.path === prev) ? prev : pickDefaultPath(result.files)));
       setEditedWorkflow(null);
-      setWorkflowEdited(false);
     } catch {
       toast.error("Could not generate the CI files.");
     }
@@ -103,7 +104,6 @@ export function ExportWizard({
 
   function handleEditWorkflow(v: string) {
     setEditedWorkflow(v);
-    setWorkflowEdited(true);
   }
 
   function handleToggleTrigger(id: TriggerId) {

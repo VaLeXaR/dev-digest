@@ -7,6 +7,7 @@ import type {
   CodeIndex,
   Embedder,
   LLMProvider,
+  RunnerBundleProvider,
 } from '@devdigest/shared';
 import type { AppConfig } from './config.js';
 import type { Db } from '../db/client.js';
@@ -33,6 +34,7 @@ import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
+import { FsRunnerBundleProvider } from '../adapters/runner-bundle/fs.js';
 
 /**
  * DI container. One per app instance. Holds config, db, the JobRunner,
@@ -56,6 +58,8 @@ export interface ContainerOverrides {
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
+  /** Prebuilt agent-runner bundle reader (CI export). */
+  runnerBundle?: RunnerBundleProvider;
 }
 
 export class Container {
@@ -85,6 +89,7 @@ export class Container {
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
+  private _runnerBundle?: RunnerBundleProvider;
   private _priceBook?: PriceBook;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
@@ -153,6 +158,13 @@ export class Container {
     if (this.overrides.tokenizer) return this.overrides.tokenizer;
     this._tokenizer ??= new TiktokenTokenizer();
     return this._tokenizer;
+  }
+
+  /** Prebuilt agent-runner bundle reader — embedded into every CI export. */
+  get runnerBundle(): RunnerBundleProvider {
+    if (this.overrides.runnerBundle) return this.overrides.runnerBundle;
+    this._runnerBundle ??= new FsRunnerBundleProvider();
+    return this._runnerBundle;
   }
 
   /**
